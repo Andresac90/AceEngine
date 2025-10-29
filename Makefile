@@ -11,8 +11,8 @@ SOKOL_INCLUDE_DIR := /Users/andres/sokol/include
 
 CXX := g++
 CC := gcc
-CXXFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR)
-CFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR)
+CXXFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR)
+CFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR)
 LDFLAGS := -L$(GLFW_LIB_DIR) -lglfw -ldl -framework OpenGL -framework Cocoa
 
 # Find all C and C++ source files

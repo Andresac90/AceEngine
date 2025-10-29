@@ -1,74 +1,77 @@
-#define UNUSED __attribute__((unused))
-
-#define OPENG_INCLUDES
-#include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include "log.h"
+#include "utils.h"
+#include "exercise1.h"
 
-#define CGLM_INCLUDE
-#include <cglm/cglm.h>
-
-#define SOKOL_INCLUDE
-#include <sokol_gfx.h>  
-
-#include <stdio.h>
-#include <stdlib.h>
-
-static void framebuffer_size_callback(UNUSED GLFWwindow* window, int width, int height)
-{
-    glViewport(0, 0, width, height);
+// GLFW error callback
+void glfw_error_callback(int error, const char* description) {
+    gl_log_err("GLFW ERROR: code %i msg: %s\n", error, description);
 }
 
-static GLFWwindow* init(void)
-{
+int main() {
+    // Restart the log file
+    if (!restart_gl_log()) {
+        return 1;
+    }
+    
+    // Log GLFW startup
+    gl_log("starting GLFW\n%s\n", glfwGetVersionString());
+    
+    // Register the error callback function
+    glfwSetErrorCallback(glfw_error_callback);
+    
+    // Initialize GLFW
     if (!glfwInit()) {
-        fprintf(stderr, "GLFW initialization failed\n");
-        return NULL;
+        gl_log_err("ERROR: could not start GLFW3\n");
+        return 1;
     }
     
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-#if __APPLE__
+    // Set OpenGL version hints (required for macOS)
+    gl_log("Setting OpenGL version hints\n");
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
-
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Renderer", NULL, NULL);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    
+    // Set anti-aliasing BEFORE creating window
+    glfwWindowHint(GLFW_SAMPLES, 4);  // 4x MSAA
+    gl_log("Anti-aliasing set to 4x MSAA\n");
+    
+    // Windowed mode (easier to test resize and callbacks)
+    GLFWwindow* window = glfwCreateWindow(640, 480, "Extended GL Init", nullptr, nullptr);
+    g_win_width = 640;
+    g_win_height = 480;
+    
+    /* Fullscreen mode - uncomment to use fullscreen
+    GLFWmonitor* mon = glfwGetPrimaryMonitor();
+    const GLFWvidmode* vmode = glfwGetVideoMode(mon);
+    GLFWwindow* window = glfwCreateWindow(vmode->width, vmode->height, "Extended GL Init", mon, nullptr);
+    g_win_width = vmode->width;
+    g_win_height = vmode->height;
+    */
+    
     if (!window) {
-        fprintf(stderr, "GLFW window creation failed\n");
+        gl_log_err("ERROR: could not create window\n");
         glfwTerminate();
-        return NULL;
+        return 1;
     }
     
-    glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); 
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        fprintf(stderr, "Failed to initialize GLAD\n");
-        return NULL;
-    }
-
-    const char *version = (const char *)glGetString(GL_VERSION);
-    printf("OpenGL version: %s\n", version);
-
-    return window;
-}
-
-int main(UNUSED int argc, UNUSED char **argv)
-{
-    GLFWwindow* window = init();
-    if (!window) {
-        return EXIT_FAILURE;
-    }
-
-    glViewport(0, 0, 800, 600);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
-    while (!glfwWindowShouldClose(window)) {
-        glClear(GL_COLOR_BUFFER_BIT);
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-    }
-
+    gl_log("Window created: %dx%d\n", g_win_width, g_win_height);
+    
+    // Get framebuffer dimensions
+    glfwGetFramebufferSize(window, &g_fb_width, &g_fb_height);
+    gl_log("Initial framebuffer size: %dx%d\n", g_fb_width, g_fb_height);
+    
+    // Register window callbacks
+    glfwSetWindowSizeCallback(window, glfw_window_size_callback);
+    glfwSetFramebufferSizeCallback(window, glfw_framebuffer_resize_callback);
+    
+    // Run your exercise with the window
+    runExercise1(window);
+    
+    // Terminate GLFW
     glfwTerminate();
-    return EXIT_SUCCESS;
+    gl_log("GLFW terminated\n");
+    
+    return 0;
 }
