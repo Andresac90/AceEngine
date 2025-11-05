@@ -15,9 +15,9 @@ CXXFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(GLFW_INCLUDE_DIR) -I
 CFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR)
 LDFLAGS := -L$(GLFW_LIB_DIR) -lglfw -ldl -framework OpenGL -framework Cocoa
 
-# Find all C and C++ source files
-C_SRCS := $(wildcard $(SRC_DIR)/*.c)
-CPP_SRCS := $(wildcard $(SRC_DIR)/*.cpp)
+# Find all C and C++ source files recursively
+C_SRCS := $(shell find $(SRC_DIR) -name '*.c')
+CPP_SRCS := $(shell find $(SRC_DIR) -name '*.cpp')
 
 # Generate object file names
 C_OBJS := $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(C_SRCS))
@@ -27,17 +27,17 @@ OBJS := $(C_OBJS) $(CPP_OBJS)
 all: $(BUILD_DIR)/$(PROJECT_NAME)
 
 $(BUILD_DIR)/$(PROJECT_NAME): $(OBJS)
-	mkdir -p $(BUILD_DIR)
+	@mkdir -p $(BUILD_DIR)
 	$(CXX) $(OBJS) -o $(BUILD_DIR)/$(PROJECT_NAME) $(LDFLAGS)
 
 # Rule for C files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	mkdir -p $(BUILD_DIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Rule for C++ files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
-	mkdir -p $(BUILD_DIR)
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:

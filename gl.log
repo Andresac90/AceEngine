@@ -1,11 +1,12 @@
-GL_LOG_FILE log. local time Wed Oct 29 14:58:24 2025
+GL_LOG_FILE log. local time Wed Nov  5 11:47:23 2025
 
-starting GLFW
-3.4.0 Cocoa NSGL Null EGL OSMesa monotonic dynamic
+Starting AceEngine
+GLFW Version: 3.4.0 Cocoa NSGL Null EGL OSMesa monotonic dynamic
 Setting OpenGL version hints
 Anti-aliasing set to 4x MSAA
-Window created: 640x480
+Created windowed mode: 640x480
 Initial framebuffer size: 1280x960
+Engine initialized successfully
 Running Exercise 1
 Initializing GLAD
 Initial viewport set to 1280x960
@@ -28,173 +29,82 @@ GL_STEREO 0
 Multisampling enabled
 Depth testing enabled
 Creating VBOs and VAOs
-Loading shaders from files
-Compiling shaders
-First shader program created
-Second shader program created
+Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
+Shader 1 compiled successfully
+Shader 2 compiled successfully
+Shader programme 3 linked successfully
+Shader programme 3 loaded successfully
+--------------------
+shader programme 3 info:
+GL_LINK_STATUS = 1
+GL_ATTACHED_SHADERS = 2
+GL_ACTIVE_ATTRIBUTES = 1
+  0) type:vec3 name:vp location:0
+GL_ACTIVE_UNIFORMS = 0
+program info log for GL index 3:
+
+program 3 GL_VALIDATE_STATUS = 1
+Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
+Shader 4 compiled successfully
+Shader 5 compiled successfully
+Shader programme 6 linked successfully
+Shader programme 6 loaded successfully
+--------------------
+shader programme 6 info:
+GL_LINK_STATUS = 1
+GL_ATTACHED_SHADERS = 2
+GL_ACTIVE_ATTRIBUTES = 1
+  0) type:vec3 name:vp location:0
+GL_ACTIVE_UNIFORMS = 0
+program info log for GL index 6:
+
+program 6 GL_VALIDATE_STATUS = 1
 Entering render loop
-Framebuffer resized to 1284x964
-Window resized to 642x482
-Framebuffer resized to 1292x966
-Window resized to 646x483
-Framebuffer resized to 1304x972
-Window resized to 652x486
-Framebuffer resized to 1326x980
-Window resized to 663x490
-Framebuffer resized to 1352x990
-Window resized to 676x495
-Framebuffer resized to 1372x1000
-Window resized to 686x500
-Framebuffer resized to 1410x1014
-Window resized to 705x507
-Framebuffer resized to 1436x1026
-Window resized to 718x513
-Framebuffer resized to 1482x1044
-Window resized to 741x522
-Framebuffer resized to 1518x1058
-Window resized to 759x529
-Framebuffer resized to 1566x1078
-Window resized to 783x539
-Framebuffer resized to 1616x1098
-Window resized to 808x549
-Framebuffer resized to 1668x1120
-Window resized to 834x560
-Framebuffer resized to 1722x1142
-Window resized to 861x571
-Framebuffer resized to 1782x1168
-Window resized to 891x584
-Framebuffer resized to 1842x1192
-Window resized to 921x596
-Framebuffer resized to 1902x1218
-Window resized to 951x609
-Framebuffer resized to 1968x1244
-Window resized to 984x622
-Framebuffer resized to 2030x1270
-Window resized to 1015x635
-Framebuffer resized to 2094x1296
-Window resized to 1047x648
-Framebuffer resized to 2160x1322
-Window resized to 1080x661
-Framebuffer resized to 2224x1350
-Window resized to 1112x675
-Framebuffer resized to 2290x1376
-Window resized to 1145x688
-Framebuffer resized to 2354x1404
-Window resized to 1177x702
-Framebuffer resized to 2416x1428
-Window resized to 1208x714
-Framebuffer resized to 2478x1454
-Window resized to 1239x727
-Framebuffer resized to 2560x1488
-Window resized to 1280x744
-Framebuffer resized to 2596x1502
-Window resized to 1298x751
-Framebuffer resized to 2650x1524
-Window resized to 1325x762
-Framebuffer resized to 2706x1546
-Window resized to 1353x773
-Framebuffer resized to 2752x1566
-Window resized to 1376x783
-Framebuffer resized to 2810x1592
-Window resized to 1405x796
-Framebuffer resized to 2840x1602
-Window resized to 1420x801
-Framebuffer resized to 2928x1640
-Window resized to 1464x820
-Framebuffer resized to 2968x1656
-Window resized to 1484x828
-Framebuffer resized to 2988x1664
-Window resized to 1494x832
-Framebuffer resized to 3006x1670
-Window resized to 1503x835
-Framebuffer resized to 3016x1676
-Window resized to 1508x838
-Framebuffer resized to 3024x1678
-Window resized to 1512x839
-Framebuffer resized to 3020x1678
-Window resized to 1510x839
-Framebuffer resized to 3010x1672
-Window resized to 1505x836
-Framebuffer resized to 2996x1668
-Window resized to 1498x834
-Framebuffer resized to 2976x1658
-Window resized to 1488x829
-Framebuffer resized to 2952x1650
-Window resized to 1476x825
-Framebuffer resized to 2924x1636
-Window resized to 1462x818
-Framebuffer resized to 2890x1624
-Window resized to 1445x812
-Framebuffer resized to 2854x1608
-Window resized to 1427x804
-Framebuffer resized to 2812x1592
-Window resized to 1406x796
-Framebuffer resized to 2770x1574
-Window resized to 1385x787
-Framebuffer resized to 2720x1554
-Window resized to 1360x777
-Framebuffer resized to 2670x1532
-Window resized to 1335x766
-Framebuffer resized to 2616x1510
-Window resized to 1308x755
-Framebuffer resized to 2560x1488
-Window resized to 1280x744
-Framebuffer resized to 2500x1462
-Window resized to 1250x731
-Framebuffer resized to 2440x1438
-Window resized to 1220x719
-Framebuffer resized to 2378x1412
-Window resized to 1189x706
-Framebuffer resized to 2314x1386
-Window resized to 1157x693
-Framebuffer resized to 2250x1360
-Window resized to 1125x680
-Framebuffer resized to 2186x1334
-Window resized to 1093x667
-Framebuffer resized to 2118x1306
-Window resized to 1059x653
-Framebuffer resized to 2054x1280
-Window resized to 1027x640
-Framebuffer resized to 1990x1252
-Window resized to 995x626
-Framebuffer resized to 1926x1226
-Window resized to 963x613
-Framebuffer resized to 1864x1202
-Window resized to 932x601
-Framebuffer resized to 1804x1176
-Window resized to 902x588
-Framebuffer resized to 1744x1152
-Window resized to 872x576
-Framebuffer resized to 1688x1128
-Window resized to 844x564
-Framebuffer resized to 1634x1106
-Window resized to 817x553
-Framebuffer resized to 1584x1086
-Window resized to 792x543
-Framebuffer resized to 1536x1066
-Window resized to 768x533
-Framebuffer resized to 1492x1048
-Window resized to 746x524
-Framebuffer resized to 1450x1030
-Window resized to 725x515
-Framebuffer resized to 1414x1016
-Window resized to 707x508
-Framebuffer resized to 1382x1002
-Window resized to 691x501
-Framebuffer resized to 1354x992
-Window resized to 677x496
-Framebuffer resized to 1330x980
-Window resized to 665x490
-Framebuffer resized to 1312x974
-Window resized to 656x487
-Framebuffer resized to 1298x968
-Window resized to 649x484
-Framebuffer resized to 1288x964
-Window resized to 644x482
-Framebuffer resized to 1282x960
-Window resized to 641x480
-Framebuffer resized to 1280x960
-Window resized to 640x480
+=== Reloading Shaders ===
+Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
+Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
+Shader 7 compiled successfully
+Shader 8 compiled successfully
+Shader programme 9 linked successfully
+Shader programme 9 loaded successfully
+Shaders reloaded successfully!
+Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
+Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
+Shader 1 compiled successfully
+Shader 2 compiled successfully
+Shader programme 3 linked successfully
+Shader programme 3 loaded successfully
+Shaders reloaded successfully!
+=== Reloading Shaders ===
+Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
+Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
+Shader 4 compiled successfully
+Shader 5 compiled successfully
+Shader programme 6 linked successfully
+Shader programme 6 loaded successfully
+Shaders reloaded successfully!
+Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
+Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
+Shader 7 compiled successfully
+Shader 8 compiled successfully
+Shader programme 9 linked successfully
+Shader programme 9 loaded successfully
+Shaders reloaded successfully!
+=== Reloading Shaders ===
+Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
+Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
+Shader 1 compiled successfully
+Shader 2 compiled successfully
+Shader programme 3 linked successfully
+Shader programme 3 loaded successfully
+Shaders reloaded successfully!
+Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
+Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
+Shader 4 compiled successfully
+Shader 5 compiled successfully
+Shader programme 6 linked successfully
+Shader programme 6 loaded successfully
+Shaders reloaded successfully!
 Exiting render loop, cleaning up
 Exercise 1 completed
-GLFW terminated
+Shutting down engine

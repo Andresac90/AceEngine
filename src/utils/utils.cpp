@@ -1,6 +1,7 @@
 #include <glad/glad.h> 
-#include "utils.h"
-#include "log.h"
+#include "utils/utils.h"
+#include "utils/log.h"
+#include "graphics/shader.h"
 #include <fstream>
 #include <sstream>
 #include <iostream>
@@ -36,6 +37,32 @@ void updateInput(GLFWwindow* window) {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     }
+}
+
+// Update input with shader reload (R key)
+void updateInputWithShaderReload(GLFWwindow* window, Shader* shader1, Shader* shader2) {
+    // Check for ESC key press to close the window
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, 1);
+    }
+    
+    // Check for R key press to reload shaders
+    static bool r_key_was_pressed = false;
+    bool r_key_is_pressed = glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS;
+    
+    if (r_key_is_pressed && !r_key_was_pressed) {
+        std::cout << "\n=== Reloading Shaders ===" << std::endl;
+        gl_log("=== Reloading Shaders ===\n");
+        
+        if (shader1) {
+            shader1->reload();
+        }
+        if (shader2) {
+            shader2->reload();
+        }
+    }
+    
+    r_key_was_pressed = r_key_is_pressed;
 }
 
 // Update FPS counter in window title

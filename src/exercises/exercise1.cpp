@@ -1,9 +1,10 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
-#include "exercise1.h"
-#include "log.h"
-#include "utils.h"
+#include "exercises/exercise1.h"
+#include "graphics/shader.h"
+#include "utils/log.h"
+#include "utils/utils.h"
 
 void runExercise1(GLFWwindow* window) {
     gl_log("Running Exercise 1\n");
@@ -93,62 +94,34 @@ void runExercise1(GLFWwindow* window) {
     glBindBuffer(GL_ARRAY_BUFFER, vbo2);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
-    gl_log("Loading shaders from files\n");
-    
-    //Load Vertex Shader from file
-    std::string vertex_shader_str = readShaderFile("src/shaders/exercise1/test.vert");
-    const char* vertex_shader = vertex_shader_str.c_str();
-
-    //Load Fragment Shader from file
-    std::string fragment_shader_str = readShaderFile("src/shaders/exercise1/test.frag");
-    const char* fragment_shader = fragment_shader_str.c_str();
-
-    // Check if shaders loaded successfully
-    if (vertex_shader_str.empty() || fragment_shader_str.empty()) {
-        gl_log_err("ERROR: Failed to load shader files\n");
-        std::cerr << "ERROR: Failed to load shader files" << std::endl;
+    // Load shaders using Shader class
+    Shader shader1;
+    if (!shader1.loadFromFiles("shaders/exercises/exercise1/test.vert", 
+                                "shaders/exercises/exercise1/test.frag")) {
+        gl_log_err("Failed to load first shader\n");
         return;
     }
-
-    //Load second Fragment Shader (different color)
-    std::string fragment_shader_str2 = readShaderFile("src/shaders/exercise1/test2.frag");
-    const char* fragment_shader2 = fragment_shader_str2.c_str();
     
-    if (fragment_shader_str2.empty()) {
-        gl_log_err("ERROR: Failed to load second fragment shader\n");
-        std::cerr << "ERROR: Failed to load second fragment shader" << std::endl;
-        return;
+    // Print all shader info (useful for debugging)
+    shader1.printAll();
+    
+    // Validate shader (only during development)
+    if (!shader1.validate()) {
+        gl_log_err("First shader validation failed\n");
     }
 
-    gl_log("Compiling shaders\n");
+    Shader shader2;
+    if (!shader2.loadFromFiles("shaders/exercises/exercise1/test.vert", 
+                                "shaders/exercises/exercise1/test2.frag")) {
+        gl_log_err("Failed to load second shader\n");
+        return;
+    }
     
-    //Compile Shaders
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vertex_shader, nullptr);
-    glCompileShader(vs);
+    shader2.printAll();
     
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fragment_shader, nullptr);
-    glCompileShader(fs);
-
-    //Create empty shader program
-    GLuint shader_programme = glCreateProgram();
-    glAttachShader(shader_programme, fs);
-    glAttachShader(shader_programme, vs);
-    glLinkProgram(shader_programme);
-    gl_log("First shader program created\n");
-
-    //Compile second fragment shader
-    GLuint fs2 = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs2, 1, &fragment_shader2, nullptr);
-    glCompileShader(fs2);
-
-    //Create second shader program (reuse same vertex shader)
-    GLuint shader_programme2 = glCreateProgram();
-    glAttachShader(shader_programme2, fs2);
-    glAttachShader(shader_programme2, vs);
-    glLinkProgram(shader_programme2);
-    gl_log("Second shader program created\n");
+    if (!shader2.validate()) {
+        gl_log_err("Second shader validation failed\n");
+    }
 
     // Set background color
     glClearColor(0.6f, 0.6f, 0.8f, 1.0f);
@@ -160,20 +133,20 @@ void runExercise1(GLFWwindow* window) {
         // Update FPS counter
         update_fps_counter(window);
         
-        // Update input (handles ESC key)
-        updateInput(window);
+        // Update input with shader reload (R key) - pass both shaders
+        updateInputWithShaderReload(window, &shader1, &shader2);
         
         // Clear and set viewport
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, g_fb_width, g_fb_height);
         
         // Draw first shape (purple square)
-        glUseProgram(shader_programme);
+        shader1.use();
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 6);
         
         // Draw second shape (orange triangle)
-        glUseProgram(shader_programme2);
+        shader2.use();
         glBindVertexArray(vao2);
         glDrawArrays(GL_TRIANGLES, 0, 3);
         
@@ -188,11 +161,7 @@ void runExercise1(GLFWwindow* window) {
     glDeleteVertexArrays(1, &vao2);
     glDeleteBuffers(1, &vbo);
     glDeleteBuffers(1, &vbo2);
-    glDeleteProgram(shader_programme);
-    glDeleteProgram(shader_programme2);
-    glDeleteShader(vs);
-    glDeleteShader(fs);
-    glDeleteShader(fs2);
+    // Shaders are automatically cleaned up by Shader destructor
 
     gl_log("Exercise 1 completed\n");
 }
