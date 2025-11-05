@@ -5,6 +5,7 @@
 #include "graphics/shader.h"
 #include "utils/log.h"
 #include "utils/utils.h"
+#include "exercises/ExerciseRegistry.h"
 
 void runExercise1(GLFWwindow* window) {
     gl_log("Running Exercise 1\n");
@@ -165,3 +166,5 @@ void runExercise1(GLFWwindow* window) {
 
     gl_log("Exercise 1 completed\n");
 }
+
+REGISTER_EXERCISE("Hello Triangle", runExercise1)

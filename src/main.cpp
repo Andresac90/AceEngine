@@ -1,19 +1,47 @@
+#include <GLFW/glfw3.h>
+#include <iostream>
 #include "core/Engine.h"
-#include "exercises/exercise1.h"
+#include "exercises/ExerciseRegistry.h"
+#include "exercises/AllExercises.h"  // ONE include for all exercises
 
-int main() {
-    Engine engine;
+int main(int argc, char* argv[]) {
+    auto& registry = ExerciseRegistry::instance();
+    const auto& exercises = registry.getExercises();
     
-    // Initialize engine (windowed mode)
+    int choice = -1;
+    
+    // Command line argument
+    if (argc > 1) {
+        choice = std::atoi(argv[1]);
+    } else {
+        // Show menu
+        std::cout << "\n=== AceEngine - OpenGL Exercises ===" << std::endl;
+        for (size_t i = 0; i < exercises.size(); i++) {
+            std::cout << (i + 1) << ". " << exercises[i].name << std::endl;
+        }
+        std::cout << "0. Exit" << std::endl;
+        std::cout << "\nEnter your choice: ";
+        std::cin >> choice;
+    }
+    
+    if (choice == 0) {
+        std::cout << "Goodbye!" << std::endl;
+        return 0;
+    }
+    
+    if (choice < 1 || choice > (int)exercises.size()) {
+        std::cerr << "Invalid choice!" << std::endl;
+        return 1;
+    }
+    
+    // Initialize engine
+    Engine engine;
     if (!engine.init(640, 480, false)) {
         return 1;
     }
     
-    // For fullscreen, use: engine.init(0, 0, true);
+    // Run selected exercise
+    exercises[choice - 1].run(engine.getWindow());
     
-    // Run exercise
-    runExercise1(engine.getWindow());
-    
-    // Engine automatically shuts down via destructor
     return 0;
 }

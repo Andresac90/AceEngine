@@ -1,4 +1,4 @@
-GL_LOG_FILE log. local time Wed Nov  5 11:47:23 2025
+GL_LOG_FILE log. local time Wed Nov  5 17:28:35 2025
 
 Starting AceEngine
 GLFW Version: 3.4.0 Cocoa NSGL Null EGL OSMesa monotonic dynamic
@@ -7,29 +7,14 @@ Anti-aliasing set to 4x MSAA
 Created windowed mode: 640x480
 Initial framebuffer size: 1280x960
 Engine initialized successfully
-Running Exercise 1
+Running Exercise 2 - Vertex Colors
 Initializing GLAD
 Initial viewport set to 1280x960
 Renderer: Apple M1 Pro
 OpenGL version supported: 4.1 Metal - 90.5
-GL Context Params:
-GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS 80
-GL_MAX_CUBE_MAP_TEXTURE_SIZE 16384
-GL_MAX_DRAW_BUFFERS 8
-GL_MAX_FRAGMENT_UNIFORM_COMPONENTS 4096
-GL_MAX_TEXTURE_IMAGE_UNITS 16
-GL_MAX_TEXTURE_SIZE 16384
-GL_MAX_VARYING_FLOATS 0
-GL_MAX_VERTEX_ATTRIBS 16
-GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS 16
-GL_MAX_VERTEX_UNIFORM_COMPONENTS 4096
-GL_MAX_VIEWPORT_DIMS 16384 16384
-GL_STEREO 0
------------------------------
-Multisampling enabled
-Depth testing enabled
-Creating VBOs and VAOs
-Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
+Multisampling and depth testing enabled
+Creating VBOs and VAO
+Loading shaders: shaders/exercises/exercise2/vertex.glsl, shaders/exercises/exercise2/fragment.glsl
 Shader 1 compiled successfully
 Shader 2 compiled successfully
 Shader programme 3 linked successfully
@@ -38,73 +23,57 @@ Shader programme 3 loaded successfully
 shader programme 3 info:
 GL_LINK_STATUS = 1
 GL_ATTACHED_SHADERS = 2
-GL_ACTIVE_ATTRIBUTES = 1
-  0) type:vec3 name:vp location:0
+GL_ACTIVE_ATTRIBUTES = 2
+  0) type:vec3 name:vertex_colour location:1
+  1) type:vec3 name:vertex_position location:0
 GL_ACTIVE_UNIFORMS = 0
 program info log for GL index 3:
 
 program 3 GL_VALIDATE_STATUS = 1
-Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
-Shader 4 compiled successfully
-Shader 5 compiled successfully
-Shader programme 6 linked successfully
-Shader programme 6 loaded successfully
---------------------
-shader programme 6 info:
-GL_LINK_STATUS = 1
-GL_ATTACHED_SHADERS = 2
-GL_ACTIVE_ATTRIBUTES = 1
-  0) type:vec3 name:vp location:0
-GL_ACTIVE_UNIFORMS = 0
-program info log for GL index 6:
-
-program 6 GL_VALIDATE_STATUS = 1
 Entering render loop
-=== Reloading Shaders ===
-Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
-Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
-Shader 7 compiled successfully
-Shader 8 compiled successfully
-Shader programme 9 linked successfully
-Shader programme 9 loaded successfully
-Shaders reloaded successfully!
-Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
-Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
-Shader 1 compiled successfully
-Shader 2 compiled successfully
-Shader programme 3 linked successfully
-Shader programme 3 loaded successfully
-Shaders reloaded successfully!
-=== Reloading Shaders ===
-Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
-Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
-Shader 4 compiled successfully
-Shader 5 compiled successfully
-Shader programme 6 linked successfully
-Shader programme 6 loaded successfully
-Shaders reloaded successfully!
-Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
-Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
-Shader 7 compiled successfully
-Shader 8 compiled successfully
-Shader programme 9 linked successfully
-Shader programme 9 loaded successfully
-Shaders reloaded successfully!
-=== Reloading Shaders ===
-Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
-Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test.frag
-Shader 1 compiled successfully
-Shader 2 compiled successfully
-Shader programme 3 linked successfully
-Shader programme 3 loaded successfully
-Shaders reloaded successfully!
-Reloading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
-Loading shaders: shaders/exercises/exercise1/test.vert, shaders/exercises/exercise1/test2.frag
-Shader 4 compiled successfully
-Shader 5 compiled successfully
-Shader programme 6 linked successfully
-Shader programme 6 loaded successfully
-Shaders reloaded successfully!
+Framebuffer resized to 640x480
+Framebuffer resized to 646x484
+Window resized to 646x484
+Framebuffer resized to 666x493
+Window resized to 666x493
+Framebuffer resized to 698x510
+Window resized to 698x510
+Framebuffer resized to 745x534
+Window resized to 745x534
+Framebuffer resized to 802x563
+Window resized to 802x563
+Framebuffer resized to 871x599
+Window resized to 871x599
+Framebuffer resized to 949x639
+Window resized to 949x639
+Framebuffer resized to 1034x682
+Window resized to 1034x682
+Framebuffer resized to 1125x729
+Window resized to 1125x729
+Framebuffer resized to 1219x778
+Window resized to 1219x778
+Framebuffer resized to 1315x827
+Window resized to 1315x827
+Framebuffer resized to 1410x876
+Window resized to 1410x876
+Framebuffer resized to 1502x923
+Window resized to 1502x923
+Framebuffer resized to 1589x967
+Window resized to 1589x967
+Framebuffer resized to 1670x1009
+Window resized to 1670x1009
+Framebuffer resized to 1741x1045
+Window resized to 1741x1045
+Framebuffer resized to 1802x1077
+Window resized to 1802x1077
+Framebuffer resized to 1851x1103
+Window resized to 1851x1103
+Framebuffer resized to 1888x1122
+Window resized to 1888x1122
+Framebuffer resized to 1911x1133
+Window resized to 1911x1133
+Framebuffer resized to 1920x1137
+Window resized to 1920x1137
 Exiting render loop, cleaning up
-Exercise 1 completed
+Exercise 2 completed
 Shutting down engine
