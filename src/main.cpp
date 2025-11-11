@@ -1,12 +1,19 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <algorithm>
 #include "core/Engine.h"
 #include "exercises/ExerciseRegistry.h"
-#include "exercises/AllExercises.h"  // ONE include for all exercises
+#include "exercises/AllExercises.h"
 
 int main(int argc, char* argv[]) {
     auto& registry = ExerciseRegistry::instance();
-    const auto& exercises = registry.getExercises();
+    auto exercises = registry.getExercises();  // Make a copy so we can sort
+    
+    // Sort exercises alphabetically by name (so they appear in order)
+    std::sort(exercises.begin(), exercises.end(), 
+              [](const Exercise& a, const Exercise& b) {
+                  return a.name < b.name;
+              });
     
     int choice = -1;
     

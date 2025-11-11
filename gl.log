@@ -1,79 +1,57 @@
-GL_LOG_FILE log. local time Wed Nov  5 17:28:35 2025
+GL_LOG_FILE log. local time Tue Nov 11 13:03:56 2025
 
 Starting AceEngine
 GLFW Version: 3.4.0 Cocoa NSGL Null EGL OSMesa monotonic dynamic
 Setting OpenGL version hints
 Anti-aliasing set to 4x MSAA
 Created windowed mode: 640x480
-Initial framebuffer size: 1280x960
+Initial framebuffer size: 640x480
 Engine initialized successfully
-Running Exercise 2 - Vertex Colors
-Initializing GLAD
-Initial viewport set to 1280x960
-Renderer: Apple M1 Pro
-OpenGL version supported: 4.1 Metal - 90.5
-Multisampling and depth testing enabled
-Creating VBOs and VAO
-Loading shaders: shaders/exercises/exercise2/vertex.glsl, shaders/exercises/exercise2/fragment.glsl
+Running Exercise 4 - Virtual Camera with Frustum Culling
+Loading shaders: shaders/exercises/exercise4/vertex.glsl, shaders/exercises/exercise4/fragment.glsl
 Shader 1 compiled successfully
 Shader 2 compiled successfully
 Shader programme 3 linked successfully
 Shader programme 3 loaded successfully
---------------------
-shader programme 3 info:
-GL_LINK_STATUS = 1
-GL_ATTACHED_SHADERS = 2
-GL_ACTIVE_ATTRIBUTES = 2
-  0) type:vec3 name:vertex_colour location:1
-  1) type:vec3 name:vertex_position location:0
-GL_ACTIVE_UNIFORMS = 0
-program info log for GL index 3:
-
-program 3 GL_VALIDATE_STATUS = 1
-Entering render loop
-Framebuffer resized to 640x480
-Framebuffer resized to 646x484
-Window resized to 646x484
-Framebuffer resized to 666x493
-Window resized to 666x493
-Framebuffer resized to 698x510
-Window resized to 698x510
-Framebuffer resized to 745x534
-Window resized to 745x534
-Framebuffer resized to 802x563
-Window resized to 802x563
-Framebuffer resized to 871x599
-Window resized to 871x599
-Framebuffer resized to 949x639
-Window resized to 949x639
-Framebuffer resized to 1034x682
-Window resized to 1034x682
-Framebuffer resized to 1125x729
-Window resized to 1125x729
-Framebuffer resized to 1219x778
-Window resized to 1219x778
-Framebuffer resized to 1315x827
-Window resized to 1315x827
-Framebuffer resized to 1410x876
-Window resized to 1410x876
-Framebuffer resized to 1502x923
-Window resized to 1502x923
-Framebuffer resized to 1589x967
-Window resized to 1589x967
-Framebuffer resized to 1670x1009
-Window resized to 1670x1009
-Framebuffer resized to 1741x1045
-Window resized to 1741x1045
-Framebuffer resized to 1802x1077
-Window resized to 1802x1077
-Framebuffer resized to 1851x1103
-Window resized to 1851x1103
-Framebuffer resized to 1888x1122
-Window resized to 1888x1122
-Framebuffer resized to 1911x1133
-Window resized to 1911x1133
+Framebuffer resized to 642x482
+Window resized to 642x482
+Framebuffer resized to 658x489
+Window resized to 658x489
+Framebuffer resized to 686x504
+Window resized to 686x504
+Framebuffer resized to 728x526
+Window resized to 728x526
+Framebuffer resized to 782x552
+Window resized to 782x552
+Framebuffer resized to 846x586
+Window resized to 846x586
+Framebuffer resized to 922x625
+Window resized to 922x625
+Framebuffer resized to 1004x667
+Window resized to 1004x667
+Framebuffer resized to 1094x713
+Window resized to 1094x713
+Framebuffer resized to 1186x761
+Window resized to 1186x761
+Framebuffer resized to 1282x810
+Window resized to 1282x810
+Framebuffer resized to 1378x859
+Window resized to 1378x859
+Framebuffer resized to 1472x907
+Window resized to 1472x907
+Framebuffer resized to 1560x953
+Window resized to 1560x953
+Framebuffer resized to 1642x996
+Window resized to 1642x996
+Framebuffer resized to 1718x1033
+Window resized to 1718x1033
+Framebuffer resized to 1782x1067
+Window resized to 1782x1067
+Framebuffer resized to 1836x1094
+Window resized to 1836x1094
+Framebuffer resized to 1878x1116
+Window resized to 1878x1116
 Framebuffer resized to 1920x1137
 Window resized to 1920x1137
-Exiting render loop, cleaning up
-Exercise 2 completed
+Exercise 4 completed
 Shutting down engine

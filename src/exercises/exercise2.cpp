@@ -39,6 +39,11 @@ void runExercise2(GLFWwindow* window) {
     glDepthFunc(GL_LESS);
     gl_log("Multisampling and depth testing enabled\n");
 
+    // Enable back-face culling
+    glEnable(GL_CULL_FACE);      // Enable culling
+    glCullFace(GL_BACK);         // Cull back faces
+    glFrontFace(GL_CW);         // GL_CCW for counter clock-wise (Default), GL_CW for clock-wise
+
     // Triangle vertex positions
     GLfloat points[] = {
          0.0f,  0.5f,  0.0f,
@@ -129,4 +134,4 @@ void runExercise2(GLFWwindow* window) {
     gl_log("Exercise 2 completed\n");
 }
 
-REGISTER_EXERCISE("Vertex Colors", runExercise2)
+REGISTER_EXERCISE("2. Vertex Colors", runExercise2)

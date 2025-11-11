@@ -167,4 +167,4 @@ void runExercise1(GLFWwindow* window) {
     gl_log("Exercise 1 completed\n");
 }
 
-REGISTER_EXERCISE("Hello Triangle", runExercise1)
+REGISTER_EXERCISE("1. Hello Triangle", runExercise1)
