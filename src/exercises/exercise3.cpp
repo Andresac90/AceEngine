@@ -143,9 +143,7 @@ void runExercise3(GLFWwindow* window) {
 
         update_fps_counter(window);
         
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-            glfwSetWindowShouldClose(window, 1);
-        }
+        updateInput(window);  // Handles ESC and P key (screenshot)
         
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, g_fb_width, g_fb_height);

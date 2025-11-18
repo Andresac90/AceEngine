@@ -1,5 +1,5 @@
 #include "utils/log.h"
-#include <glad/glad.h>  // Add this include
+#include <glad/glad.h>  
 #include <cstdio>
 #include <cstdarg>
 #include <ctime>

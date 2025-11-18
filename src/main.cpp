@@ -1,15 +1,14 @@
-#include <GLFW/glfw3.h>
 #include <iostream>
 #include <algorithm>
-#include "core/Engine.h"
+#include "core/Engine.h"  
 #include "exercises/ExerciseRegistry.h"
 #include "exercises/AllExercises.h"
 
 int main(int argc, char* argv[]) {
     auto& registry = ExerciseRegistry::instance();
-    auto exercises = registry.getExercises();  // Make a copy so we can sort
+    auto exercises = registry.getExercises();
     
-    // Sort exercises alphabetically by name (so they appear in order)
+    // Sort exercises alphabetically by name
     std::sort(exercises.begin(), exercises.end(), 
               [](const Exercise& a, const Exercise& b) {
                   return a.name < b.name;

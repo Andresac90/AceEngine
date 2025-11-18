@@ -218,10 +218,8 @@ void runExercise4(GLFWwindow* window) {
             }
         }
 
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-            glfwSetWindowShouldClose(window, 1);
-        }
-
+        updateInput(window);  // Handles ESC and P key (screenshot)
+        
         if (moved) {
             view_mat = rotate_x(-cam_pitch) * rotate_y(-cam_yaw) * translate(vec3(-cam_pos.v[0], -cam_pos.v[1], -cam_pos.v[2]));
             glUniformMatrix4fv(view_loc, 1, GL_FALSE, view_mat.m);

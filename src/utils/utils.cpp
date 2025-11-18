@@ -1,6 +1,8 @@
 #include <glad/glad.h> 
 #include "utils/utils.h"
 #include "utils/log.h"
+#include "utils/screenshot.h"
+#include "utils/gl_debug.h"  
 #include "graphics/shader.h"
 #include <fstream>
 #include <sstream>
@@ -12,6 +14,9 @@ int g_win_width = 640;
 int g_win_height = 480;
 int g_fb_width = 640;
 int g_fb_height = 480;
+
+// Global window title (stored so FPS counter can append to it)
+std::string g_window_title = "AceEngine";
 
 // FPS counter variables
 static double previous_seconds = 0.0;
@@ -31,15 +36,34 @@ std::string readShaderFile(const std::string& filepath) {
     return buffer.str();
 }
 
-// Update function - handles common input like ESC to quit
+// Update function - handles ESC to quit AND P for screenshot
 void updateInput(GLFWwindow* window) {
     // Check for ESC key press to close the window
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, 1);
     }
+    
+    // Check for P key press to take screenshot
+    static bool p_key_was_pressed = false;
+    bool p_key_is_pressed = glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS;
+    
+    if (p_key_is_pressed && !p_key_was_pressed) {
+        take_screenshot(g_fb_width, g_fb_height);
+    }
+    
+    p_key_was_pressed = p_key_is_pressed;
+    
+    // Periodic OpenGL error checking (every 5 seconds)
+    static double last_error_check = 0.0;
+    double current_time = glfwGetTime();
+    
+    if (current_time - last_error_check > 5.0) {
+        check_and_clear_gl_errors("Periodic check");
+        last_error_check = current_time;
+    }
 }
 
-// Update input with shader reload (R key)
+// Update input with shader reload (R key) AND screenshot (P key)
 void updateInputWithShaderReload(GLFWwindow* window, Shader* shader1, Shader* shader2) {
     // Check for ESC key press to close the window
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
@@ -63,9 +87,33 @@ void updateInputWithShaderReload(GLFWwindow* window, Shader* shader1, Shader* sh
     }
     
     r_key_was_pressed = r_key_is_pressed;
+    
+    // Check for P key press to take screenshot
+    static bool p_key_was_pressed = false;
+    bool p_key_is_pressed = glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS;
+    
+    if (p_key_is_pressed && !p_key_was_pressed) {
+        take_screenshot(g_fb_width, g_fb_height);
+    }
+    
+    p_key_was_pressed = p_key_is_pressed;
+    
+    // Periodic OpenGL error checking (every 5 seconds)
+    static double last_error_check = 0.0;
+    double current_time = glfwGetTime();
+    
+    if (current_time - last_error_check > 5.0) {
+        check_and_clear_gl_errors("Periodic check");
+        last_error_check = current_time;
+    }
 }
 
-// Update FPS counter in window title
+// Set the base window title
+void set_window_title(const char* title) {
+    g_window_title = title;
+}
+
+// Update FPS counter in window title (appends to stored title)
 void update_fps_counter(GLFWwindow* window) {
     double current_seconds = glfwGetTime();
     double elapsed_seconds = current_seconds - previous_seconds;
@@ -76,8 +124,9 @@ void update_fps_counter(GLFWwindow* window) {
         double fps = (double)frame_count / elapsed_seconds;
         double ms_per_frame = 1000.0 / fps;
         
-        char tmp[128];
-        snprintf(tmp, sizeof(tmp), "OpenGL @ fps: %.2f | ms/frame: %.2f", fps, ms_per_frame);
+        char tmp[256];
+        snprintf(tmp, sizeof(tmp), "%s @ fps: %.2f | ms/frame: %.2f", 
+                 g_window_title.c_str(), fps, ms_per_frame);
         glfwSetWindowTitle(window, tmp);
         
         frame_count = 0;

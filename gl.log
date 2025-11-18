@@ -1,57 +1,23 @@
-GL_LOG_FILE log. local time Tue Nov 11 13:03:56 2025
+GL_LOG_FILE log. local time Tue Nov 18 17:21:13 2025
 
 Starting AceEngine
 GLFW Version: 3.4.0 Cocoa NSGL Null EGL OSMesa monotonic dynamic
 Setting OpenGL version hints
+Requesting OpenGL debug context
 Anti-aliasing set to 4x MSAA
-Created windowed mode: 640x480
-Initial framebuffer size: 640x480
+Requesting sRGB capable framebuffer
+Created windowed mode: 640x480 - AceEngine
+Renderer: Apple M1 Pro
+OpenGL version: 4.1 Metal - 90.5
+OpenGL debug callback not available on macOS - using manual error checking
+sRGB gamma correction: ENABLED
+Initial framebuffer size: 1280x960
 Engine initialized successfully
-Running Exercise 4 - Virtual Camera with Frustum Culling
-Loading shaders: shaders/exercises/exercise4/vertex.glsl, shaders/exercises/exercise4/fragment.glsl
+Running Exercise 5 - Phong vs Blinn-Phong (Double-Sided)
+Loading shaders: shaders/exercises/exercise5/vertex.glsl, shaders/exercises/exercise5/fragment.glsl
 Shader 1 compiled successfully
 Shader 2 compiled successfully
 Shader programme 3 linked successfully
 Shader programme 3 loaded successfully
-Framebuffer resized to 642x482
-Window resized to 642x482
-Framebuffer resized to 658x489
-Window resized to 658x489
-Framebuffer resized to 686x504
-Window resized to 686x504
-Framebuffer resized to 728x526
-Window resized to 728x526
-Framebuffer resized to 782x552
-Window resized to 782x552
-Framebuffer resized to 846x586
-Window resized to 846x586
-Framebuffer resized to 922x625
-Window resized to 922x625
-Framebuffer resized to 1004x667
-Window resized to 1004x667
-Framebuffer resized to 1094x713
-Window resized to 1094x713
-Framebuffer resized to 1186x761
-Window resized to 1186x761
-Framebuffer resized to 1282x810
-Window resized to 1282x810
-Framebuffer resized to 1378x859
-Window resized to 1378x859
-Framebuffer resized to 1472x907
-Window resized to 1472x907
-Framebuffer resized to 1560x953
-Window resized to 1560x953
-Framebuffer resized to 1642x996
-Window resized to 1642x996
-Framebuffer resized to 1718x1033
-Window resized to 1718x1033
-Framebuffer resized to 1782x1067
-Window resized to 1782x1067
-Framebuffer resized to 1836x1094
-Window resized to 1836x1094
-Framebuffer resized to 1878x1116
-Window resized to 1878x1116
-Framebuffer resized to 1920x1137
-Window resized to 1920x1137
-Exercise 4 completed
+Exercise 5 completed
 Shutting down engine

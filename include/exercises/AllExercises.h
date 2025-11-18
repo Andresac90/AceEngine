@@ -5,5 +5,7 @@
 #include "exercises/exercise2.h"
 #include "exercises/exercise3.h"
 #include "exercises/exercise4.h"
+#include "exercises/exercise5.h"
+#include "exercises/exercise6.h" 
 
 #endif
