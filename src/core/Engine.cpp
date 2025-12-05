@@ -97,6 +97,19 @@ bool Engine::init(int width, int height, bool fullscreen, const char* title) {
     std::cout << "Renderer: " << renderer << std::endl;
     std::cout << "OpenGL version: " << version << std::endl;
     
+    // Check for Uniform Buffer Object support
+    GLint max_ubo_bindings = 0;
+    glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &max_ubo_bindings);
+    std::cout << "Uniform Buffer Objects: SUPPORTED" << std::endl;
+    std::cout << "  Max UBO binding points: " << max_ubo_bindings << std::endl;
+    gl_log("UBO support: max binding points = %d\n", max_ubo_bindings);
+    
+    GLint max_ubo_size = 0;
+    glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &max_ubo_size);
+    std::cout << "  Max UBO size: " << max_ubo_size << " bytes (" 
+              << (max_ubo_size / 1024) << " KB)" << std::endl;
+    gl_log("UBO support: max block size = %d bytes\n", max_ubo_size);
+    
     // Initialize OpenGL debug output (if available)
     init_gl_debug_output();
     

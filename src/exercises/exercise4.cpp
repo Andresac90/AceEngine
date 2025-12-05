@@ -289,4 +289,4 @@ void runExercise4(GLFWwindow* window) {
     gl_log("Exercise 4 completed\n");
 }
 
-REGISTER_EXERCISE("4. Virtual Camera", runExercise4)
+REGISTER_EXERCISE(4, "Virtual Camera", runExercise4)

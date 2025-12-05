@@ -1,6 +1,7 @@
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <cstring>
 #include "exercises/exercise5.h"
 #include "graphics/shader.h"
 #include "math/mat4.h"
@@ -9,7 +10,7 @@
 #include "exercises/ExerciseRegistry.h"
 
 void runExercise5(GLFWwindow* window) {
-    gl_log("Running Exercise 5 - Phong vs Blinn-Phong (Double-Sided)\n");
+    gl_log("Running Exercise 5 - Phong vs Blinn-Phong (Double-Sided) with UBO\n");
     
     glfwMakeContextCurrent(window);
 
@@ -21,33 +22,27 @@ void runExercise5(GLFWwindow* window) {
     glViewport(0, 0, g_fb_width, g_fb_height);
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
-    // NO backface culling - we want to see both sides!
 
     std::cout << "OpenGL version: " << glGetString(GL_VERSION) << std::endl;
 
-    // Double-sided triangle: front face + back face
-    // Front face (CCW winding, normal pointing +Z)
-    // Back face (CW winding, normal pointing -Z)
+    // Double-sided triangle
     GLfloat points[] = {
-        // FRONT FACE (normal pointing out towards viewer)
-         0.0f,  0.5f,  0.0f,   // Top
-         0.5f, -0.5f,  0.0f,   // Bottom-right
-        -0.5f, -0.5f,  0.0f,   // Bottom-left
-        
-        // BACK FACE (reversed winding order, same positions)
-         0.0f,  0.5f,  0.0f,   // Top
-        -0.5f, -0.5f,  0.0f,   // Bottom-left (reversed)
-         0.5f, -0.5f,  0.0f    // Bottom-right (reversed)
+        // FRONT FACE
+         0.0f,  0.5f,  0.0f,
+         0.5f, -0.5f,  0.0f,
+        -0.5f, -0.5f,  0.0f,
+        // BACK FACE
+         0.0f,  0.5f,  0.0f,
+        -0.5f, -0.5f,  0.0f,
+         0.5f, -0.5f,  0.0f
     };
 
-    // Normals: front points +Z, back points -Z
     GLfloat normals[] = {
-        // FRONT FACE normals (pointing towards camera in world space)
+        // FRONT FACE normals
         0.0f, 0.0f, 1.0f,
         0.0f, 0.0f, 1.0f,
         0.0f, 0.0f, 1.0f,
-        
-        // BACK FACE normals (pointing away from camera, opposite direction)
+        // BACK FACE normals
         0.0f, 0.0f, -1.0f,
         0.0f, 0.0f, -1.0f,
         0.0f, 0.0f, -1.0f
@@ -75,7 +70,7 @@ void runExercise5(GLFWwindow* window) {
     glEnableVertexAttribArray(1);
 
     Shader shader;
-    if (!shader.loadFromFiles("shaders/exercises/exercise5/vertex.glsl", 
+    if (!shader.loadFromFiles("shaders/exercises/exercise5/vertex_ubo.glsl", 
                                "shaders/exercises/exercise5/fragment.glsl")) {
         std::cerr << "Failed to load shader" << std::endl;
         return;
@@ -83,39 +78,97 @@ void runExercise5(GLFWwindow* window) {
 
     shader.use();
     
+    // ========================================
+    // WITH UBO - MODERN INTERFACE (glMapBufferRange)
+    // ========================================
+    std::cout << "Using UBO with modern buffer mapping interface!" << std::endl;
+    
+    // Camera matrices in std140 layout
+    // std140 layout: mat4 = 16 floats (64 bytes), aligned to 16 bytes
+    // Total size: 2 mat4s = 32 floats = 128 bytes
+    const size_t CAMERA_UBO_SIZE = sizeof(float) * 32;  // 2 mat4s
+    
+    GLuint camera_ubo;
+    glGenBuffers(1, &camera_ubo);
+    glBindBuffer(GL_UNIFORM_BUFFER, camera_ubo);
+    glBufferData(GL_UNIFORM_BUFFER, CAMERA_UBO_SIZE, nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 0, camera_ubo);
+    
+    std::cout << "UBO created: " << CAMERA_UBO_SIZE << " bytes, bound to binding point 0" << std::endl;
+    
+    // Get uniform block index
+    GLuint ubo_index = glGetUniformBlockIndex(shader.programme, "CameraMatrices");
+    if (ubo_index == GL_INVALID_INDEX) {
+        std::cerr << "ERROR: CameraMatrices uniform block not found!" << std::endl;
+        return;
+    }
+    
+    glUniformBlockBinding(shader.programme, ubo_index, 0);
+    std::cout << "CameraMatrices block bound to binding point 0" << std::endl;
+    
+    // Get other uniform locations
     int model_loc = glGetUniformLocation(shader.programme, "model");
-    int view_loc = glGetUniformLocation(shader.programme, "view");
-    int proj_loc = glGetUniformLocation(shader.programme, "proj");
     int spec_exp_loc = glGetUniformLocation(shader.programme, "specular_exponent");
     int use_blinn_loc = glGetUniformLocation(shader.programme, "use_blinn");
     
-    std::cout << "Uniform locations:" << std::endl;
+    std::cout << "\nUniform locations:" << std::endl;
     std::cout << "  model: " << model_loc << std::endl;
-    std::cout << "  view: " << view_loc << std::endl;
-    std::cout << "  proj: " << proj_loc << std::endl;
     std::cout << "  specular_exponent: " << spec_exp_loc << std::endl;
     std::cout << "  use_blinn: " << use_blinn_loc << std::endl;
+    std::cout << "  view/proj: in UBO at binding point 0" << std::endl;
+
+    // ========================================
+    // WITHOUT UBO (Traditional approach - COMMENTED OUT)
+    // ========================================
+    // int view_loc = glGetUniformLocation(shader.programme, "view");
+    // int proj_loc = glGetUniformLocation(shader.programme, "proj");
+    //
+    // Traditional update per frame:
+    // glUniformMatrix4fv(view_loc, 1, GL_FALSE, view_mat.m);
+    // glUniformMatrix4fv(proj_loc, 1, GL_FALSE, proj_mat.m);
 
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
 
-    // View matrix (identity - camera at origin)
+    // Setup camera matrices
     mat4 view_mat = identity_mat4();
-    
-    // Projection matrix
     float aspect = (float)g_fb_width / (float)g_fb_height;
     mat4 proj_mat = perspective(67.0f, aspect, 0.1f, 100.0f);
 
-    // Send view and projection once
-    glUniformMatrix4fv(view_loc, 1, GL_FALSE, view_mat.m);
-    glUniformMatrix4fv(proj_loc, 1, GL_FALSE, proj_mat.m);
+    // WITH UBO - MODERN INTERFACE: Map buffer and write directly
+    glBindBuffer(GL_UNIFORM_BUFFER, camera_ubo);
+    float* cam_ubo_ptr = (float*)glMapBufferRange(
+        GL_UNIFORM_BUFFER,
+        0,
+        CAMERA_UBO_SIZE,
+        GL_MAP_WRITE_BIT | GL_MAP_INVALIDATE_BUFFER_BIT
+    );
+    
+    if (!cam_ubo_ptr) {
+        std::cerr << "ERROR: Failed to map UBO buffer!" << std::endl;
+        return;
+    }
+    
+    // Copy matrices directly into mapped memory
+    // std140 layout: view at offset 0, proj at offset 16 floats
+    memcpy(&cam_ubo_ptr[0], view_mat.m, sizeof(float) * 16);   // View matrix
+    memcpy(&cam_ubo_ptr[16], proj_mat.m, sizeof(float) * 16);  // Proj matrix
+    
+    glUnmapBuffer(GL_UNIFORM_BUFFER);
+    
+    std::cout << "Camera matrices uploaded to UBO using buffer mapping" << std::endl;
+    
+    // WITH UBO - OLDER INTERFACE (commented out for reference):
+    // glBindBuffer(GL_UNIFORM_BUFFER, camera_ubo);
+    // glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(float) * 16, proj_mat.m);
+    // glBufferSubData(GL_UNIFORM_BUFFER, sizeof(float) * 16, sizeof(float) * 16, view_mat.m);
 
-    std::cout << "\n=== Exercise 5 - Double-Sided Phong Lighting ===" << std::endl;
-    std::cout << "Triangle has geometry on BOTH sides with proper normals!" << std::endl;
-    std::cout << "Both sides will be lit correctly when rotating" << std::endl;
+    std::cout << "\n=== Exercise 5 - Double-Sided Phong Lighting (UBO) ===" << std::endl;
+    std::cout << "Using modern glMapBufferRange interface!" << std::endl;
     std::cout << "\nControls:" << std::endl;
     std::cout << "  B - Toggle Blinn-Phong / Phong" << std::endl;
     std::cout << "  SPACE - Toggle rotation" << std::endl;
     std::cout << "  UP/DOWN - Adjust specular exponent" << std::endl;
+    std::cout << "  P - Take screenshot" << std::endl;
     std::cout << "  ESC - Exit" << std::endl;
 
     float rotation_angle = 0.0f;
@@ -141,10 +194,9 @@ void runExercise5(GLFWwindow* window) {
             use_blinn = !use_blinn;
             std::cout << "\n=== Switched to " << (use_blinn ? "BLINN-PHONG" : "PHONG") << " ===" << std::endl;
             if (use_blinn) {
-                std::cout << "Using half-way vector (faster, cheaper computation)" << std::endl;
-                std::cout << "Highlight is about half as focused" << std::endl;
+                std::cout << "Using half-way vector (faster)" << std::endl;
             } else {
-                std::cout << "Using reflection vector (classic Phong)" << std::endl;
+                std::cout << "Using reflection vector (classic)" << std::endl;
             }
         }
         b_was_pressed = b_is_pressed;
@@ -177,7 +229,7 @@ void runExercise5(GLFWwindow* window) {
             last_exp_print = curr_time;
         }
 
-        updateInput(window);  // Handles ESC and P key (screenshot)
+        updateInput(window);
 
         // Update rotation
         if (rotate) {
@@ -190,16 +242,23 @@ void runExercise5(GLFWwindow* window) {
         mat4 R = rotate_y(rotation_angle);
         mat4 model_mat = T * R;
         
+        // WITH UBO: Only send model matrix (view/proj are in UBO)
         glUniformMatrix4fv(model_loc, 1, GL_FALSE, model_mat.m);
         glUniform1f(spec_exp_loc, specular_exp);
         glUniform1i(use_blinn_loc, use_blinn ? 1 : 0);
+        
+        // Note: In a real engine, if view/proj changed, you'd update UBO here:
+        // glBindBuffer(GL_UNIFORM_BUFFER, camera_ubo);
+        // float* ptr = (float*)glMapBufferRange(...);
+        // memcpy(ptr, updated_matrices, size);
+        // glUnmapBuffer(GL_UNIFORM_BUFFER);
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glViewport(0, 0, g_fb_width, g_fb_height);
 
         shader.use();
         glBindVertexArray(vao);
-        glDrawArrays(GL_TRIANGLES, 0, 6);  // Draw 6 vertices (2 triangles)
+        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -208,8 +267,9 @@ void runExercise5(GLFWwindow* window) {
     glDeleteVertexArrays(1, &vao);
     glDeleteBuffers(1, &points_vbo);
     glDeleteBuffers(1, &normals_vbo);
+    glDeleteBuffers(1, &camera_ubo);
 
     gl_log("Exercise 5 completed\n");
 }
 
-REGISTER_EXERCISE("5. Phong Lighting", runExercise5)
+REGISTER_EXERCISE(5, "Phong Lighting", runExercise5)

@@ -11,8 +11,12 @@ public:
     Shader();
     ~Shader();
     
-    // Load and compile shaders from files
-    bool loadFromFiles(const std::string& vertex_path, const std::string& fragment_path);
+    // Load and compile shaders from files (WITH OPTIONAL GEOMETRY SHADER!)
+    bool loadFromFiles(const std::string& vertex_path, 
+                       const std::string& fragment_path,
+                       const std::string& geometry_path = "",
+                       const std::string& tess_control_path = "",   
+                       const std::string& tess_eval_path = "");     
     
     // Reload shaders (for live editing)
     bool reload();
@@ -42,10 +46,12 @@ public:
 private:
     GLuint vertex_shader;
     GLuint fragment_shader;
+    GLuint geometry_shader;  // ADD THIS
     
     // Store paths for reloading
     std::string vertex_path;
     std::string fragment_path;
+    std::string geometry_path;  // ADD THIS
     
     // Helper functions
     bool compileShader(GLuint shader_index, const std::string& source);

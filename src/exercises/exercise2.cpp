@@ -134,4 +134,4 @@ void runExercise2(GLFWwindow* window) {
     gl_log("Exercise 2 completed\n");
 }
 
-REGISTER_EXERCISE("2. Vertex Colors", runExercise2)
+REGISTER_EXERCISE(2, "Vertex Colors", runExercise2)

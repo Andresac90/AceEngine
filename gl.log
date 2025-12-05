@@ -1,4 +1,4 @@
-GL_LOG_FILE log. local time Tue Nov 18 17:21:13 2025
+GL_LOG_FILE log. local time Fri Dec  5 17:27:38 2025
 
 Starting AceEngine
 GLFW Version: 3.4.0 Cocoa NSGL Null EGL OSMesa monotonic dynamic
@@ -9,15 +9,28 @@ Requesting sRGB capable framebuffer
 Created windowed mode: 640x480 - AceEngine
 Renderer: Apple M1 Pro
 OpenGL version: 4.1 Metal - 90.5
+UBO support: max binding points = 80
+UBO support: max block size = 65536 bytes
 OpenGL debug callback not available on macOS - using manual error checking
 sRGB gamma correction: ENABLED
-Initial framebuffer size: 1280x960
+Initial framebuffer size: 640x480
 Engine initialized successfully
-Running Exercise 5 - Phong vs Blinn-Phong (Double-Sided)
-Loading shaders: shaders/exercises/exercise5/vertex.glsl, shaders/exercises/exercise5/fragment.glsl
+Running Exercise 22 - Shadow Mapping
+Created shadow map 1024x1024
+Loading shaders: shaders/exercises/exercise22/depth_vertex.glsl, shaders/exercises/exercise22/depth_fragment.glsl
 Shader 1 compiled successfully
 Shader 2 compiled successfully
 Shader programme 3 linked successfully
 Shader programme 3 loaded successfully
-Exercise 5 completed
+Loading shaders: shaders/exercises/exercise22/scene_vertex.glsl, shaders/exercises/exercise22/scene_fragment.glsl
+Shader 4 compiled successfully
+Shader 5 compiled successfully
+Shader programme 6 linked successfully
+Shader programme 6 loaded successfully
+Loading shaders: shaders/exercises/exercise22/quad_vertex.glsl, shaders/exercises/exercise22/quad_fragment.glsl
+Shader 7 compiled successfully
+Shader 8 compiled successfully
+Shader programme 9 linked successfully
+Shader programme 9 loaded successfully
+Exercise 22 completed
 Shutting down engine

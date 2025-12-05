@@ -7,6 +7,7 @@
 #include <functional>
 
 struct Exercise {
+    int number;           // Exercise number (1-10)
     std::string name;
     std::function<void(GLFWwindow*)> run;
 };
@@ -18,8 +19,8 @@ public:
         return registry;
     }
     
-    void registerExercise(const std::string& name, std::function<void(GLFWwindow*)> func) {
-        exercises.push_back({name, func});
+    void registerExercise(int number, const std::string& name, std::function<void(GLFWwindow*)> func) {
+        exercises.push_back({number, name, func});
     }
     
     const std::vector<Exercise>& getExercises() const {
@@ -31,10 +32,10 @@ private:
     std::vector<Exercise> exercises;
 };
 
-// Helper macro to auto-register exercises
-#define REGISTER_EXERCISE(name, func) \
+// Helper macro to auto-register exercises with number
+#define REGISTER_EXERCISE(num, name, func) \
     static bool registered_##func = []() { \
-        ExerciseRegistry::instance().registerExercise(name, func); \
+        ExerciseRegistry::instance().registerExercise(num, name, func); \
         return true; \
     }();
 

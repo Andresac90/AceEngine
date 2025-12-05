@@ -1,4 +1,4 @@
-PROJECT_NAME := Demo
+PROJECT_NAME := AceEngine
 
 SRC_DIR := src
 BUILD_DIR := build
@@ -7,13 +7,15 @@ INCLUDE_DIR := include
 GLFW_INCLUDE_DIR := /opt/homebrew/opt/glfw/include
 GLFW_LIB_DIR := /opt/homebrew/opt/glfw/lib
 CGLM_INCLUDE_DIR := /opt/homebrew/opt/cglm/include/cglm
-SOKOL_INCLUDE_DIR := /Users/andres/sokol/include  
+SOKOL_INCLUDE_DIR := /Users/andres/sokol/include
+ASSIMP_INCLUDE_DIR := /opt/homebrew/opt/assimp/include
+ASSIMP_LIB_DIR := /opt/homebrew/opt/assimp/lib
 
 CXX := g++
 CC := gcc
-CXXFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR)
-CFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR)
-LDFLAGS := -L$(GLFW_LIB_DIR) -lglfw -ldl -framework OpenGL -framework Cocoa
+CXXFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR) -I$(ASSIMP_INCLUDE_DIR)
+CFLAGS := -Wall -Wextra -I$(INCLUDE_DIR) -I$(SRC_DIR) -I$(GLFW_INCLUDE_DIR) -I$(SOKOL_INCLUDE_DIR) -I$(ASSIMP_INCLUDE_DIR)
+LDFLAGS := -L$(GLFW_LIB_DIR) -L$(ASSIMP_LIB_DIR) -lglfw -lassimp -ldl -framework OpenGL -framework Cocoa
 
 # Find all C and C++ source files recursively
 C_SRCS := $(shell find $(SRC_DIR) -name '*.c')

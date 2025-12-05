@@ -3,20 +3,32 @@
 #include "utils/utils.h"
 #include <iostream>
 
-Shader::Shader() : programme(0), vertex_shader(0), fragment_shader(0) {}
+Shader::Shader() : programme(0), vertex_shader(0), fragment_shader(0), geometry_shader(0) {}
 
 Shader::~Shader() {
     if (vertex_shader) glDeleteShader(vertex_shader);
     if (fragment_shader) glDeleteShader(fragment_shader);
+    if (geometry_shader) glDeleteShader(geometry_shader);
     if (programme) glDeleteProgram(programme);
 }
 
-bool Shader::loadFromFiles(const std::string& vertex_path, const std::string& fragment_path) {
+bool Shader::loadFromFiles(const std::string& vertex_path, 
+                           const std::string& fragment_path,
+                           const std::string& geometry_path,
+                           const std::string& tess_control_path,   
+                           const std::string& tess_eval_path) {    
     // Store paths for reload functionality
     this->vertex_path = vertex_path;
     this->fragment_path = fragment_path;
+    this->geometry_path = geometry_path;
     
     gl_log("Loading shaders: %s, %s\n", vertex_path.c_str(), fragment_path.c_str());
+    if (!geometry_path.empty()) {
+        gl_log("  with geometry shader: %s\n", geometry_path.c_str());
+    }
+    if (!tess_control_path.empty() && !tess_eval_path.empty()) {
+        gl_log("  with tessellation shaders: %s, %s\n", tess_control_path.c_str(), tess_eval_path.c_str());
+    }
     
     // Read shader source files
     std::string vertex_source = readShaderFile(vertex_path);
@@ -31,7 +43,7 @@ bool Shader::loadFromFiles(const std::string& vertex_path, const std::string& fr
     vertex_shader = glCreateShader(GL_VERTEX_SHADER);
     fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
     
-    // Compile shaders
+    // Compile vertex and fragment shaders
     if (!compileShader(vertex_shader, vertex_source)) {
         gl_log_err("Vertex shader compilation failed\n");
         return false;
@@ -42,15 +54,71 @@ bool Shader::loadFromFiles(const std::string& vertex_path, const std::string& fr
         return false;
     }
     
+    // GEOMETRY SHADER (OPTIONAL)
+    GLuint geom_shader = 0;
+    if (!geometry_path.empty()) {
+        std::string geometry_source = readShaderFile(geometry_path);
+        if (geometry_source.empty()) {
+            gl_log_err("Failed to load geometry shader file\n");
+            return false;
+        }
+        
+        geom_shader = glCreateShader(GL_GEOMETRY_SHADER);
+        if (!compileShader(geom_shader, geometry_source)) {
+            gl_log_err("Geometry shader compilation failed\n");
+            return false;
+        }
+        geometry_shader = geom_shader;
+    }
+    
+    // TESSELLATION SHADERS (OPTIONAL - must have BOTH or neither)
+    GLuint tcs_shader = 0;
+    GLuint tes_shader = 0;
+    if (!tess_control_path.empty() && !tess_eval_path.empty()) {
+        std::string tcs_source = readShaderFile(tess_control_path);
+        std::string tes_source = readShaderFile(tess_eval_path);
+        
+        if (tcs_source.empty() || tes_source.empty()) {
+            gl_log_err("Failed to load tessellation shader files\n");
+            return false;
+        }
+        
+        tcs_shader = glCreateShader(GL_TESS_CONTROL_SHADER);
+        tes_shader = glCreateShader(GL_TESS_EVALUATION_SHADER);
+        
+        if (!compileShader(tcs_shader, tcs_source)) {
+            gl_log_err("Tessellation control shader compilation failed\n");
+            return false;
+        }
+        
+        if (!compileShader(tes_shader, tes_source)) {
+            gl_log_err("Tessellation evaluation shader compilation failed\n");
+            return false;
+        }
+    }
+    
     // Create and link program
     programme = glCreateProgram();
     glAttachShader(programme, vertex_shader);
     glAttachShader(programme, fragment_shader);
     
+    if (geom_shader) {
+        glAttachShader(programme, geom_shader);
+    }
+    
+    if (tcs_shader && tes_shader) {
+        glAttachShader(programme, tcs_shader);
+        glAttachShader(programme, tes_shader);
+    }
+    
     if (!linkProgram()) {
         gl_log_err("Shader program linking failed\n");
         return false;
     }
+    
+    // Clean up tessellation shader objects (they're now in the program)
+    if (tcs_shader) glDeleteShader(tcs_shader);
+    if (tes_shader) glDeleteShader(tes_shader);
     
     gl_log("Shader programme %i loaded successfully\n", programme);
     return true;
@@ -58,30 +126,37 @@ bool Shader::loadFromFiles(const std::string& vertex_path, const std::string& fr
 
 bool Shader::reload() {
     gl_log("Reloading shaders: %s, %s\n", vertex_path.c_str(), fragment_path.c_str());
+    if (!geometry_path.empty()) {
+        gl_log("  with geometry shader: %s\n", geometry_path.c_str());
+    }
     
     // Save old programme in case reload fails
     GLuint old_programme = programme;
     GLuint old_vs = vertex_shader;
     GLuint old_fs = fragment_shader;
+    GLuint old_gs = geometry_shader;
     
     // Reset IDs
     programme = 0;
     vertex_shader = 0;
     fragment_shader = 0;
+    geometry_shader = 0;
     
-    // Try to reload
-    if (!loadFromFiles(vertex_path, fragment_path)) {
+    // Try to reload (note: tessellation paths not stored for reload)
+    if (!loadFromFiles(vertex_path, fragment_path, geometry_path)) {
         gl_log_err("Shader reload failed, keeping old shaders\n");
         // Restore old shaders
         programme = old_programme;
         vertex_shader = old_vs;
         fragment_shader = old_fs;
+        geometry_shader = old_gs;
         return false;
     }
     
     // Delete old shaders
     glDeleteShader(old_vs);
     glDeleteShader(old_fs);
+    if (old_gs) glDeleteShader(old_gs);
     glDeleteProgram(old_programme);
     
     gl_log("Shaders reloaded successfully!\n");
@@ -153,7 +228,6 @@ GLint Shader::getUniformLocation(const std::string& name) {
     return location;
 }
 
-// Uniform setters with automatic shader activation check
 void Shader::setUniform(const std::string& name, int value) {
     if (!isInUse()) {
         gl_log_err("ERROR: Trying to set uniform '%s' but shader %i is not in use!\n", name.c_str(), programme);
@@ -233,17 +307,14 @@ void Shader::printAll() {
     
     int params = -1;
     
-    // Link status
     glGetProgramiv(programme, GL_LINK_STATUS, &params);
     gl_log("GL_LINK_STATUS = %i\n", params);
     std::cout << "GL_LINK_STATUS = " << params << std::endl;
     
-    // Attached shaders
     glGetProgramiv(programme, GL_ATTACHED_SHADERS, &params);
     gl_log("GL_ATTACHED_SHADERS = %i\n", params);
     std::cout << "GL_ATTACHED_SHADERS = " << params << std::endl;
     
-    // Active attributes
     glGetProgramiv(programme, GL_ACTIVE_ATTRIBUTES, &params);
     gl_log("GL_ACTIVE_ATTRIBUTES = %i\n", params);
     std::cout << "GL_ACTIVE_ATTRIBUTES = " << params << std::endl;
@@ -270,7 +341,6 @@ void Shader::printAll() {
         }
     }
     
-    // Active uniforms
     glGetProgramiv(programme, GL_ACTIVE_UNIFORMS, &params);
     gl_log("GL_ACTIVE_UNIFORMS = %i\n", params);
     std::cout << "GL_ACTIVE_UNIFORMS = " << params << std::endl;

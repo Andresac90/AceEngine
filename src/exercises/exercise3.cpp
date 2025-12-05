@@ -167,4 +167,4 @@ void runExercise3(GLFWwindow* window) {
     gl_log("Exercise 3 completed\n");
 }
 
-REGISTER_EXERCISE("3. Matrix Translation", runExercise3)
+REGISTER_EXERCISE(3, "Matrix Translation", runExercise3)

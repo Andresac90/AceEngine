@@ -72,9 +72,9 @@ void runExercise6(GLFWwindow* window) {
     std::cout << "  Attribute 1 (texcoord): 2 floats per vertex" << std::endl;
 
     Texture texture;
-    if (!texture.loadFromFile("assets/textures/test_texture.png")) {
+    if (!texture.loadFromFile("assets/textures/alley-brick-wall_albedo.png")) {
         std::cerr << "\nERROR: Failed to load texture!" << std::endl;
-        std::cerr << "Make sure 'assets/textures/test_texture.png' exists!" << std::endl;
+        std::cerr << "Make sure 'assets/textures/brick_texture.png' exists!" << std::endl;
         return;
     }
 
@@ -171,4 +171,4 @@ void runExercise6(GLFWwindow* window) {
     gl_log("Exercise 6 completed\n");
 }
 
-REGISTER_EXERCISE("6. Texture Mapping", runExercise6)
+REGISTER_EXERCISE(6, "Texture Mapping", runExercise6)
