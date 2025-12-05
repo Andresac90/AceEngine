@@ -415,7 +415,7 @@ void runExercise22(GLFWwindow* window) {
 
         updateInput(window);
 
-        // ========== PASS 1: Render shadow map ==========
+        // PASS 1: Render shadow map 
         glBindFramebuffer(GL_FRAMEBUFFER, shadow_fb);
         glViewport(0, 0, shadow_size, shadow_size);
         glClear(GL_DEPTH_BUFFER_BIT);
@@ -429,7 +429,7 @@ void runExercise22(GLFWwindow* window) {
         glUniformMatrix4fv(depth_M_loc, 1, GL_FALSE, monkey_M.m);
         suzanne.draw();
 
-        // ========== PASS 2: Render scene with shadows ==========
+        // PASS 2: Render scene with shadows 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, g_fb_width, g_fb_height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -458,7 +458,7 @@ void runExercise22(GLFWwindow* window) {
         glBindVertexArray(ground_vao);
         glDrawArrays(GL_TRIANGLES, 0, ground_point_count);
 
-        // ========== Draw debug quad (shadow map visualization) ==========
+        // Draw debug quad (shadow map visualization) 
         quad_shader.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, shadow_depth_tex);

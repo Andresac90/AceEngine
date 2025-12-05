@@ -1,4 +1,4 @@
-GL_LOG_FILE log. local time Fri Dec  5 17:27:38 2025
+GL_LOG_FILE log. local time Fri Dec  5 18:26:10 2025
 
 Starting AceEngine
 GLFW Version: 3.4.0 Cocoa NSGL Null EGL OSMesa monotonic dynamic
@@ -13,7 +13,7 @@ UBO support: max binding points = 80
 UBO support: max block size = 65536 bytes
 OpenGL debug callback not available on macOS - using manual error checking
 sRGB gamma correction: ENABLED
-Initial framebuffer size: 640x480
+Initial framebuffer size: 1280x960
 Engine initialized successfully
 Running Exercise 22 - Shadow Mapping
 Created shadow map 1024x1024

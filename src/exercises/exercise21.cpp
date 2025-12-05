@@ -378,7 +378,7 @@ void runExercise21(GLFWwindow* window) {
             suzanne.draw();
         }
 
-        // ========== SECOND PASS: Lighting ==========
+        // SECOND PASS: Lighting 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, g_fb_width, g_fb_height);
         glClearColor(0.2f, 0.2f, 0.2f, 0.0f);  // Ambient light as background

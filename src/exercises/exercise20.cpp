@@ -243,7 +243,7 @@ void runExercise20(GLFWwindow* window) {
 
         updateInput(window);
 
-        // ========== FIRST PASS: Render scene to framebuffer ==========
+        // FIRST PASS: Render scene to framebuffer
         glBindFramebuffer(GL_FRAMEBUFFER, fb);
         glViewport(0, 0, g_fb_width, g_fb_height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -261,7 +261,7 @@ void runExercise20(GLFWwindow* window) {
 
         suzanne.draw();
 
-        // ========== SECOND PASS: Render quad with post-processing ==========
+        // SECOND PASS: Render quad with post-processing
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, g_fb_width, g_fb_height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
