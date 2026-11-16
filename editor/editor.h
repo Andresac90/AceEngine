@@ -31,6 +31,10 @@ public:
   // Automation hooks (used by --select / --play for scripted screenshots).
   void select(const std::string& name) { selected_ = scene_.find(name); }
   void play() { setPlaying(true); }
+  // Scripted interaction test (--autotest): injects mouse/keyboard input and
+  // checks the editor reacted. Returns 0 while running, 1 on pass, -1 on failure.
+  int autotestResult() const { return autotestResult_; }
+  bool autotest = false;
   rhi::Format uiFormat = rhi::Format::BGRA8_SRGB;
 
 private:
@@ -84,6 +88,10 @@ private:
   f64 assetsRefreshed_ = -10.0;
   std::vector<std::pair<LogLevel, std::string>> console_;
   bool firstFrame_ = true;
+
+  void autotestStep();
+  ImVec2 viewPos_{0, 0}, viewSize_{0, 0}; // viewport image rectangle, ImGui coordinates
+  int autotestFrame_ = 0, autotestResult_ = 0;
 };
 
 } // namespace ace

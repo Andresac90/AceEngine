@@ -217,6 +217,7 @@ void Editor::buildUi() {
   }
 
   ImGui_ImplSDL3_NewFrame();
+  if (autotest) autotestStep(); // after the backend, so injected input wins over the real mouse
   ImGui::NewFrame();
   ImGuizmo::BeginFrame();
 
@@ -618,6 +619,8 @@ void Editor::drawViewport() {
   wantedW_ = (u32)std::max(size.x * scale.x, 16.0f);
   wantedH_ = (u32)std::max(size.y * scale.y, 16.0f);
   ImVec2 pos = ImGui::GetCursorScreenPos();
+  viewPos_ = pos;
+  viewSize_ = size;
   if (viewportTexture_ && size.x > 1 && size.y > 1) {
     ImGui::Image(ImGuiRhi::textureId(viewportTexture_), size);
     bool hovered = ImGui::IsItemHovered();
@@ -668,6 +671,163 @@ void Editor::drawViewport() {
   }
   ImGui::End();
   ImGui::PopStyleVar();
+}
+
+// ---------------------------------------------------------------- autotest
+
+// Drives the editor like a user would (--autotest). Each step runs a few frames
+// after the previous one so ImGui has processed the input. Run it on a copy of
+// the demo project: it saves the scene.
+void Editor::autotestStep() {
+  static const int kFramesPerStep = 4;
+  static vec3 before;
+  static f32 yawBefore, zoomBefore;
+  static size_t undoBefore;
+  static ImVec2 grab, dragDir, mouse(-1, -1);
+  ImGuiIO& io = ImGui::GetIO();
+  // Re-assert the scripted pointer every frame: when the window has focus the
+  // SDL backend reports the real mouse position each frame.
+  if (mouse.x >= 0) io.AddMousePosEvent(mouse.x, mouse.y);
+  auto moveTo = [&](f32 x, f32 y) {
+    mouse = ImVec2(x, y);
+    io.AddMousePosEvent(x, y);
+  };
+  int frame = autotestFrame_++;
+  if (autotestResult_ != 0 || frame % kFramesPerStep != 0) return;
+  int step = frame / kFramesPerStep - 3; // let the layout settle first
+  if (step < 0) return;
+
+  auto expect = [&](bool ok, const char* what) {
+    if (ok || autotestResult_ != 0) return;
+    ACE_ERROR("autotest FAILED at step %d: %s", step, what);
+    autotestResult_ = -1;
+  };
+  auto center = [&] { return ImVec2(viewPos_.x + viewSize_.x * 0.5f, viewPos_.y + viewSize_.y * 0.5f); };
+  auto toScreen = [&](vec3 world) {
+    CameraView cv = camera_.view();
+    vec4 clip = cv.camera.projection(viewSize_.x / viewSize_.y) * glm::inverse(cv.world) * vec4(world, 1.0f);
+    return ImVec2(viewPos_.x + (clip.x / clip.w * 0.5f + 0.5f) * viewSize_.x, viewPos_.y + (0.5f - clip.y / clip.w * 0.5f) * viewSize_.y);
+  };
+  auto key = [&](ImGuiKey k, bool ctrl = false, bool shift = false) { // press + release; ImGui spreads them over frames
+    // On macOS ImGui maps the physical Cmd key to "Ctrl" as events are added, so
+    // send what a real keyboard would: Cmd there, Ctrl elsewhere.
+    ImGuiKey mod = io.ConfigMacOSXBehaviors ? ImGuiMod_Super : ImGuiMod_Ctrl;
+    if (ctrl) io.AddKeyEvent(mod, true);
+    if (shift) io.AddKeyEvent(ImGuiMod_Shift, true);
+    io.AddKeyEvent(k, true);
+    io.AddKeyEvent(k, false);
+    if (shift) io.AddKeyEvent(ImGuiMod_Shift, false);
+    if (ctrl) io.AddKeyEvent(mod, false);
+  };
+  auto positionOf = [&](const char* name) {
+    Entity e = scene_.find(name);
+    return e == kNoEntity ? vec3(1e9f) : scene_.reg.get<Transform>(e).position;
+  };
+  Entity player = scene_.find("Player");
+
+  switch (step) {
+    // --- camera: orbit with a right-drag, zoom with the wheel
+    case 0:
+      expect(player != kNoEntity && scene_.find("Orb") != kNoEntity && viewSize_.x > 100, "needs the demo scene and a visible viewport");
+      yawBefore = camera_.yaw;
+      zoomBefore = camera_.orthoSize;
+      moveTo(center().x, center().y);
+      break;
+    case 1: io.AddMouseButtonEvent(ImGuiMouseButton_Right, true); break;
+    case 2: moveTo(center().x + 60, center().y); break;
+    case 3: moveTo(center().x + 120, center().y); break;
+    case 4: io.AddMouseButtonEvent(ImGuiMouseButton_Right, false); break;
+    case 5:
+      expect(fabsf(camera_.yaw - yawBefore) > 5.0f, "right-drag should orbit the camera");
+      camera_.yaw = yawBefore;
+      io.AddMouseWheelEvent(0.0f, 2.0f);
+      break;
+    case 6: expect(camera_.orthoSize < zoomBefore, "mouse wheel should zoom in"); break;
+    // --- selection: click an entity in the viewport
+    case 7: {
+      selected_ = kNoEntity;
+      ImVec2 p = toScreen(vec3(scene_.reg.get<Transform>(player).world[3]));
+      moveTo(p.x, p.y);
+      break;
+    }
+    case 8:
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+      break;
+    case 9: expect(selected_ == player, "clicking the Player in the viewport should select it"); break;
+    // --- gizmo: drag the X axis handle, expect one undo step, then undo/redo
+    case 10: {
+      before = positionOf("Player");
+      undoBefore = undoStack_.size();
+      vec3 origin = vec3(scene_.reg.get<Transform>(player).world[3]);
+      ImVec2 a = toScreen(origin), b = toScreen(origin + vec3(1, 0, 0));
+      f32 len = sqrtf((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+      dragDir = ImVec2((b.x - a.x) / len, (b.y - a.y) / len);
+      grab = ImVec2(a.x + dragDir.x * 45.0f, a.y + dragDir.y * 45.0f); // on the axis, clear of the centre handle
+      moveTo(grab.x, grab.y);
+      break;
+    }
+    case 11: io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); break;
+    case 12: moveTo(grab.x + dragDir.x * 30.0f, grab.y + dragDir.y * 30.0f); break;
+    case 13: moveTo(grab.x + dragDir.x * 60.0f, grab.y + dragDir.y * 60.0f); break;
+    case 14: io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); break;
+    case 15: {
+      vec3 now = positionOf("Player");
+      expect(now.x > before.x + 0.2f, "dragging the gizmo X handle should move the entity along +X");
+      expect(fabsf(now.y - before.y) < 1e-3f && fabsf(now.z - before.z) < 1e-3f, "an X-axis drag must not change Y or Z");
+      expect(undoStack_.size() == undoBefore + 1, "one gizmo drag should record exactly one undo step");
+      expect(dirty_, "an edit should mark the scene as modified");
+      moveTo(viewPos_.x + 5, viewPos_.y + 5);
+      key(ImGuiKey_Z, true);
+      break;
+    }
+    case 16:
+      expect(glm::distance(positionOf("Player"), before) < 1e-4f, "Ctrl+Z should undo the move");
+      key(ImGuiKey_Z, true, true);
+      break;
+    case 17:
+      expect(positionOf("Player").x > before.x + 0.2f, "Ctrl+Shift+Z should redo the move");
+      expect(selected_ != kNoEntity && selected_ == scene_.find("Player"), "selection should survive undo/redo");
+      key(ImGuiKey_D, true);
+      break;
+    // --- duplicate, delete, undo the delete
+    case 18:
+      expect(scene_.find("Player copy") != kNoEntity && selected_ == scene_.find("Player copy"), "Ctrl+D should duplicate and select the copy");
+      key(ImGuiKey_Delete);
+      break;
+    case 19:
+      expect(scene_.find("Player copy") == kNoEntity, "Delete should remove the selected entity");
+      key(ImGuiKey_Z, true);
+      break;
+    case 20:
+      expect(scene_.find("Player copy") != kNoEntity, "Ctrl+Z should bring the deleted entity back");
+      key(ImGuiKey_S, true);
+      break;
+    // --- save, then play/stop must restore the edited scene exactly
+    case 21: {
+      expect(!dirty_, "Ctrl+S should save and clear the modified flag");
+      Scene onDisk;
+      expect(onDisk.load(project_.path(scenePath_)) && onDisk.find("Player copy") != kNoEntity, "the saved file should contain the edits");
+      before = positionOf("Orb");
+      key(ImGuiKey_F5);
+      break;
+    }
+    case 22: break; // let the scripts run a few frames
+    case 23:
+      expect(playing_, "F5 should start play mode");
+      expect(glm::distance(positionOf("Orb"), before) > 1e-4f, "the Orb's script should move it while playing");
+      key(ImGuiKey_F5);
+      break;
+    case 24:
+      expect(!playing_, "F5 should stop play mode");
+      expect(glm::distance(positionOf("Orb"), before) < 1e-5f, "stopping should restore the scene");
+      if (autotestResult_ == 0) {
+        ACE_INFO("autotest passed");
+        autotestResult_ = 1;
+      }
+      break;
+    default: break;
+  }
 }
 
 } // namespace ace
