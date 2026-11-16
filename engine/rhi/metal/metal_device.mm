@@ -276,6 +276,7 @@ public:
     int w = 0, h = 0;
     SDL_GetWindowSizeInPixels(window_, &w, &h);
     if (w <= 0 || h <= 0) return nullptr;
+    waitIdle(); // one frame in flight: see Device::beginFrame
     pool_ = objc_autoreleasePoolPush();
     if ((int)layer_.drawableSize.width != w || (int)layer_.drawableSize.height != h) layer_.drawableSize = CGSizeMake(w, h);
     drawable_ = [layer_ nextDrawable];

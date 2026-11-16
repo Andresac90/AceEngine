@@ -72,15 +72,15 @@ endif()
 # --- Editor UI ----------------------------------------------------------------
 if(ACE_BUILD_EDITOR)
   ace_fetch_sources(imgui https://github.com/ocornut/imgui.git v1.91.9b-docking)
-  ace_fetch_sources(imguizmo https://github.com/CedricGuillemet/ImGuizmo.git master)
+  ace_fetch_sources(imguizmo https://github.com/CedricGuillemet/ImGuizmo.git master) # sources live in src/
   add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp
     ${imgui_SOURCE_DIR}/imgui_demo.cpp
     ${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
-    ${imguizmo_SOURCE_DIR}/ImGuizmo.cpp)
+    ${imguizmo_SOURCE_DIR}/src/ImGuizmo.cpp)
   target_include_directories(imgui SYSTEM PUBLIC ${imgui_SOURCE_DIR} ${imgui_SOURCE_DIR}/backends
-    ${imgui_SOURCE_DIR}/misc/cpp ${imguizmo_SOURCE_DIR})
+    ${imgui_SOURCE_DIR}/misc/cpp ${imguizmo_SOURCE_DIR}/src)
   target_link_libraries(imgui PUBLIC SDL3::SDL3)
 endif()

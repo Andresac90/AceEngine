@@ -188,6 +188,10 @@ public:
 
   // Frame: beginFrame() -> record on the returned list -> endFrame() presents.
   // Returns null when there is nothing to draw to (minimised window).
+  // beginFrame waits for the previous frame's GPU work, so buffers may be
+  // rewritten every frame without tearing.
+  // shortcut: one frame in flight; move to per-frame resource rings if CPU/GPU
+  // overlap ever shows up as the bottleneck.
   virtual CommandList* beginFrame() = 0;
   virtual void endFrame() = 0;
   virtual TextureHandle backbuffer() = 0; // valid between beginFrame and endFrame
