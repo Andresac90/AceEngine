@@ -1,0 +1,12 @@
+// Shared by every scene shader. Must match FrameData in render/renderer.cpp.
+struct FrameData {
+  float4x4 view;
+  float4x4 viewProj;
+  float4 lightDir;   // xyz: direction towards the light
+  float4 lightColor; // rgb * intensity
+  float4 ambient;
+  float4 params;     // x: toon bands (0 = smooth)
+};
+
+// Views below this depth are "sky": no geometry was drawn there.
+static const float kSkyDepth = 9000.0;

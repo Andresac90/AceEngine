@@ -1,0 +1,6 @@
+{
+  "name": "Pixel Demo",
+  "startScene": "scenes/main.scene.json",
+  "width": 1280,
+  "height": 720
+}

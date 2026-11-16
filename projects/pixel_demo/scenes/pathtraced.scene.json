@@ -1,0 +1,389 @@
+{
+  "version": 1,
+  "settings": {
+    "pathTraced": true
+  },
+  "entities": [
+    {
+      "name": "Camera",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            10,
+            10,
+            10
+          ],
+          "rotation": [
+            -0.27984514816326583,
+            0.3647055938186188,
+            0.11591565573353295,
+            0.8804771908702426
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Camera": {
+          "orthographic": true,
+          "orthoSize": 4.5,
+          "fov": 50,
+          "nearPlane": 0.1,
+          "farPlane": 100
+        }
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            -0.40821789367673483,
+            0.23456971600980447,
+            0.109381654946615,
+            0.875426098065593
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "color": [
+            1,
+            0.95,
+            0.85
+          ],
+          "intensity": 3.2
+        }
+      }
+    },
+    {
+      "name": "Ground",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            14,
+            1,
+            14
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:plane",
+          "texture": "",
+          "color": [
+            0.36,
+            0.62,
+            0.33,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "Player",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            0.5,
+            1.5
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "",
+          "color": [
+            0.9,
+            0.36,
+            0.3,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ]
+        },
+        "Script": {
+          "path": "scripts/player.lua"
+        }
+      }
+    },
+    {
+      "name": "Orb",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            -2.2,
+            1.4,
+            -1
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:sphere",
+          "texture": "",
+          "color": [
+            0.98,
+            0.8,
+            0.3,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ]
+        },
+        "Script": {
+          "path": "scripts/spin.lua"
+        }
+      }
+    },
+    {
+      "name": "Tower",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            2.5,
+            1.5,
+            -2
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.4,
+            3,
+            1.4
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "",
+          "color": [
+            0.62,
+            0.6,
+            0.68,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "TowerRoof",
+      "parent": 5,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            0.62,
+            0
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            1.25,
+            0.25,
+            1.25
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "",
+          "color": [
+            0.55,
+            0.25,
+            0.3,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "Rock",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            -3,
+            0.4,
+            2.5
+          ],
+          "rotation": [
+            0.0,
+            0.25881904510252074,
+            0.0,
+            0.9659258262890683
+          ],
+          "scale": [
+            1.2,
+            0.8,
+            1
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:sphere",
+          "texture": "",
+          "color": [
+            0.5,
+            0.5,
+            0.55,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "Crate",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            1.2,
+            0.35,
+            2.8
+          ],
+          "rotation": [
+            0.0,
+            0.17364817766693033,
+            0.0,
+            0.984807753012208
+          ],
+          "scale": [
+            0.7,
+            0.7,
+            0.7
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "",
+          "color": [
+            0.7,
+            0.5,
+            0.3,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ]
+        }
+      }
+    },
+    {
+      "name": "Lantern",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            -0.8,
+            0.3,
+            -2.6
+          ],
+          "rotation": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ],
+          "scale": [
+            0.4,
+            0.6,
+            0.4
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "",
+          "color": [
+            1,
+            0.8,
+            0.4,
+            1
+          ],
+          "emissive": [
+            4,
+            2.4,
+            0.8
+          ]
+        }
+      }
+    }
+  ]
+}

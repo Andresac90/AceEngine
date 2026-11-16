@@ -1,0 +1,50 @@
+cmake_minimum_required(VERSION 3.24)
+project(AceEngine VERSION 0.2.0 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+
+# Which GPU backends to compile. Each platform enables what it can run.
+if(APPLE)
+  enable_language(OBJCXX)
+  option(ACE_RHI_METAL "Metal backend" ON)
+endif()
+find_package(Vulkan QUIET)
+if(Vulkan_FOUND AND NOT IOS)
+  option(ACE_RHI_VULKAN "Vulkan backend" ON)
+endif()
+if(ANDROID)
+  set(ACE_RHI_VULKAN ON)
+endif()
+if(WIN32)
+  option(ACE_RHI_D3D12 "Direct3D 12 backend" ON)
+endif()
+
+# The editor is a desktop tool; mobile targets build only the player.
+if(IOS OR ANDROID)
+  set(ACE_BUILD_EDITOR OFF)
+else()
+  option(ACE_BUILD_EDITOR "Build the level editor" ON)
+endif()
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(ACE_DATA_DIR ${CMAKE_BINARY_DIR}/bin/ace_data)
+
+include(cmake/Deps.cmake)
+include(cmake/Shaders.cmake)
+
+add_subdirectory(engine)
+add_subdirectory(player)
+if(ACE_BUILD_EDITOR)
+  add_subdirectory(editor)
+endif()
+
+if(NOT IOS AND NOT ANDROID)
+  enable_testing()
+  add_subdirectory(tests)
+endif()
