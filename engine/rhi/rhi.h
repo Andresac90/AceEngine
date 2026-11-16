@@ -226,6 +226,9 @@ public:
     ACE_ASSERT(id != 0 && id < items_.size(), "invalid RHI handle %u", id);
     return items_[id];
   }
+  template <typename F> void each(F&& fn) { // live and freed slots alike; freed ones hold T{}
+    for (size_t i = 1; i < items_.size(); i++) fn(items_[i]);
+  }
   void remove(u32 id) {
     if (id == 0) return;
     items_[id] = T{};
