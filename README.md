@@ -1,2 +1,88 @@
 # AceEngine
-OpenGL C++ Graphics Renderer
+
+A small cross-platform game engine for stylized 2D and 3D games, with a level
+editor. First target look: 3D pixel art (low-resolution render, toon shading,
+outlines, optional path tracing).
+
+Status: early but usable on macOS. See [docs/HANDOFF.md](docs/HANDOFF.md) for
+exactly what works, what is untested and what is missing.
+
+## Build (macOS)
+
+Requirements: Xcode command line tools, `brew install cmake ninja sdl3`.
+Optional, for the Vulkan backend: `brew install molten-vk vulkan-loader vulkan-headers vulkan-validationlayers`.
+
+```sh
+cmake -S . -B build -G Ninja
+cmake --build build
+ctest --test-dir build          # CPU-side unit tests
+```
+
+The first configure downloads the pinned dependencies and the Slang shader
+compiler into `build/` (Slang is reused from `~/.cache/ace/slang` if present).
+
+## Run
+
+```sh
+build/bin/ace_editor projects/pixel_demo     # level editor
+build/bin/ace_player projects/pixel_demo     # the game alone
+build/bin/ace_editor --new ~/games/my_game   # create and open a new project
+```
+
+Add `--backend vulkan` (or `metal`) to pick the GPU backend.
+
+## Editor
+
+| Action | How |
+| --- | --- |
+| Orbit / pan / zoom | right-drag / middle-drag or Shift+right-drag / wheel |
+| Select | click in the viewport or the Hierarchy |
+| Move / rotate / scale | W / E / R, then drag the gizmo |
+| Focus selection | F |
+| Create entities | Entity menu; right-click a node for Add Child |
+| Re-parent | drag a node onto another (or onto empty space) |
+| Assign assets | drag a file from Assets onto a mesh / texture / script field |
+| Play / stop | F5 (changes made while playing are discarded on stop) |
+| Undo / redo, save, duplicate, delete | Cmd+Z / Cmd+Shift+Z, Cmd+S, Cmd+D, Delete |
+
+The look of a level (pixel height, outlines, toon bands, path tracing, sky) is
+in the **Render Settings** tab and is saved with the scene.
+
+## Projects
+
+```
+my_game/
+  project.json            name, start scene, window size
+  scenes/*.scene.json     entities + render settings
+  scripts/*.lua           gameplay (docs/SCRIPTING.md)
+  assets/...              .gltf/.glb meshes, .png/.jpg textures
+```
+
+Meshes: `builtin:cube`, `builtin:sphere`, `builtin:plane`, `builtin:quad`, or a
+glTF path. Colors in scenes are sRGB.
+
+## Export
+
+```sh
+tools/export_macos.sh projects/pixel_demo    # -> build-export/macos/<Name>.app
+```
+
+Windows, Android and iOS export are not done yet; the plan is in docs/HANDOFF.md.
+
+## Layout
+
+```
+engine/core      types, logging, math
+engine/rhi       GPU interface + Metal and Vulkan backends
+engine/render    renderer (raster + path traced scene passes, present pass)
+engine/scene     entities, components, reflection, serialization
+engine/assets    meshes and textures
+engine/script    Lua
+engine/platform  window, input, timing (SDL3)
+engine/runtime   project files
+engine/shaders   Slang shaders
+editor/          level editor (Dear ImGui)
+player/          game runtime executable
+projects/        sample project
+tests/           unit tests
+```
