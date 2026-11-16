@@ -30,8 +30,9 @@ private:
   rhi::BindGroupLayoutHandle layout_;
   rhi::BindGroupHandle group_;
   rhi::PipelineHandle pipeline_;
-  rhi::BufferHandle nodeBuffer_, triBuffer_;
-  u64 nodeCapacity_ = 0, triCapacity_ = 0;
+  rhi::BufferHandle nodeBuffer_, triBuffer_, lightBuffer_;
+  u64 nodeCapacity_ = 0, triCapacity_ = 0, lightCapacity_ = 0;
+  u32 lightCount_ = 0;
   u64 sceneHash_ = 0, viewHash_ = 0;
   u32 frame_ = 0;
 };

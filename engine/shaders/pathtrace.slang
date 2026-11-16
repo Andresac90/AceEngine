@@ -12,6 +12,7 @@ struct TraceData {
   float4 skyTop;
   float4 skyBottom;
   float4 params; // x: accumulated frames, y: samples per pixel, z: bounces, w: toon bands
+  float4 lightInfo; // x: number of emissive triangles
 };
 struct BvhNode {
   float4 minLeft;  // xyz: box min, w (bits): left child, or first triangle for leaves
@@ -27,6 +28,7 @@ struct Triangle {
 [[vk::binding(0, 0)]] ConstantBuffer<TraceData> data;
 [[vk::binding(1, 0)]] StructuredBuffer<BvhNode> nodes;
 [[vk::binding(2, 0)]] StructuredBuffer<Triangle> triangles;
+[[vk::binding(3, 0)]] StructuredBuffer<float4> lights; // per emissive triangle: x (bits) = triangle index, y = area
 
 struct VsOut {
   float4 position : SV_Position;
@@ -153,6 +155,7 @@ FsOut fsMain(VsOut i) {
   int spp = max(1, int(data.params.y));
   int bounces = max(1, int(data.params.z));
   float bands = data.params.w;
+  uint lightCount = uint(data.lightInfo.x);
   float3 total = 0;
   for (int s = 0; s < spp; s++) {
     // Every sample restarts at the primary hit: no anti-aliasing on purpose, the
@@ -161,7 +164,10 @@ FsOut fsMain(VsOut i) {
     Triangle tri = ptri;
     float3 throughput = 1, radiance = 0;
     for (int b = 0; b < bounces; b++) {
-      radiance += throughput * tri.emissive.rgb;
+      // Emission is added only when seen directly; light reaching other surfaces
+      // comes from sampling the emissive triangles below. Counting it on bounce
+      // hits as well would double it (and brings back single-pixel sparkles).
+      if (b == 0) radiance += throughput * tri.emissive.rgb;
       throughput *= tri.color.rgb;
       // Direct sun light (next-event estimation).
       float ndl = dot(n, data.lightDir.xyz);
@@ -171,6 +177,24 @@ FsOut fsMain(VsOut i) {
           float direct = ndl;
           if (b == 0 && bands > 0.5) direct = ceil(ndl * bands - 0.001) / bands; // toon bands on first hit
           radiance += throughput * data.lightColor.rgb * direct * 0.318;
+        }
+      }
+      // Direct light from one randomly chosen emissive triangle.
+      if (lightCount > 0) {
+        float4 light = lights[min(uint(rand(rng) * float(lightCount)), lightCount - 1)];
+        Triangle lt = triangles[asuint(light.x)];
+        float su = sqrt(rand(rng));
+        float3 lp = lt.v0.xyz + lt.e1.xyz * (1.0 - su) + lt.e2.xyz * (rand(rng) * su); // uniform point on the triangle
+        float3 toLight = lp - pos;
+        float dist2 = max(dot(toLight, toLight), 1e-4);
+        float dist = sqrt(dist2);
+        toLight /= dist;
+        float cosSurface = dot(n, toLight);
+        float cosLight = abs(dot(normalize(cross(lt.e1.xyz, lt.e2.xyz)), toLight));
+        if (cosSurface > 0.0 && cosLight > 0.0) {
+          Hit lh;
+          if (!trace(pos + n * 1e-3, toLight, dist - 2e-3, true, lh))
+            radiance += throughput * lt.emissive.rgb * (cosSurface * cosLight / dist2 * light.y * float(lightCount) * 0.318);
         }
       }
       float3 next = cosineSample(n, rng);
@@ -183,7 +207,7 @@ FsOut fsMain(VsOut i) {
       pos = pos + n * 1e-3 + next * h.t;
       n = shadingNormal(tri, h, next);
     }
-    total += min(radiance, 4.0); // firefly clamp: slightly biased, removes single-pixel sparkles
+    total += min(radiance, 16.0); // firefly clamp: slightly biased, removes single-pixel sparkles
   }
   o.color.rgb = total / float(spp);
   return o;

@@ -1,5 +1,6 @@
 #include "render/path_tracer.h"
 #include <algorithm>
+#include <glm/gtx/component_wise.hpp>
 
 namespace ace {
 
@@ -8,7 +9,7 @@ using namespace rhi;
 namespace {
 struct TraceData {
   mat4 invViewProj, view;
-  vec4 lightDir, lightColor, skyTop, skyBottom, params;
+  vec4 lightDir, lightColor, skyTop, skyBottom, params, lightInfo;
 };
 constexpr u32 kMovingHistoryFrames = 6;
 constexpr u32 kMaxAccumulatedFrames = 512; // RGBA16F stops gaining precision beyond this
@@ -25,6 +26,7 @@ PathTracer::PathTracer(Renderer& renderer) : r_(renderer) {
   l.bindings[0] = BindingType::UniformBuffer;
   l.bindings[1] = BindingType::StorageBuffer;
   l.bindings[2] = BindingType::StorageBuffer;
+  l.bindings[3] = BindingType::StorageBuffer;
   layout_ = dev.createBindGroupLayout(l);
   PipelineDesc p;
   p.name = "pathtrace";
@@ -115,6 +117,18 @@ void PathTracer::rebuild(Scene& scene, Assets& assets) {
   buildBvh(tris, nodes);
   if (tris.empty()) tris.push_back(Triangle{});
 
+  // Emissive triangles, by their final (post-BVH) index, for direct light sampling.
+  std::vector<vec4> lights;
+  for (u32 i = 0; i < tris.size(); i++) {
+    f32 area = 0.5f * glm::length(glm::cross(vec3(tris[i].e1), vec3(tris[i].e2)));
+    if (glm::compMax(vec3(tris[i].emissive)) <= 0.0f || area <= 0.0f) continue;
+    vec4 entry(0.0f, area, 0.0f, 0.0f);
+    memcpy(&entry.x, &i, sizeof(u32));
+    lights.push_back(entry);
+  }
+  lightCount_ = (u32)lights.size();
+  if (lights.empty()) lights.push_back(vec4(0.0f)); // buffers cannot be empty
+
   Device& dev = r_.device();
   bool grew = false;
   auto fit = [&](BufferHandle& buffer, u64& capacity, u64 bytes, const char* name) {
@@ -128,7 +142,9 @@ void PathTracer::rebuild(Scene& scene, Assets& assets) {
   fit(nodeBuffer_, nodeCapacity_, nodes.size() * sizeof(Node), "bvh nodes");
   fit(triBuffer_, triCapacity_, tris.size() * sizeof(Triangle), "bvh triangles");
   dev.writeBuffer(nodeBuffer_, 0, nodes.data(), nodes.size() * sizeof(Node));
+  fit(lightBuffer_, lightCapacity_, lights.size() * sizeof(vec4), "bvh lights");
   dev.writeBuffer(triBuffer_, 0, tris.data(), tris.size() * sizeof(Triangle));
+  dev.writeBuffer(lightBuffer_, 0, lights.data(), lights.size() * sizeof(vec4));
   if (grew) {
     if (group_) dev.destroy(group_);
     BindGroupDesc d;
@@ -137,6 +153,7 @@ void PathTracer::rebuild(Scene& scene, Assets& assets) {
     d.entries[0].size = sizeof(TraceData);
     d.entries[1].buffer = nodeBuffer_;
     d.entries[2].buffer = triBuffer_;
+    d.entries[3].buffer = lightBuffer_;
     group_ = dev.createBindGroup(d);
   }
 }
@@ -174,6 +191,8 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   d.skyTop = vec4(toLinear(scene.settings.skyTop), 0);
   d.skyBottom = vec4(toLinear(scene.settings.skyBottom), 0);
   d.params = vec4(0, (f32)scene.settings.ptSamples, (f32)scene.settings.ptBounces, (f32)scene.settings.toonBands);
+
+  d.lightInfo = vec4((f32)lightCount_, 0, 0, 0);
 
   // Anything else that changes the image restarts the running average.
   u64 vh = hashBytes(14695981039346656037ull, &d, sizeof(d));
