@@ -41,6 +41,10 @@ looking at screenshots produced with `--screenshot`:
   only) that runs from another working directory.
 - Unit tests (`build/bin/ace_tests`): scene round trip, tolerant loading,
   hierarchy operations, BVH build.
+- `ace_editor --new <dir>`, then in that project on both backends: a textured
+  cube, a `SpriteRenderer`, a perspective camera, the missing-mesh fallback
+  (warns, draws a cube) and `pixelArt = false`. Images matched across backends.
+- A from-scratch `cmake -S . -B <dir> -G Ninja` + build with default options.
 
 **Not verified — treat as unknown until someone tries it:**
 
@@ -51,10 +55,8 @@ looking at screenshots produced with `--screenshot`:
 - `player.lua` keyboard movement (needs real key input).
 - Window resize and minimise paths in both backends.
 - Vulkan on a real Vulkan driver (Android, Windows, Linux). Only MoltenVK ran.
-- glTF loading: `loadGltf` has never been given a file. Same for textures on
-  meshes and `SpriteRenderer` (no scene uses them yet).
-- Perspective cameras, and `pixelArt = false` (full-resolution) rendering.
-- `ace_editor --new <dir>`.
+- glTF loading: `loadGltf` has never been given a real file.
+- Path tracing with a perspective camera.
 
 **Not written at all:**
 
@@ -204,9 +206,8 @@ otherwise; ask the owner before installing anything.
 
 1. **Hand-test the editor on macOS** and fix what breaks: every row of the
    README's editor table, plus resize, Save As, New Scene, play/stop while an
-   entity is selected, and deleting a parent. Add a small scene that uses a
-   texture, a sprite, a glTF mesh and a perspective camera, and check it on
-   both backends. Done: all of section 2's "not verified" macOS items are
+   entity is selected, and deleting a parent. Load a real glTF model on both
+   backends. Done: all of section 2's "not verified" macOS items are
    confirmed or fixed.
 2. **Raster shadows** (one directional shadow map sampled in `mesh.slang`,
    texel-snapped so the shadow edge does not crawl). The path-traced image in
