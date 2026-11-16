@@ -12,7 +12,7 @@ struct Vertex {
   vec3 position;
   vec3 normal;
   vec2 uv;
-  u8 color[4];
+  u8 color[4]; // sRGB-encoded RGB + alpha
 };
 
 struct Mesh {

@@ -5,8 +5,15 @@ set(FETCHCONTENT_QUIET OFF)
 
 # Declares a dependency whose own CMakeLists we do not want to run (header-only
 # libraries, or ones we compile ourselves with a few lines below).
+# `tag` is a release tag, or a full commit hash for projects that do not tag releases.
 macro(ace_fetch_sources name repo tag)
-  FetchContent_Declare(${name} GIT_REPOSITORY ${repo} GIT_TAG ${tag} GIT_SHALLOW ON
+  string(LENGTH "${tag}" _ace_tag_length)
+  if(_ace_tag_length EQUAL 40) # commit hashes cannot be fetched shallowly
+    set(_ace_shallow OFF)
+  else()
+    set(_ace_shallow ON)
+  endif()
+  FetchContent_Declare(${name} GIT_REPOSITORY ${repo} GIT_TAG ${tag} GIT_SHALLOW ${_ace_shallow}
     SOURCE_SUBDIR _ace_no_cmake_)
   FetchContent_MakeAvailable(${name})
 endmacro()
@@ -39,7 +46,7 @@ ace_fetch_sources(json https://github.com/nlohmann/json.git v3.11.3)
 add_library(json INTERFACE)
 target_include_directories(json SYSTEM INTERFACE ${json_SOURCE_DIR}/single_include)
 
-ace_fetch_sources(stb https://github.com/nothings/stb.git master)
+ace_fetch_sources(stb https://github.com/nothings/stb.git 9600522de53973336fa033a289858a4354cbb04c)
 ace_fetch_sources(cgltf https://github.com/jkuhlmann/cgltf.git v1.14)
 add_library(stb_cgltf INTERFACE)
 target_include_directories(stb_cgltf SYSTEM INTERFACE ${stb_SOURCE_DIR} ${cgltf_SOURCE_DIR})
@@ -72,7 +79,7 @@ endif()
 # --- Editor UI ----------------------------------------------------------------
 if(ACE_BUILD_EDITOR)
   ace_fetch_sources(imgui https://github.com/ocornut/imgui.git v1.91.9b-docking)
-  ace_fetch_sources(imguizmo https://github.com/CedricGuillemet/ImGuizmo.git master) # sources live in src/
+  ace_fetch_sources(imguizmo https://github.com/CedricGuillemet/ImGuizmo.git 105e4fde45e4e74aae8973d98750820ef7aca7e2) # sources live in src/
   add_library(imgui STATIC
     ${imgui_SOURCE_DIR}/imgui.cpp ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp ${imgui_SOURCE_DIR}/imgui_widgets.cpp

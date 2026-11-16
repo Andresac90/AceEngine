@@ -24,7 +24,12 @@ using f64 = double;
 enum class LogLevel { Info, Warn, Error };
 
 // Printf-style logging. Every line also goes to the sink (the editor console).
-void log(LogLevel level, const char* fmt, ...) __attribute__((format(printf, 2, 3)));
+#if defined(__GNUC__) || defined(__clang__)
+#define ACE_PRINTF_ARGS(fmt, first) __attribute__((format(printf, fmt, first))) // compile-time format checking
+#else
+#define ACE_PRINTF_ARGS(fmt, first)
+#endif
+void log(LogLevel level, const char* fmt, ...) ACE_PRINTF_ARGS(2, 3);
 void setLogSink(std::function<void(LogLevel, const std::string&)> sink);
 
 #define ACE_INFO(...) ::ace::log(::ace::LogLevel::Info, __VA_ARGS__)

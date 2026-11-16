@@ -95,7 +95,13 @@ static bool loadGltf(const std::string& file, Mesh& m) {
         vert.position = vec3(world * vec4(p[0], p[1], p[2], 1.0f));
         vert.normal = glm::normalize(normalMatrix * vec3(n[0], n[1], n[2]));
         vert.uv = {t[0], t[1]};
-        for (int i = 0; i < 4; i++) vert.color[i] = (u8)(glm::clamp(c[i] * base[i], 0.0f, 1.0f) * 255.0f + 0.5f);
+        // glTF colors are linear; vertex colors are stored sRGB-encoded (8 bits
+        // hold dark tones far better that way) and linearized again when shading.
+        for (int i = 0; i < 4; i++) {
+          f32 value = glm::clamp(c[i] * base[i], 0.0f, 1.0f);
+          if (i < 3) value = powf(value, 1.0f / 2.2f);
+          vert.color[i] = (u8)(value * 255.0f + 0.5f);
+        }
         m.vertices.push_back(vert);
       }
       if (prim.indices) {

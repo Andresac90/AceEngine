@@ -40,7 +40,7 @@ VsOut vsMain(VsIn v) {
   o.position = mul(frame.viewProj, world);
   o.normal = mul(draw.normalMatrix, float4(v.normal, 0.0)).xyz;
   o.uv = v.uv;
-  o.color = v.color * draw.color;
+  o.color = float4(pow(v.color.rgb, 2.2), v.color.a) * draw.color; // vertex colors are sRGB-encoded
   o.viewDepth = -mul(frame.view, world).z;
   o.worldPos = world.xyz;
   return o;
