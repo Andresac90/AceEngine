@@ -23,6 +23,7 @@ constexpr u32 kVertexBufferIndex = 30; // last slot of Metal's buffer table; uni
 MTLPixelFormat toMTL(Format f) {
   switch (f) {
     case Format::R8: return MTLPixelFormatR8Unorm;
+    case Format::R32F: return MTLPixelFormatR32Float;
     case Format::RGBA8: return MTLPixelFormatRGBA8Unorm;
     case Format::RGBA8_SRGB: return MTLPixelFormatRGBA8Unorm_sRGB;
     case Format::BGRA8: return MTLPixelFormatBGRA8Unorm;

@@ -37,7 +37,7 @@ constexpr u32 kMaxBindings = 8; // per group
 constexpr u32 kMaxColorTargets = 4;
 constexpr u32 kMaxVertexAttributes = 8;
 
-enum class Format { Undefined, R8, RGBA8, RGBA8_SRGB, BGRA8, BGRA8_SRGB, RGBA16F, RGBA32F, D32F };
+enum class Format { Undefined, R8, R32F, RGBA8, RGBA8_SRGB, BGRA8, BGRA8_SRGB, RGBA16F, RGBA32F, D32F };
 bool isDepthFormat(Format f);
 u32 bytesPerPixel(Format f);
 

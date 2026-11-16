@@ -27,6 +27,7 @@ namespace {
 VkFormat toVk(Format f) {
   switch (f) {
     case Format::R8: return VK_FORMAT_R8_UNORM;
+    case Format::R32F: return VK_FORMAT_R32_SFLOAT;
     case Format::RGBA8: return VK_FORMAT_R8G8B8A8_UNORM;
     case Format::RGBA8_SRGB: return VK_FORMAT_R8G8B8A8_SRGB;
     case Format::BGRA8: return VK_FORMAT_B8G8R8A8_UNORM;

@@ -43,7 +43,7 @@ const std::vector<Field>& renderSettingsFields() {
   using R = RenderSettings;
   static const std::vector<Field> fields = {
       ACE_FIELD(R, pathTraced, Bool),     ACE_FIELD(R, pixelArt, Bool),         ACE_FIELD(R, pixelHeight, Int),
-      ACE_FIELD(R, pixelSnap, Bool),      ACE_FIELD(R, toonBands, Int),         ACE_FIELD(R, outlines, Bool),
+      ACE_FIELD(R, pixelSnap, Bool),      ACE_FIELD(R, toonBands, Int),         ACE_FIELD(R, shadows, Bool),  ACE_FIELD(R, outlines, Bool),
       ACE_FIELD(R, outlineStrength, Float), ACE_FIELD(R, highlightStrength, Float), ACE_FIELD(R, ambient, Color3),
       ACE_FIELD(R, skyTop, Color3),       ACE_FIELD(R, skyBottom, Color3),      ACE_FIELD(R, ptSamples, Int),
       ACE_FIELD(R, ptBounces, Int),       ACE_FIELD(R, exposure, Float),

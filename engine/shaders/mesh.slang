@@ -10,6 +10,7 @@ struct DrawData {
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<FrameData> frame;
+[[vk::binding(1, 0)]] Texture2D shadowMap; // r: light-space depth of the nearest occluder
 [[vk::binding(0, 1)]] ConstantBuffer<DrawData> draw;
 [[vk::binding(0, 2)]] Texture2D albedoTexture;
 [[vk::binding(1, 2)]] SamplerState albedoSampler;
@@ -26,6 +27,7 @@ struct VsOut {
   float2 uv : TEXCOORD0;
   float4 color : COLOR0;
   float viewDepth : DEPTH;
+  float3 worldPos : POSITION1;
 };
 struct FsOut {
   float4 color : SV_Target0;
@@ -40,7 +42,22 @@ VsOut vsMain(VsIn v) {
   o.uv = v.uv;
   o.color = v.color * draw.color;
   o.viewDepth = -mul(frame.view, world).z;
+  o.worldPos = world.xyz;
   return o;
+}
+
+// 1 = lit, 0 = in shadow. Unfiltered on purpose: pixel art wants a hard edge.
+float sunVisibility(float3 worldPos, float3 n) {
+  if (frame.params.y < 0.5) return 1.0;
+  // Offset along the normal by ~1.5 shadow texels instead of a large depth bias:
+  // removes acne without detaching shadows from their casters.
+  float4 lp = mul(frame.lightViewProj, float4(worldPos + n * frame.params.z * 1.5, 1.0));
+  float2 uv = float2(lp.x * 0.5 + 0.5, 0.5 - lp.y * 0.5);
+  if (any(uv < 0.0) || any(uv >= 1.0) || lp.z >= 1.0) return 1.0;
+  uint w, h;
+  shadowMap.GetDimensions(w, h);
+  float occluder = shadowMap.Load(int3(int2(uv * float2(w, h)), 0)).r;
+  return lp.z - 0.0015 > occluder ? 0.0 : 1.0;
 }
 
 FsOut fsMain(VsOut i) {
@@ -50,6 +67,7 @@ FsOut fsMain(VsOut i) {
   float3 lit = albedo.rgb;
   if (draw.emissive.a < 0.5) {
     float ndl = saturate(dot(n, frame.lightDir.xyz));
+    if (ndl > 0.0) ndl *= sunVisibility(i.worldPos, n);
     float bands = frame.params.x;
     if (bands > 0.5) ndl = ceil(ndl * bands - 0.001) / bands;
     lit = albedo.rgb * (frame.ambient.rgb + frame.lightColor.rgb * ndl * 0.318);

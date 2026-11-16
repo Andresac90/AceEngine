@@ -9,10 +9,12 @@ namespace {
 constexpr u32 kUniformRingSize = 4 << 20;
 constexpr u32 kUniformAlign = 256; // satisfies every backend's minimum offset alignment
 constexpr Format kColorFormat = Format::RGBA16F;
+constexpr u32 kShadowMapSize = 2048;
 
 struct FrameData {
   mat4 view, viewProj;
   vec4 lightDir, lightColor, ambient, params;
+  mat4 lightViewProj;
 };
 struct DrawData {
   mat4 model, normalMatrix;
@@ -30,8 +32,13 @@ Renderer::Renderer(Device& device) : device_(device) {
 
   BindGroupLayoutDesc ubo;
   ubo.bindings[0] = BindingType::UniformBuffer;
-  frameLayout_ = device_.createBindGroupLayout(ubo);
   drawLayout_ = device_.createBindGroupLayout(ubo);
+  BindGroupLayoutDesc frameDesc = ubo;
+  frameDesc.bindings[1] = BindingType::Texture; // shadow map
+  frameLayout_ = device_.createBindGroupLayout(frameDesc);
+  u32 target = TextureUsage_RenderTarget | TextureUsage_Sampled;
+  shadowMap_ = device_.createTexture({kShadowMapSize, kShadowMapSize, Format::R32F, target, "shadow map"});
+  shadowDepth_ = device_.createTexture({kShadowMapSize, kShadowMapSize, Format::D32F, TextureUsage_RenderTarget, "shadow depth"});
   BindGroupLayoutDesc material;
   material.bindings[0] = BindingType::Texture;
   material.bindings[1] = BindingType::Sampler;
@@ -49,8 +56,16 @@ Renderer::Renderer(Device& device) : device_(device) {
     d.entries[0].size = size;
     return device_.createBindGroup(d);
   };
-  frameGroup_ = uboGroup(frameLayout_, sizeof(FrameData));
+  {
+    BindGroupDesc d;
+    d.layout = frameLayout_;
+    d.entries[0].buffer = uniforms_;
+    d.entries[0].size = sizeof(FrameData);
+    d.entries[1].texture = shadowMap_;
+    frameGroup_ = device_.createBindGroup(d);
+  }
   drawGroup_ = uboGroup(drawLayout_, sizeof(DrawData));
+  shadowFrameGroup_ = uboGroup(drawLayout_, sizeof(FrameData)); // the shadow pass cannot bind the map it renders to
 
   PipelineDesc p;
   p.name = "mesh";
@@ -73,7 +88,20 @@ Renderer::Renderer(Device& device) : device_(device) {
   p.name = "sprite";
   p.cull = CullMode::None;
   spritePipeline_ = device_.createPipeline(p);
-  ACE_ASSERT(meshPipeline_ && spritePipeline_, "failed to create scene pipelines");
+  PipelineDesc sp;
+  sp.name = "shadow";
+  sp.vertexShader = loadShader("shadow", ShaderStage::Vertex);
+  sp.fragmentShader = loadShader("shadow", ShaderStage::Fragment);
+  sp.attributes[0] = {0, VertexFormat::Float3, offsetof(Vertex, position)};
+  sp.attributeCount = 1;
+  sp.vertexStride = sizeof(Vertex);
+  sp.bindGroupLayouts[0] = drawLayout_;
+  sp.bindGroupLayouts[1] = drawLayout_;
+  sp.colorFormats[0] = Format::R32F;
+  sp.depthFormat = Format::D32F;
+  sp.cull = CullMode::None; // single-sided planes must cast shadows too
+  shadowPipeline_ = device_.createPipeline(sp);
+  ACE_ASSERT(meshPipeline_ && spritePipeline_ && shadowPipeline_, "failed to create scene pipelines");
 
   presentVs_ = loadShader("present", ShaderStage::Vertex);
   presentFs_ = loadShader("present", ShaderStage::Fragment);
@@ -144,6 +172,23 @@ void Renderer::ensureTargets(u32 w, u32 h) {
   presentGroup_ = device_.createBindGroup(d);
 }
 
+// shortcut: one shadow map over the whole scene, so texel density drops as levels
+// grow; fit to the camera frustum (texel-snapped) or add cascades for big worlds.
+f32 Renderer::fitShadowFrustum(Scene& scene, Assets& assets, vec3 lightDir, mat4& lightViewProj) {
+  Aabb bounds;
+  for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
+    const Aabb& b = assets.mesh(m.mesh)->bounds;
+    for (int c = 0; c < 8; c++) bounds.grow(vec3(t.world * vec4(c & 1 ? b.max.x : b.min.x, c & 2 ? b.max.y : b.min.y, c & 4 ? b.max.z : b.min.z, 1.0f)));
+  }
+  if (bounds.min.x > bounds.max.x) bounds = Aabb{vec3(-1.0f), vec3(1.0f)}; // no meshes
+  vec3 center = (bounds.min + bounds.max) * 0.5f;
+  f32 radius = std::max(glm::length(bounds.max - center), 0.5f);
+  vec3 up = fabsf(lightDir.y) > 0.99f ? vec3(1, 0, 0) : vec3(0, 1, 0);
+  mat4 view = glm::lookAt(center + lightDir * radius, center, up);
+  lightViewProj = glm::orthoRH_ZO(-radius, radius, -radius, radius, 0.0f, 2.0f * radius) * view;
+  return 2.0f * radius / (f32)kShadowMapSize;
+}
+
 void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj) {
   FrameData frame;
   frame.view = view;
@@ -156,8 +201,31 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
     break;
   }
   frame.ambient = vec4(toLinear(scene.settings.ambient), 0.0f);
-  frame.params = vec4((f32)scene.settings.toonBands, 0, 0, 0);
+  f32 shadowTexel = fitShadowFrustum(scene, assets, vec3(frame.lightDir), frame.lightViewProj);
+  frame.params = vec4((f32)scene.settings.toonBands, scene.settings.shadows ? 1.0f : 0.0f, shadowTexel, 0);
   u32 frameOffset = pushUniform(&frame, sizeof(frame));
+
+  if (scene.settings.shadows) {
+    RenderPassDesc sp;
+    sp.name = "shadow";
+    sp.color[0].texture = shadowMap_;
+    sp.color[0].clear[0] = 1.0f; // far plane: nothing occludes
+    sp.depth = shadowDepth_;
+    cmd.beginRenderPass(sp);
+    cmd.setPipeline(shadowPipeline_);
+    cmd.setBindGroup(0, shadowFrameGroup_, {&frameOffset, 1});
+    for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
+      const Mesh* mesh = assets.mesh(m.mesh);
+      DrawData d{};
+      d.model = t.world;
+      u32 offset = pushUniform(&d, sizeof(d));
+      cmd.setBindGroup(1, drawGroup_, {&offset, 1});
+      cmd.setVertexBuffer(mesh->vertexBuffer);
+      cmd.setIndexBuffer(mesh->indexBuffer);
+      cmd.drawIndexed((u32)mesh->indices.size());
+    }
+    cmd.endRenderPass();
+  }
 
   RenderPassDesc pass;
   pass.name = "scene";

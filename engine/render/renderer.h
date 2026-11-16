@@ -41,6 +41,8 @@ public:
 private:
   void ensureTargets(u32 w, u32 h);
   void drawRaster(rhi::CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj);
+  // Fits the sun's orthographic frustum around every mesh; returns the shadow texel size in world units.
+  f32 fitShadowFrustum(Scene& scene, Assets& assets, vec3 lightDir, mat4& lightViewProj);
   rhi::BindGroupHandle materialGroup(const Texture* texture);
 
   rhi::Device& device_;
@@ -49,7 +51,9 @@ private:
 
   rhi::BindGroupLayoutHandle frameLayout_, drawLayout_, materialLayout_, presentLayout_;
   rhi::BindGroupHandle frameGroup_, drawGroup_, presentGroup_;
-  rhi::PipelineHandle meshPipeline_, spritePipeline_;
+  rhi::PipelineHandle meshPipeline_, spritePipeline_, shadowPipeline_;
+  rhi::BindGroupHandle shadowFrameGroup_;
+  rhi::TextureHandle shadowMap_, shadowDepth_;
   rhi::ShaderHandle presentVs_, presentFs_;
   std::map<rhi::Format, rhi::PipelineHandle> presentPipelines_;
   std::map<u32, rhi::BindGroupHandle> materialGroups_;

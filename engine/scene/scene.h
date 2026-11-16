@@ -66,6 +66,7 @@ struct RenderSettings {
   int pixelHeight = 180;    // low-resolution image height when pixelArt is on
   bool pixelSnap = true;    // snap orthographic cameras to the texel grid (no shimmer)
   int toonBands = 3;        // 0 = smooth lighting
+  bool shadows = true;      // sun shadows in raster mode (the path tracer always has them)
   bool outlines = true;
   f32 outlineStrength = 0.6f;
   f32 highlightStrength = 0.6f;
