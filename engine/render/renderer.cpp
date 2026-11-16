@@ -13,16 +13,18 @@ constexpr u32 kShadowMapSize = 2048;
 
 struct FrameData {
   mat4 view, viewProj;
-  vec4 lightDir, lightColor, ambient, params;
+  vec4 lightDir, lightColor, ambient, params, params2;
   mat4 lightViewProj;
 };
 struct DrawData {
   mat4 model, normalMatrix;
-  vec4 color, emissive;
+  vec4 color, emissive, flags;
 };
 struct PresentData {
   vec4 rect, outline, skyTop, skyBottom;
   vec4 camRight, camUp, camForward; // world space; camRight.w: texel size (ortho), camUp.w: texel size per unit depth (perspective)
+  vec4 paletteInfo; // x: color count, y: dither amount
+  vec4 palette[64]; // sRGB
 };
 } // namespace
 
@@ -202,7 +204,8 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   }
   frame.ambient = vec4(toLinear(scene.settings.ambient), 0.0f);
   f32 shadowTexel = fitShadowFrustum(scene, assets, vec3(frame.lightDir), frame.lightViewProj);
-  frame.params = vec4((f32)scene.settings.toonBands, scene.settings.shadows ? 1.0f : 0.0f, shadowTexel, 0);
+  frame.params = vec4((f32)scene.settings.toonBands, scene.settings.shadows ? 1.0f : 0.0f, shadowTexel, scene.settings.dither);
+  frame.params2 = vec4(scene.settings.texelLighting ? 1.0f : 0.0f, (f32)std::max(scene.settings.texelsPerUnit, 1), 0, 0);
   u32 frameOffset = pushUniform(&frame, sizeof(frame));
 
   if (scene.settings.shadows) {
@@ -238,12 +241,13 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   cmd.setViewport(0, 0, (f32)lowWidth_, (f32)lowHeight_);
   cmd.setScissor(0, 0, lowWidth_, lowHeight_);
 
-  auto drawMesh = [&](const Mesh* mesh, const Texture* tex, const mat4& model, vec4 color, vec4 emissive) {
+  auto drawMesh = [&](const Mesh* mesh, const Texture* tex, const mat4& model, vec4 color, vec3 emissive, vec4 flags) {
     DrawData d;
     d.model = model;
     d.normalMatrix = mat4(glm::transpose(glm::inverse(mat3(model))));
     d.color = toLinear(color);
-    d.emissive = toLinear(emissive);
+    d.emissive = vec4(toLinear(emissive), 0.0f);
+    d.flags = flags;
     u32 offset = pushUniform(&d, sizeof(d));
     cmd.setBindGroup(1, drawGroup_, {&offset, 1});
     cmd.setBindGroup(2, materialGroup(tex));
@@ -255,13 +259,22 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   cmd.setPipeline(meshPipeline_);
   cmd.setBindGroup(0, frameGroup_, {&frameOffset, 1});
   for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each())
-    drawMesh(assets.mesh(m.mesh), assets.texture(m.texture), t.world, m.color, vec4(m.emissive, 0.0f));
+    drawMesh(assets.mesh(m.mesh), assets.texture(m.texture), t.world, m.color, m.emissive, vec4(0, m.worldTexels ? 1.0f : 0.0f, 0, 0));
 
   cmd.setPipeline(spritePipeline_);
   cmd.setBindGroup(0, frameGroup_, {&frameOffset, 1});
   const Mesh* quad = assets.mesh("builtin:quad");
-  for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each())
-    drawMesh(quad, assets.texture(s.texture), t.world * glm::scale(mat4(1.0f), vec3(s.size, 1.0f)), s.color, vec4(0, 0, 0, 1));
+  mat4 camWorld = glm::inverse(view);
+  for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
+    mat4 model = t.world;
+    if (s.billboard) {
+      // Face the camera but stay upright, like a character sprite in a 3D world.
+      vec3 right = glm::normalize(vec3(camWorld[0].x, 0.0f, camWorld[0].z));
+      vec3 scale(glm::length(vec3(t.world[0])), glm::length(vec3(t.world[1])), 1.0f);
+      model = mat4(vec4(right * scale.x, 0), vec4(0, scale.y, 0, 0), vec4(glm::cross(right, vec3(0, 1, 0)), 0), t.world[3]);
+    }
+    drawMesh(quad, assets.texture(s.texture), model * glm::scale(mat4(1.0f), vec3(s.size, 1.0f)), s.color, vec3(0.0f), vec4(1, 0, 0, 0));
+  }
 
   cmd.endRenderPass();
 }
@@ -314,7 +327,7 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
     presentPipeline = device_.createPipeline(p);
     ACE_ASSERT(presentPipeline, "failed to create present pipeline");
   }
-  PresentData pd;
+  PresentData pd{};
   pd.rect = vec4((f32)margin - scroll.x, (f32)margin + scroll.y, (f32)visW, (f32)visH);
   pd.outline = vec4(s.outlineStrength, s.highlightStrength, s.exposure, s.outlines ? 1.0f : 0.0f);
   pd.skyTop = vec4(toLinear(s.skyTop), 1.0f);
@@ -323,6 +336,21 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
   pd.camRight = vec4(vec3(cv.world[0]), cam.orthographic ? 2.0f * cam.orthoSize / texelsHigh : 0.0f);
   pd.camUp = vec4(vec3(cv.world[1]), cam.orthographic ? 0.0f : 2.0f * tanf(glm::radians(cam.fov) * 0.5f) / texelsHigh);
   pd.camForward = vec4(-vec3(cv.world[2]), 0.0f);
+  // Palette: the distinct colors of the palette image, in reading order.
+  // shortcut: re-read from the cached texture every frame and searched per output
+  // pixel in the shader; move to a low-resolution pass + 3D lookup if it shows up.
+  pd.paletteInfo = vec4(0.0f, s.dither, 0, 0);
+  if (!s.palette.empty()) {
+    const Texture* pal = assets.texture(s.palette);
+    int count = 0;
+    for (size_t i = 0; i + 3 < pal->pixels.size() && count < 64; i += 4) {
+      vec4 c = vec4(pal->pixels[i], pal->pixels[i + 1], pal->pixels[i + 2], 255.0f) / 255.0f;
+      bool seen = pal->pixels[i + 3] < 128; // transparent pixels are not colors
+      for (int k = 0; k < count && !seen; k++) seen = pd.palette[k] == c;
+      if (!seen) pd.palette[count++] = c;
+    }
+    pd.paletteInfo.x = (f32)count;
+  }
   u32 offset = pushUniform(&pd, sizeof(pd));
 
   RenderPassDesc pass;

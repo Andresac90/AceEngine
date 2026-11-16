@@ -32,12 +32,14 @@ struct MeshRenderer {
   std::string texture;               // optional albedo, project-relative
   vec4 color{1.0f};
   vec3 emissive{0.0f}; // light emitted (path tracer) / unlit add (raster)
+  bool worldTexels = false; // map the texture in world space at the scene's texel density
 };
 
 struct SpriteRenderer {
   std::string texture;
   vec4 color{1.0f};
   vec2 size{1.0f}; // world units
+  bool billboard = false; // always face the camera, staying upright
 };
 
 struct Camera {
@@ -66,6 +68,10 @@ struct RenderSettings {
   int pixelHeight = 180;    // low-resolution image height when pixelArt is on
   bool pixelSnap = true;    // snap orthographic cameras to the texel grid (no shimmer)
   int toonBands = 3;        // 0 = smooth lighting
+  f32 dither = 0.6f;        // ordered dithering between light bands and palette colors (0 = none)
+  bool texelLighting = true; // evaluate light/shadow per texture texel, not per screen pixel
+  int texelsPerUnit = 16;   // texture pixels per world unit for worldTexels meshes
+  std::string palette;      // optional image; every on-screen color snaps to one of its (max 64) colors
   bool shadows = true;      // sun shadows in raster mode (the path tracer always has them)
   bool outlines = true;
   f32 outlineStrength = 0.6f;

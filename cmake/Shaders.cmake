@@ -2,7 +2,8 @@
 # one file per entry point (<name>.vs.spv / <name>.fs.spv). Vulkan consumes the
 # SPIR-V directly, Metal transpiles it at load time, D3D12 gets DXIL (Windows).
 set(ACE_SLANG_VERSION 2026.22)
-find_program(SLANGC slangc HINTS $ENV{HOME}/.cache/ace/slang/bin ${CMAKE_BINARY_DIR}/_slang/bin)
+# slangc is a host tool: when cross-compiling (iOS, Android) do not look in the target sysroot.
+find_program(SLANGC slangc HINTS $ENV{HOME}/.cache/ace/slang/bin ${CMAKE_BINARY_DIR}/_slang/bin NO_CMAKE_FIND_ROOT_PATH)
 if(NOT SLANGC)
   if(CMAKE_HOST_APPLE)
     set(_slang_pkg macos-aarch64)
@@ -16,7 +17,7 @@ if(NOT SLANGC)
     URL https://github.com/shader-slang/slang/releases/download/v${ACE_SLANG_VERSION}/slang-${ACE_SLANG_VERSION}-${_slang_pkg}.tar.gz
     SOURCE_DIR ${CMAKE_BINARY_DIR}/_slang)
   FetchContent_MakeAvailable(slang_bin)
-  find_program(SLANGC slangc HINTS ${CMAKE_BINARY_DIR}/_slang/bin REQUIRED)
+  find_program(SLANGC slangc HINTS ${CMAKE_BINARY_DIR}/_slang/bin NO_CMAKE_FIND_ROOT_PATH REQUIRED)
 endif()
 message(STATUS "slangc: ${SLANGC}")
 

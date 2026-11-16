@@ -45,8 +45,25 @@ Add `--backend vulkan` (or `metal`) to pick the GPU backend.
 | Play / stop | F5 (changes made while playing are discarded on stop) |
 | Undo / redo, save, duplicate, delete | Cmd+Z / Cmd+Shift+Z, Cmd+S, Cmd+D, Delete |
 
-The look of a level (pixel height, outlines, toon bands, path tracing, sky) is
-in the **Render Settings** tab and is saved with the scene.
+The look of a level is in the **Render Settings** tab and is saved with the scene.
+
+## Making it look like pixel art
+
+The demo's `scenes/village.scene.json` is the reference. The look comes from
+five things working together, all controlled per scene or per entity:
+
+| What | Where |
+| --- | --- |
+| Low-resolution image, hard-pixel upscale | Render Settings: `pixelArt`, `pixelHeight` |
+| Pixel-art textures at one pixel size everywhere | MeshRenderer `worldTexels` + Render Settings `texelsPerUnit` (texture pixels per world unit) |
+| Light and shadow that follow the texture's pixel grid | Render Settings `texelLighting`, `toonBands`, `shadows` |
+| Dithering between light bands and palette colors | Render Settings `dither` |
+| Every on-screen color taken from one palette | Render Settings `palette` (an image; up to 64 distinct colors) |
+| Characters and props as sprites in the 3D world | SpriteRenderer with `billboard` |
+
+Draw textures and sprites from the same palette image. Size sprites so one
+texel matches the world: a 16x22 sprite at 16 texels per unit is 1.0 x 1.375.
+`python3 tools/make_demo_art.py` regenerates the demo's art and shows the idea.
 
 ## Projects
 
@@ -65,9 +82,11 @@ glTF path. Colors in scenes are sRGB.
 
 ```sh
 tools/export_macos.sh projects/pixel_demo    # -> build-export/macos/<Name>.app
+tools/export_ios.sh projects/pixel_demo      # iOS simulator build (work in progress, see docs/HANDOFF.md)
+tools/autotest.sh                            # scripted editor interaction test on each backend
 ```
 
-Windows, Android and iOS export are not done yet; the plan is in docs/HANDOFF.md.
+Windows and Android export are not done yet; the plan is in docs/HANDOFF.md.
 
 ## Layout
 

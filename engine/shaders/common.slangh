@@ -5,9 +5,25 @@ struct FrameData {
   float4 lightDir;   // xyz: direction towards the light
   float4 lightColor; // rgb * intensity
   float4 ambient;
-  float4 params;     // x: toon bands (0 = smooth), y: shadows on, z: shadow-map texel size in world units
+  float4 params;     // x: toon bands (0 = smooth), y: shadows on, z: shadow-map texel size in world units, w: dither amount
+  float4 params2;    // x: texel-space lighting on, y: texels per world unit
   float4x4 lightViewProj; // world -> shadow map clip space
 };
+
+// Per-draw constants. Must match DrawData in render/renderer.cpp.
+struct DrawData {
+  float4x4 model;
+  float4x4 normalMatrix;
+  float4 color;
+  float4 emissive; // rgb: emissive
+  float4 flags;    // x: unlit (sprites), y: map the texture in world space at the scene's texel density
+};
+
+// 4x4 ordered-dither threshold in 0..1 for an integer coordinate.
+float bayer4(int2 p) {
+  static const float m[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
+  return (m[(p.x & 3) + (p.y & 3) * 4] + 0.5) / 16.0;
+}
 
 // Views below this depth are "sky": no geometry was drawn there.
 static const float kSkyDepth = 9000.0;

@@ -331,6 +331,7 @@ private:
       opts.platform = spirv_cross::CompilerMSL::Options::macOS;
 #else
       opts.platform = spirv_cross::CompilerMSL::Options::iOS;
+      opts.ios_support_base_vertex_instance = true; // SV_VertexID lowers to vertex id minus base vertex (A9+)
 #endif
       compiler.set_msl_options(opts);
       spv::ExecutionModel model = shader.stage == ShaderStage::Vertex ? spv::ExecutionModelVertex : spv::ExecutionModelFragment;

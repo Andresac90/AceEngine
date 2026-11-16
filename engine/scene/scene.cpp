@@ -28,9 +28,10 @@ const std::vector<ComponentType>& componentTypes() {
       makeType<Transform>("Transform", {ACE_FIELD(Transform, position, Vec3), ACE_FIELD(Transform, rotation, Quat),
                                         ACE_FIELD(Transform, scale, Vec3)}),
       makeType<MeshRenderer>("MeshRenderer", {ACE_FIELD(MeshRenderer, mesh, Asset), ACE_FIELD(MeshRenderer, texture, Asset),
-                                              ACE_FIELD(MeshRenderer, color, Color4), ACE_FIELD(MeshRenderer, emissive, Color3)}),
+                                              ACE_FIELD(MeshRenderer, color, Color4), ACE_FIELD(MeshRenderer, emissive, Color3),
+                                              ACE_FIELD(MeshRenderer, worldTexels, Bool)}),
       makeType<SpriteRenderer>("SpriteRenderer", {ACE_FIELD(SpriteRenderer, texture, Asset), ACE_FIELD(SpriteRenderer, color, Color4),
-                                                  ACE_FIELD(SpriteRenderer, size, Vec2)}),
+                                                  ACE_FIELD(SpriteRenderer, size, Vec2), ACE_FIELD(SpriteRenderer, billboard, Bool)}),
       makeType<Camera>("Camera", {ACE_FIELD(Camera, orthographic, Bool), ACE_FIELD(Camera, orthoSize, Float), ACE_FIELD(Camera, fov, Float),
                                   ACE_FIELD(Camera, nearPlane, Float), ACE_FIELD(Camera, farPlane, Float)}),
       makeType<Light>("Light", {ACE_FIELD(Light, color, Color3), ACE_FIELD(Light, intensity, Float)}),
@@ -43,7 +44,8 @@ const std::vector<Field>& renderSettingsFields() {
   using R = RenderSettings;
   static const std::vector<Field> fields = {
       ACE_FIELD(R, pathTraced, Bool),     ACE_FIELD(R, pixelArt, Bool),         ACE_FIELD(R, pixelHeight, Int),
-      ACE_FIELD(R, pixelSnap, Bool),      ACE_FIELD(R, toonBands, Int),         ACE_FIELD(R, shadows, Bool),  ACE_FIELD(R, outlines, Bool),
+      ACE_FIELD(R, pixelSnap, Bool),      ACE_FIELD(R, toonBands, Int),         ACE_FIELD(R, dither, Float),  ACE_FIELD(R, texelLighting, Bool),
+      ACE_FIELD(R, texelsPerUnit, Int),   ACE_FIELD(R, palette, Asset),         ACE_FIELD(R, shadows, Bool),  ACE_FIELD(R, outlines, Bool),
       ACE_FIELD(R, outlineStrength, Float), ACE_FIELD(R, highlightStrength, Float), ACE_FIELD(R, ambient, Color3),
       ACE_FIELD(R, skyTop, Color3),       ACE_FIELD(R, skyBottom, Color3),      ACE_FIELD(R, ptSamples, Int),
       ACE_FIELD(R, ptBounces, Int),       ACE_FIELD(R, exposure, Float),

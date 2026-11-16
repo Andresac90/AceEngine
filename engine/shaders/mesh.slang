@@ -1,13 +1,14 @@
-// Rasterized scene pass: toon-lit meshes and sprites.
+// Rasterized scene pass: meshes and sprites shaded like pixel art.
 // Writes linear HDR color and (world normal, view depth) for the present pass.
+//
+// What makes it read as pixel art rather than filtered 3D:
+//  - textures are sampled unfiltered and can be mapped in world space at a fixed
+//    texel density, so every surface shows the same pixel size;
+//  - light and shadow are evaluated at texture-texel centers ("texel-space
+//    lighting"), so shading edges follow the texture's pixel grid;
+//  - light is quantized into a few bands, with ordered dithering between bands
+//    that is anchored to the texture's texels.
 #include "common.slangh"
-
-struct DrawData {
-  float4x4 model;
-  float4x4 normalMatrix;
-  float4 color;
-  float4 emissive; // rgb: emissive, a: 1 = unlit (sprites)
-};
 
 [[vk::binding(0, 0)]] ConstantBuffer<FrameData> frame;
 [[vk::binding(1, 0)]] Texture2D shadowMap; // r: light-space depth of the nearest occluder
@@ -61,16 +62,52 @@ float sunVisibility(float3 worldPos, float3 n) {
 }
 
 FsOut fsMain(VsOut i) {
-  float4 albedo = albedoTexture.Sample(albedoSampler, i.uv) * i.color;
-  if (albedo.a < 0.5) discard; // hard-edged cutout: pixel art has no soft alpha
   float3 n = normalize(i.normal);
+  uint tw, th;
+  albedoTexture.GetDimensions(tw, th);
+  float2 texSize = float2(tw, th);
+
+  // World-space mapping: project along the dominant normal axis, one texel =
+  // 1 / texelsPerUnit world units, whatever the object's scale.
+  float2 uv = i.uv;
+  if (draw.flags.y > 0.5) {
+    float3 a = abs(n);
+    float2 plane = a.y >= a.x && a.y >= a.z ? i.worldPos.xz : (a.x >= a.z ? float2(-i.worldPos.z, -i.worldPos.y) : float2(i.worldPos.x, -i.worldPos.y));
+    uv = plane * frame.params2.y / texSize;
+  }
+  float4 albedo = albedoTexture.Sample(albedoSampler, uv) * i.color;
+  if (albedo.a < 0.5) discard; // hard-edged cutout: pixel art has no soft alpha
+
+  // Texel-space lighting: move the shading point to the center of the texture
+  // texel under this pixel, by solving the screen-space UV derivatives.
+  float3 shadePos = i.worldPos;
+  bool textured = tw > 1 || th > 1;
+  int2 ditherCoord = int2(i.position.xy);
+  if (textured) {
+    float2 texel = floor(uv * texSize);
+    ditherCoord = int2(texel);
+    if (frame.params2.x > 0.5) {
+      float2 d = (texel + 0.5) / texSize - uv;
+      float2 dx = ddx(uv), dy = ddy(uv);
+      float det = dx.x * dy.y - dx.y * dy.x;
+      if (abs(det) > 1e-12) {
+        float2 steps = float2(d.x * dy.y - d.y * dy.x, dx.x * d.y - dx.y * d.x) / det; // in screen pixels
+        steps = clamp(steps, -16.0, 16.0); // grazing angles: do not extrapolate far off the surface
+        shadePos += ddx(i.worldPos) * steps.x + ddy(i.worldPos) * steps.y;
+      }
+    }
+  }
+
   float3 lit = albedo.rgb;
-  if (draw.emissive.a < 0.5) {
-    float ndl = saturate(dot(n, frame.lightDir.xyz));
-    if (ndl > 0.0) ndl *= sunVisibility(i.worldPos, n);
+  if (draw.flags.x < 0.5) {
+    float light = saturate(dot(n, frame.lightDir.xyz));
+    if (light > 0.0) light *= sunVisibility(shadePos, n);
     float bands = frame.params.x;
-    if (bands > 0.5) ndl = ceil(ndl * bands - 0.001) / bands;
-    lit = albedo.rgb * (frame.ambient.rgb + frame.lightColor.rgb * ndl * 0.318);
+    if (bands > 0.5) {
+      float jitter = (bayer4(ditherCoord) - 0.5) * frame.params.w;
+      light = clamp(ceil(light * bands - 0.001 + jitter), 0.0, bands) / bands;
+    }
+    lit = albedo.rgb * (frame.ambient.rgb + frame.lightColor.rgb * light * 0.318);
   }
   FsOut o;
   o.color = float4(lit + draw.emissive.rgb, 1.0);

@@ -11,6 +11,17 @@ macOS, Android and iOS. The first game is a stylized **3D pixel-art** game, and
 the engine must support a **path-traced** renderer for it. Other art styles
 must remain possible.
 
+**Art direction, clarified by the owner on 2026-11-16:** "3D pixel art" means a
+real 3D game (perspective camera, free movement) whose world *is* pixel art —
+hand-pixelled textures and sprites — not smooth 3D pushed through a pixelation
+filter. Their references: github.com/siliconjungle/shapeshift-labs-ink-studio
+(palette ramps + dithering, though built on splats), github.com/remorses/castle-valley
+(a painterly world with pixel sprites), and a Reddit r/IndieDev post titled
+"After a year of solo dev, my 3D pixel art medieval..." that could not be
+fetched (Reddit blocks it) — ask the owner for screenshots of it. The engine's
+answer is in README "Making it look like pixel art"; `scenes/village.scene.json`
+is the current reference image. Judge every rendering change against that goal.
+
 Decisions the owner made explicitly (do not revisit without asking):
 
 | Topic | Decision |
@@ -46,13 +57,29 @@ looking at screenshots produced with `--screenshot`:
   (warns, draws a cube) and `pixelArt = false`. Images matched across backends.
 - A from-scratch `cmake -S . -B <dir> -G Ninja` + build with default options.
 
+- Editor interactions, by `tools/autotest.sh` on Metal and Vulkan (it injects
+  real mouse/keyboard input): orbit, wheel zoom, viewport click-select, gizmo
+  X-axis drag, one undo step per drag, undo/redo, duplicate, delete, save to
+  disk, play/stop restoring the scene.
+- Raster sun shadows, direct sampling of emissive triangles in the path tracer,
+  a hand-made glTF model (`assets/pine.gltf`), and the pixel-art feature set
+  (world-space texel mapping, texel-space lighting, dithering, palette, billboard
+  sprites) in `scenes/village.scene.json`: Metal and Vulkan images are identical.
+
 **Not verified — treat as unknown until someone tries it:**
 
-- Every editor *interaction*: mouse orbit/pan/zoom, click picking, dragging
-  the gizmo, drag-and-drop re-parenting and asset assignment, undo/redo, save,
-  Save As, keyboard shortcuts. The code is written and the UI renders, but
-  nobody has operated it by hand or by script. Do this first (section 6, task 1).
+- Editor interactions the autotest does not cover: pan, drag-and-drop
+  re-parenting and asset assignment, Save As, New Scene, the menus, text fields.
+  Nobody has used the editor by hand yet.
 - `player.lua` keyboard movement (needs real key input).
+- **iOS.** `tools/export_ios.sh projects/pixel_demo simulator` builds and the
+  app installs and starts in the simulator (Metal device and pipelines are
+  created; one crash was fixed: SPIRV-Cross needs
+  `ios_support_base_vertex_instance`). After that the screen stayed black and
+  `simctl terminate`/`screenshot` hung, so the app is probably stuck in its
+  frame loop. Suspects: `waitIdle()`/`nextDrawable` in `MetalDevice::beginFrame`
+  on the simulator, or SDL's iOS main-loop expectations (SDL recommends
+  `SDL_MAIN_USE_CALLBACKS` on iOS). No frame has been seen on iOS.
 - Window resize and minimise paths in both backends.
 - Vulkan on a real Vulkan driver (Android, Windows, Linux). Only MoltenVK ran.
 - glTF loading: `loadGltf` has never been given a real file.
@@ -209,12 +236,18 @@ otherwise; ask the owner before installing anything.
    entity is selected, and deleting a parent. Load a real glTF model on both
    backends. Done: all of section 2's "not verified" macOS items are
    confirmed or fixed.
-2. **Raster shadows** (one directional shadow map sampled in `mesh.slang`,
-   texel-snapped so the shadow edge does not crawl). The path-traced image in
-   `scenes/pathtraced.scene.json` is the reference for where shadows fall.
-3. **Path tracer quality**: sample emissive triangles directly (removes the
-   sparkle around the lantern; the 4.0 radiance clamp in `pathtrace.slang` is a
-   stopgap); sample albedo textures (pack them into one atlas, add UVs to
+2. ~~Raster shadows~~ done (one 2048 map over the whole scene; see the
+   `shortcut:` in `Renderer::fitShadowFrustum`). Still open: sprites do not
+   cast shadows.
+2b. **Pixel-art look, next steps** (the owner's main interest): sprites casting
+   shadows and receiving texel lighting; sprite sheets + animation and 8-way
+   directional character sprites; per-material color ramps (shade by picking
+   the next ramp color instead of multiplying, the way ink-studio does); a
+   palette editor panel; water and foliage; make the path tracer honor
+   textures, palette and texel lighting so both modes share one look. Compare
+   against the owner's references each time.
+3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;
+   sample albedo textures (pack them into one atlas, add UVs to
    `PathTracer::Triangle`); include sprites; then a two-level BVH (per-mesh
    BLAS built once + TLAS rebuilt per frame) so moving objects are cheap; then
    a denoiser. Hardware ray tracing (Metal/Vulkan/DXR ray queries) is a later

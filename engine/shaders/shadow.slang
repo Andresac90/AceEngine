@@ -2,13 +2,6 @@
 // in a color target (R32F), so the scene shader can read it with a plain Load.
 #include "common.slangh"
 
-struct DrawData {
-  float4x4 model;
-  float4x4 normalMatrix;
-  float4 color;
-  float4 emissive;
-};
-
 [[vk::binding(0, 0)]] ConstantBuffer<FrameData> frame;
 [[vk::binding(0, 1)]] ConstantBuffer<DrawData> draw;
 

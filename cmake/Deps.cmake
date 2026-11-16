@@ -58,7 +58,7 @@ list(FILTER LUA_SOURCES EXCLUDE REGEX "/(lua|onelua|ltests)\\.c$")
 add_library(lua STATIC ${LUA_SOURCES})
 target_include_directories(lua SYSTEM PUBLIC ${lua_SOURCE_DIR})
 if(IOS)
-  target_compile_definitions(lua PRIVATE "system(s)=(-1)") # os.execute is unavailable on iOS
+  target_compile_definitions(lua PRIVATE LUA_USE_IOS) # iOS has no system(); Lua stubs os.execute
 endif()
 
 # --- SPIRV-Cross: SPIR-V -> Metal Shading Language at load time (Apple only) ---

@@ -11,6 +11,8 @@ struct PresentData {
   float4 camRight;   // xyz: world-space camera right, w: texel size in world units (orthographic)
   float4 camUp;      // xyz: camera up, w: texel size per unit of depth (perspective)
   float4 camForward;
+  float4 paletteInfo;  // x: number of palette colors (0 = no palette), y: dither amount
+  float4 palette[64];  // sRGB colors
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<PresentData> data;
@@ -67,6 +69,24 @@ float4 fsMain(VsOut i) : SV_Target0 {
       if (depthEdge > 0.6) color *= 1.0 - data.outline.x;
       else if (normalEdge > 0.4) color *= 1.0 + data.outline.y;
     }
+  }
+  // Limited palette: snap to the nearest palette color, with ordered dithering
+  // on the low-resolution pixel grid. Compared in sRGB, which is closer to how
+  // differences are perceived than linear light.
+  int count = int(data.paletteInfo.x);
+  if (count > 0) {
+    float3 c = pow(saturate(color), 1.0 / 2.2) + (bayer4(p) - 0.5) * data.paletteInfo.y * 0.12;
+    float best = 1e9;
+    float3 chosen = c;
+    for (int k = 0; k < count; k++) {
+      float3 diff = data.palette[k].rgb - c;
+      float dist = dot(diff * diff, float3(0.30, 0.59, 0.11));
+      if (dist < best) {
+        best = dist;
+        chosen = data.palette[k].rgb;
+      }
+    }
+    color = pow(chosen, 2.2);
   }
   return float4(color, 1.0);
 }
