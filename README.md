@@ -55,12 +55,25 @@ The look of a level is in the **Render Settings** tab and is saved with the scen
 
 ## Making it look like pixel art
 
-The demo's `scenes/village.scene.json` is the reference. The look comes from
-five things working together, all controlled per scene or per entity:
+The demo's `scenes/village.scene.json` is the reference. Two ways to get pixels:
+
+- **World pixels** (`worldPixels`, used by the demo; perspective cameras): the
+  scene is captured into small cube maps around a point snapped to a world
+  grid, and every captured pixel is drawn as a little square *in the 3D world*.
+  The pixels belong to the world, so they don't swim or shimmer when the camera
+  turns or moves. `probeResolution` sets their size (384 per cube face by
+  default; lower = chunkier), `probeCell` how far you walk before the pixel grid
+  re-centres (with a quick dissolve). This is the technique of Dylan Ebert's
+  [Texel Splatting](https://dylanebert.com/texel-splatting/) paper.
+- **Screen pixels** (`pixelArt` + `pixelHeight`): a low-resolution image scaled
+  up. Rock steady with an orthographic camera (`pixelSnap`); with a perspective
+  camera the pixels slide over surfaces as you move.
+
+Then, for both:
 
 | What | Where |
 | --- | --- |
-| Low-resolution image, hard-pixel upscale | Render Settings: `pixelArt`, `pixelHeight` |
+| Low-resolution image, hard-pixel upscale (screen pixels) | Render Settings: `pixelArt`, `pixelHeight` (also sets the UI text size) |
 | Pixel-art textures at one pixel size everywhere | MeshRenderer `worldTexels` + Render Settings `texelsPerUnit` (texture pixels per world unit) |
 | Light and shadow that follow the texture's pixel grid | Render Settings `texelLighting`, `toonBands`, `shadows` |
 | Dithering between light bands and palette colors | Render Settings `dither` |

@@ -18,9 +18,26 @@ filter. Their references: github.com/siliconjungle/shapeshift-labs-ink-studio
 (palette ramps + dithering, though built on splats), github.com/remorses/castle-valley
 (a painterly world with pixel sprites), and a Reddit r/IndieDev post titled
 "After a year of solo dev, my 3D pixel art medieval..." that could not be
-fetched (Reddit blocks it) — ask the owner for screenshots of it. The engine's
-answer is in README "Making it look like pixel art"; `scenes/village.scene.json`
-is the current reference image. Judge every rendering change against that goal.
+fetched (Reddit blocks it); it is very likely Project Shadowglass (Godot,
+dark fantasy, "pixel stabilization" with a perspective camera). The owner
+re-sent the note on 2026-11-17 with "I want actual pixels art in a 3D world":
+pixels must belong to the world, not to the screen.
+
+Research behind the current answer:
+- Dylan Ebert, *Texel Splatting* (arXiv 2603.14587, dylanebert.com/texel-splatting,
+  MIT code at github.com/dylanebert/texel-splatting, WebGPU): capture cube maps
+  from a grid-snapped probe + an eye probe, draw each texel as a world-space quad,
+  Bayer-crossfade on cell changes, shade/posterize/outline per texel. 384 texels
+  per face; 40 fps on an iPhone 15. Does not handle animated characters.
+- tesseractcat, "Replicating the Shadowglass 3D pixel-art technique"
+  (tesseractc.at/shadowglass): the same idea with screen-space ray-marched
+  reprojection of near/mid/far cube maps; notes texel splatting shimmers less.
+- 80.lv interview with Shadowglass's developer: limited palettes/LUTs, point
+  filtering, stepped animation, readability from every angle; details withheld.
+
+The engine's answer is `worldPixels` (engine/render/texel_splat.*), on in
+`scenes/village.scene.json`, which is the current reference image. Judge every
+rendering change against that goal and get the owner's reaction to it.
 
 Decisions the owner made explicitly (do not revisit without asking):
 
@@ -103,6 +120,14 @@ looking at screenshots produced with `--screenshot`:
   work while the display is asleep. Before this, such runs could stall forever
   at night: macOS stops handing out drawables for an invisible window, so every
   frame was skipped. (A real game skipping frames while hidden is correct.)
+- **World pixels** (`worldPixels`, `engine/render/texel_splat.*`): a unit test
+  checks capture and splat agree on texel positions; Metal and Vulkan images are
+  pixel-identical. On a 60-frame camera orbit at a fixed timestep
+  (`ace_player ... --fixed-dt 0.0166667 --frames 60 --frames-to out/`), the share
+  of pixels that change between frames after the best shift is 19% (ground) and
+  10% (wall), versus 34% and 14% with screen pixels, with no spikes when the grid
+  probe moves. Cost at 2560x1440 on an M1 Pro: about 11-12 ms per frame,
+  versus about 3 ms for screen pixels.
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
@@ -188,6 +213,10 @@ scene pass   -> color RGBA16F (linear HDR) + normalDepth RGBA16F (world normal, 
                              world-space texel mapping, cutout sprites)
                 path traced: pathtrace.slang  (software BVH in the fragment shader;
                              textures from a 1024 atlas, same texel/ramp rules)
+world pixels -> texel_splat.cpp: capture (drawRaster into 6-face atlases, grid +
+                eye [+ previous grid while crossfading]) -> probe_post.slang
+                (per-texel outlines, tone, palette, dither) -> texel_splat.slang
+                (one square per texel, no vertex buffer) -> sprites drawn direct
 present pass -> present.slang: sky, outlines (depth) + convex-edge highlights
                 (normals), tone map, palette snap, hard-pixel upscale; then
                 screen text (pixel font, imgui.slang) in the same pass
@@ -288,6 +317,10 @@ Pitfalls already hit:
 - Each iOS executable gets wrapped in a bare `.app` by CMake; the export script
   copies the binary out of it. iOS needs SPIRV-Cross's
   `ios_support_base_vertex_instance`.
+- World pixels: a lower-priority probe must be pushed back in *world* space
+  (fraction of the camera distance), not clip space: perspective depth is
+  nearly 1.0 beyond a few metres, so a clip-space push sends splats to the far
+  plane and they vanish. Orthographic cameras use screen pixels instead.
 - The editor captures keys through ImGui, which maps Cmd to "Ctrl" on macOS;
   injected test input must send `ImGuiMod_Super` there.
 
@@ -303,6 +336,14 @@ otherwise; ask the owner before installing anything.
    confirmed or fixed.
 2. ~~Raster shadows~~ done (one 2048 map over the whole scene, sprites cast
    theirs; see the `shortcut:` in `Renderer::fitShadowFrustum` for big levels).
+2a. **World pixels, next steps.** Show the owner and tune `probeResolution` /
+   `probeCell` / palette with them. Then: capture only the (at most 3) visible
+   faces and cache the grid probe while nothing moves (today: 12-18 scene
+   renders per frame); crossfade the eye probe's disocclusion fill (it can
+   shimmer at silhouettes); outlines across cube-face seams (post pass stops at
+   face edges); sprites with the same pixel size as the world; path-traced
+   capture (shade probe texels with the path tracer instead of raster); a
+   mobile budget (384 per face is heavy for phones; try 256).
 2b. **Pixel-art look** (the owner's main interest). Done: texel-space lighting,
    world-space texel density, palette snap + dithering, palette-ramp shading
    in both render modes, integer scaling, sprite sheets/animation, sprite
