@@ -353,6 +353,11 @@ void Editor::drawMenu() {
     }
     if (ImGui::BeginMenu("Entity")) {
       if (ImGui::MenuItem("Empty")) createEntity("Entity", nullptr);
+      if (ImGui::MenuItem("Block (textured, solid)")) { // level-building brick: world-mapped texture + collider
+        Entity e = createEntity("Block", "builtin:cube");
+        scene_.reg.get<MeshRenderer>(e).worldTexels = true;
+        scene_.reg.emplace<Collider>(e);
+      }
       if (ImGui::MenuItem("Cube")) createEntity("Cube", "builtin:cube");
       if (ImGui::MenuItem("Sphere")) createEntity("Sphere", "builtin:sphere");
       if (ImGui::MenuItem("Plane")) createEntity("Plane", "builtin:plane");
@@ -463,7 +468,11 @@ bool Editor::editFields(void* object, const std::vector<Field>& fields) {
       }
       case FieldType::String:
       case FieldType::Asset: {
-        changed = ImGui::InputText(f.name, (std::string*)p);
+        if (f.type == FieldType::Asset) {
+          if (assetPicker(f, *(std::string*)p)) changed = instant = true;
+          ImGui::SameLine(0.0f, 2.0f);
+        }
+        changed |= ImGui::InputText(f.name, (std::string*)p);
         if (f.type == FieldType::Asset && ImGui::BeginDragDropTarget()) {
           if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ACE_ASSET")) {
             *(std::string*)p = (const char*)payload->Data;
@@ -479,6 +488,43 @@ bool Editor::editFields(void* object, const std::vector<Field>& fields) {
     ImGui::PopID();
   }
   return finished;
+}
+
+// A small "v" button that lists the project files suited to this field (decided
+// by the field's name), so paths rarely need typing.
+bool Editor::assetPicker(const Field& field, std::string& value) {
+  std::vector<const char*> extensions, builtins;
+  if (strcmp(field.name, "mesh") == 0) {
+    extensions = {".gltf", ".glb"};
+    builtins = {"builtin:cube", "builtin:sphere", "builtin:plane", "builtin:quad"};
+  } else if (strcmp(field.name, "path") == 0) {
+    extensions = {".lua"};
+  } else {
+    extensions = {".png", ".jpg", ".jpeg"};
+  }
+  bool picked = false;
+  if (ImGui::ArrowButton("##pick", ImGuiDir_Down)) ImGui::OpenPopup("pick_asset");
+  if (ImGui::BeginPopup("pick_asset")) {
+    if (ImGui::Selectable("(none)", value.empty())) {
+      value.clear();
+      picked = true;
+    }
+    for (const char* b : builtins)
+      if (ImGui::Selectable(b, value == b)) {
+        value = b;
+        picked = true;
+      }
+    for (const std::string& file : assetFiles_) {
+      bool match = false;
+      for (const char* ext : extensions) match |= endsWith(file, ext);
+      if (match && ImGui::Selectable(file.c_str(), value == file)) {
+        value = file;
+        picked = true;
+      }
+    }
+    ImGui::EndPopup();
+  }
+  return picked;
 }
 
 void Editor::drawInspector() {
@@ -604,6 +650,12 @@ void Editor::drawToolbar() {
   ImGui::SameLine();
   ImGui::RadioButton("Scale (R)", &gizmoOp_, 2);
   ImGui::SameLine();
+  ImGui::Checkbox("Snap", &snap_);
+  ImGui::SameLine();
+  ImGui::SetNextItemWidth(70);
+  ImGui::DragFloat("##snapstep", &snapMove_, 0.0125f, 0.0125f, 10.0f, "%.4g");
+  if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move step in world units (rotate snaps to 15 degrees, scale to 0.25)");
+  ImGui::SameLine();
   ImGui::Checkbox("Orthographic", &camera_.orthographic);
   ImGui::EndDisabled();
   ImGui::SameLine();
@@ -654,7 +706,30 @@ void Editor::drawViewport() {
         Transform& t = scene_.reg.get<Transform>(selected_);
         mat4 world = t.world;
         static const ImGuizmo::OPERATION ops[] = {ImGuizmo::TRANSLATE, ImGuizmo::ROTATE, ImGuizmo::SCALE};
-        if (ImGuizmo::Manipulate(&view[0][0], &proj[0][0], ops[gizmoOp_], gizmoOp_ == 2 ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world[0][0])) {
+        f32 step = gizmoOp_ == 0 ? std::max(snapMove_, 0.0001f) : gizmoOp_ == 1 ? 15.0f : 0.25f;
+        f32 snapValues[3] = {step, step, step};
+        // Collider outline of the selection, so blocking volumes can be lined up by eye.
+        Aabb box = scene_.colliderBounds(selected_);
+        if (box.min.x <= box.max.x) {
+          mat4 viewProj = proj * view;
+          ImVec2 corner[8];
+          bool visible = true;
+          for (int c = 0; c < 8; c++) {
+            vec4 clip = viewProj * vec4(c & 1 ? box.max.x : box.min.x, c & 2 ? box.max.y : box.min.y, c & 4 ? box.max.z : box.min.z, 1.0f);
+            visible &= clip.w > 0.001f;
+            corner[c] = ImVec2(pos.x + (clip.x / clip.w * 0.5f + 0.5f) * size.x, pos.y + (0.5f - clip.y / clip.w * 0.5f) * size.y);
+          }
+          if (visible) {
+            ImDrawList* dl = ImGui::GetWindowDrawList();
+            dl->PushClipRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), true);
+            for (int a = 0; a < 8; a++)
+              for (int bit = 1; bit < 8; bit <<= 1)
+                if (!(a & bit)) dl->AddLine(corner[a], corner[a | bit], IM_COL32(90, 255, 140, 220), 1.5f);
+            dl->PopClipRect();
+          }
+        }
+        if (ImGuizmo::Manipulate(&view[0][0], &proj[0][0], ops[gizmoOp_], gizmoOp_ == 2 ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world[0][0],
+                                 nullptr, snap_ ? snapValues : nullptr)) {
           mat4 parentWorld = scene_.reg.valid(t.parent) ? scene_.reg.get<Transform>(t.parent).world : mat4(1.0f);
           vec3 skew;
           vec4 persp;

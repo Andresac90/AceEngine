@@ -48,6 +48,7 @@ private:
   void drawConsole();
   void drawViewport();
   bool editFields(void* object, const std::vector<Field>& fields); // true when an edit finished
+  bool assetPicker(const Field& field, std::string& value);         // dropdown of matching project files
   void handleShortcuts();
 
   void commit(); // record an undo step after a finished edit
@@ -74,6 +75,8 @@ private:
   Entity selected_ = kNoEntity;
   EditorCamera camera_;
   int gizmoOp_ = 0; // 0 move, 1 rotate, 2 scale
+  bool snap_ = true;      // gizmo snapping: move by snapMove_, rotate by 15 degrees, scale by 0.25
+  f32 snapMove_ = 0.25f;  // world units; 0.25 = 4 texels at 16 texels per unit
   bool gizmoWasUsing_ = false;
   bool playing_ = false;
   bool dirty_ = false;
