@@ -11,7 +11,7 @@ using namespace rhi;
 namespace {
 struct TraceData {
   mat4 invViewProj, view;
-  vec4 lightDir, lightColor, skyTop, skyBottom, params, lightInfo;
+  vec4 lightDir, lightColor, skyTop, skyBottom, params, lightInfo, ramp;
 };
 constexpr u32 kAtlasSize = 1024;
 constexpr u32 kMovingHistoryFrames = 6;
@@ -31,6 +31,7 @@ PathTracer::PathTracer(Renderer& renderer) : r_(renderer) {
   l.bindings[2] = BindingType::StorageBuffer;
   l.bindings[3] = BindingType::StorageBuffer;
   l.bindings[4] = BindingType::Texture;
+  l.bindings[5] = BindingType::Texture;
   layout_ = dev.createBindGroupLayout(l);
   PipelineDesc p;
   p.name = "pathtrace";
@@ -190,17 +191,9 @@ void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight) {
   fit(lightBuffer_, lightCapacity_, lights.size() * sizeof(vec4), "bvh lights");
   dev.writeBuffer(triBuffer_, 0, tris.data(), tris.size() * sizeof(Triangle));
   dev.writeBuffer(lightBuffer_, 0, lights.data(), lights.size() * sizeof(vec4));
-  if (grew) {
-    if (group_) dev.destroy(group_);
-    BindGroupDesc d;
-    d.layout = layout_;
-    d.entries[0].buffer = r_.uniformBuffer();
-    d.entries[0].size = sizeof(TraceData);
-    d.entries[1].buffer = nodeBuffer_;
-    d.entries[2].buffer = triBuffer_;
-    d.entries[3].buffer = lightBuffer_;
-    d.entries[4].texture = atlas_;
-    group_ = dev.createBindGroup(d);
+  if (grew && group_) {
+    dev.destroy(group_); // recreated in render() against the new buffers
+    group_ = {};
   }
 }
 
@@ -228,13 +221,29 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     if (s.billboard) sh = hashBytes(sh, &cameraRight, sizeof(vec3)); // billboards turn with the camera
   }
   bool reset = false;
-  if (sh != sceneHash_ || !group_) {
+  if (sh != sceneHash_ || !nodeBuffer_) {
     sceneHash_ = sh;
     rebuild(scene, assets, cameraRight);
     // Moving objects: keep a short history instead of restarting, trading a
     // little ghosting for far less noise.
     // shortcut: replace with motion-vector reprojection + a spatial denoiser.
     frame_ = std::min(frame_, kMovingHistoryFrames);
+  }
+  const Texture* palette = assets.texture(scene.settings.palette); // white 1x1 when unset
+  if (!group_ || palette->handle.id != paletteId_) {
+    Device& dev = r_.device();
+    if (group_) dev.destroy(group_);
+    BindGroupDesc g;
+    g.layout = layout_;
+    g.entries[0].buffer = r_.uniformBuffer();
+    g.entries[0].size = sizeof(TraceData);
+    g.entries[1].buffer = nodeBuffer_;
+    g.entries[2].buffer = triBuffer_;
+    g.entries[3].buffer = lightBuffer_;
+    g.entries[4].texture = atlas_;
+    g.entries[5].texture = palette->handle;
+    group_ = dev.createBindGroup(g);
+    paletteId_ = palette->handle.id;
   }
 
   TraceData d;
@@ -252,6 +261,12 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   d.params = vec4(0, (f32)scene.settings.ptSamples, (f32)scene.settings.ptBounces, (f32)scene.settings.toonBands);
 
   d.lightInfo = vec4((f32)lightCount_, (f32)std::max(scene.settings.texelsPerUnit, 1), scene.settings.texelLighting ? 1.0f : 0.0f, 0);
+  // Ramp shading needs to know what "fully lit" is: a white surface facing the
+  // sun, plus roughly what the sky adds.
+  auto luminance = [](vec3 c) { return glm::dot(c, vec3(0.2126f, 0.7152f, 0.0722f)); };
+  f32 fullyLit = luminance(vec3(d.lightColor)) * 0.318f + luminance(vec3(d.skyTop) + vec3(d.skyBottom)) * 0.25f;
+  bool ramps = scene.settings.rampShading && !scene.settings.palette.empty();
+  d.ramp = vec4(ramps ? 1.0f : 0.0f, (f32)glm::clamp(scene.settings.rampShadowSteps, 0, 15), fullyLit, 0);
 
   // Anything else that changes the image restarts the running average.
   u64 vh = hashBytes(14695981039346656037ull, &d, sizeof(d));

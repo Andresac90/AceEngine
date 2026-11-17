@@ -264,8 +264,10 @@ otherwise; ask the owner before installing anything.
    cast shadows.
 2b. **Pixel-art look, next steps** (the owner's main interest): sprites casting
    8-way directional character sprites (sheets, animation, sprite shadows and
-   palette-ramp shading are done; ramp shading is raster-only so far — the
-   path tracer still multiplies); a palette editor panel; water and foliage. (The path tracer already honors
+   palette-ramp shading in both render modes are done; in path-traced mode
+   ramp shading uses the amount of light, not its color, so colored light such
+   as the lantern's warm glow is lost — tint the ramp choice by light hue if the
+   owner wants it back); a palette editor panel; water and foliage. (The path tracer already honors
    textures, sprites, palette and texel lighting.) Compare against the owner's
    references each time.
 3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;

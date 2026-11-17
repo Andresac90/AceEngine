@@ -27,5 +27,42 @@ float bayer4(int2 p) {
   return (m[(p.x & 3) + (p.y & 3) * 4] + 0.5) / 16.0;
 }
 
+// Exact sRGB encoding: the palette lookup needs exact round trips, or close
+// colors (light stone vs pale sky) get confused.
+float3 linearToSrgb(float3 c) {
+  c = saturate(c);
+  return select(c <= 0.0031308, c * 12.92, 1.055 * pow(c, 1.0 / 2.4) - 0.055);
+}
+
+// Ramp shading: find the palette entry nearest to the surface color, then move
+// along its row: towards the darker (usually cooler) end as light falls off,
+// one step brighter in full light. Textures are drawn in the ramp's mid-tones.
+// `palette` is sRGB-typed (Load returns linear); rows are ramps, darkest on the
+// left, transparent texels are gaps. Returns linear color.
+float3 rampShade(Texture2D palette, float3 albedoLinear, float light, int steps) {
+  uint w, h;
+  palette.GetDimensions(w, h);
+  float3 c = linearToSrgb(albedoLinear);
+  float best = 1e9;
+  int2 at = int2(0, 0);
+  for (int y = 0; y < int(h) && y < 16; y++) {
+    for (int x = 0; x < int(w) && x < 16; x++) {
+      float4 p = palette.Load(int3(x, y, 0));
+      if (p.a < 0.5) continue;
+      float3 d = linearToSrgb(p.rgb) - c;
+      float dist = dot(d * d, float3(0.30, 0.59, 0.11));
+      if (dist < best) {
+        best = dist;
+        at = int2(x, y);
+      }
+    }
+  }
+  int shift = int(round(saturate(light) * float(steps + 1))) - steps; // -steps (shadow) .. +1 (full light)
+  int x = at.x;
+  for (int k = 0; k < 16 && shift < 0 && x > 0 && palette.Load(int3(x - 1, at.y, 0)).a >= 0.5; k++, shift++) x--;
+  for (int k = 0; k < 16 && shift > 0 && x + 1 < int(w) && palette.Load(int3(x + 1, at.y, 0)).a >= 0.5; k++, shift--) x++;
+  return palette.Load(int3(x, at.y, 0)).rgb;
+}
+
 // Views below this depth are "sky": no geometry was drawn there.
 static const float kSkyDepth = 9000.0;

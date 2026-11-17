@@ -34,6 +34,7 @@ private:
   rhi::BufferHandle nodeBuffer_, triBuffer_, lightBuffer_;
   u64 nodeCapacity_ = 0, triCapacity_ = 0, lightCapacity_ = 0;
   u32 lightCount_ = 0;
+  u32 paletteId_ = 0; // palette texture the bind group was built with
   rhi::TextureHandle atlas_; // every texture used by the scene, packed side by side
   u64 sceneHash_ = 0, viewHash_ = 0;
   u32 frame_ = 0;

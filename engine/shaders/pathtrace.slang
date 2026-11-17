@@ -18,6 +18,7 @@ struct TraceData {
   float4 skyBottom;
   float4 params;    // x: accumulated frames, y: samples per pixel, z: bounces, w: toon bands
   float4 lightInfo; // x: number of emissive triangles, y: texels per world unit, z: texel-space lighting on
+  float4 ramp;      // x: ramp shading on, y: shadow steps, z: luminance of a fully lit white surface
 };
 struct BvhNode {
   float4 minLeft;  // xyz: box min, w (bits): left child, or first triangle for leaves
@@ -38,6 +39,7 @@ struct Triangle {
 [[vk::binding(2, 0)]] StructuredBuffer<Triangle> triangles;
 [[vk::binding(3, 0)]] StructuredBuffer<float4> lights; // per emissive triangle: x (bits) = triangle index, y = area
 [[vk::binding(4, 0)]] Texture2D atlasTexture;
+[[vk::binding(5, 0)]] Texture2D paletteTexture; // ramp shading
 
 struct VsOut {
   float4 position : SV_Position;
@@ -216,6 +218,10 @@ FsOut fsMain(VsOut i) {
 
   float2 ptexel = texelAt(ptri, ppos, primary.u, primary.v);
   float3 palbedo = ptri.color.rgb * texelColor(ptri, ptexel).rgb;
+  // Ramp shading: gather light onto a white surface, then pick the ramp color.
+  bool ramp = data.ramp.x > 0.5 && (flagsOf(ptri) & 2) == 0;
+  float3 surfaceAlbedo = palbedo;
+  if (ramp) palbedo = float3(1, 1, 1);
   uint rng = uint(i.position.x) * 1973u + uint(i.position.y) * 9277u + frame * 26699u + 1u;
   if ((flagsOf(ptri) & 4) != 0 && data.lightInfo.z > 0.5) {
     // Texel-space lighting: every screen pixel showing this texel gathers light
@@ -287,5 +293,10 @@ FsOut fsMain(VsOut i) {
     total += min(radiance, 16.0); // firefly clamp: slightly biased, removes single-pixel sparkles
   }
   o.color.rgb = total / float(spp);
+  if (ramp) {
+    float3 emitted = ptri.emissive.rgb;
+    float light = dot(max(o.color.rgb - emitted, 0.0), float3(0.2126, 0.7152, 0.0722)) / max(data.ramp.z, 1e-4);
+    o.color.rgb = rampShade(paletteTexture, surfaceAlbedo, light, int(data.ramp.y)) + emitted;
+  }
   return o;
 }
