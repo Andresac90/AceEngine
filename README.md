@@ -40,6 +40,7 @@ Add `--backend vulkan` (or `metal`) to pick the GPU backend.
 | Move / rotate / scale | W / E / R, then drag the gizmo |
 | Snap the gizmo to a grid | Snap checkbox + step in the toolbar |
 | Build levels from blocks | tick **Build**, pick a texture and block size, click any surface to add a block there; Shift+click removes a block |
+| Reuse an object (prefab) | right-click it in the Hierarchy > **Save as Prefab**; double-click the `.prefab.json` in Assets to place a copy. Scripts use `ace.spawn_prefab` |
 | Pick a mesh / texture / script | the arrow button beside the field, or drag from Assets |
 | Focus selection | F |
 | Create entities | Entity menu; right-click a node for Add Child |

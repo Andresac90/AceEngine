@@ -304,7 +304,8 @@ otherwise; ask the owner before installing anything.
    changes are done and were tested with a throwaway project.)
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
    outline, Build mode, File > Export, verified with `ace_editor <project>
-   --export macos` on a path containing a space). Next: multi-select, copy/paste, prefabs,
+   --export macos` on a path containing a space; prefabs, which are
+   independent copies with no live link to the file). Next: multi-select, copy/paste,
    camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), crisp fonts on HiDPI displays, a
    game-resolution preview, asset thumbnails.
 9. **Engine scale**: replace `Scene::children`' linear scans with cached child
