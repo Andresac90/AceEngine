@@ -68,7 +68,18 @@ Editor::Editor(App& app, Project project)
   ACE_INFO("Editor ready: %s (%s)", project_.name.c_str(), rhi::backendName(app_.device->backend()));
 }
 
+void Editor::flushExportLog() {
+  std::lock_guard<std::mutex> lock(exportMutex_);
+  for (const std::string& line : exportLines_) {
+    if (line.find("FAILED") != std::string::npos || line.find("error") != std::string::npos) ACE_ERROR("%s", line.c_str());
+    else ACE_INFO("%s", line.c_str());
+  }
+  exportLines_.clear();
+}
+
 Editor::~Editor() {
+  if (exportThread_.joinable()) exportThread_.join(); // let a running export finish rather than leave a half-built app
+  flushExportLog();
   setLogSink({});
   app_.device->waitIdle();
   scripts_.reset();
@@ -180,6 +191,58 @@ Entity Editor::createEntity(const char* name, const char* mesh) {
   return e;
 }
 
+void Editor::startExport(const char* script, const char* extraArg) {
+#ifdef _WIN32
+  ACE_ERROR("exporting from the editor is not supported on Windows yet; see docs/HANDOFF.md");
+  (void)script;
+  (void)extraArg;
+#else
+  if (exporting_) return;
+  if (exportThread_.joinable()) exportThread_.join();
+  auto quote = [](const std::string& s) { // single-quote for sh, escaping embedded quotes
+    std::string out = "'";
+    for (char c : s) out += c == '\'' ? std::string("'\\''") : std::string(1, c);
+    return out + "'";
+  };
+  std::string command = quote(std::string(ACE_SOURCE_DIR) + "/tools/" + script) + " " + quote(project_.dir);
+  if (extraArg) command += std::string(" ") + extraArg;
+  command += " 2>&1";
+  ACE_INFO("export: %s", command.c_str());
+  exporting_ = true;
+  exportResult_ = 0;
+  exportThread_ = std::thread([this, command] {
+    auto emit = [this](std::string line) {
+      std::lock_guard<std::mutex> lock(exportMutex_);
+      exportLines_.push_back(std::move(line));
+    };
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+      emit("export: could not start the export script");
+      exportResult_ = -1;
+    } else {
+      char buffer[1024];
+      while (fgets(buffer, sizeof(buffer), pipe)) {
+        std::string line(buffer);
+        while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) line.pop_back();
+        emit(line);
+      }
+      int status = pclose(pipe);
+      emit(status == 0 ? "export: done" : "export: FAILED (see the lines above)");
+      exportResult_ = status == 0 ? 1 : -1;
+    }
+    exporting_ = false;
+  });
+#endif
+}
+
+bool Editor::exportTarget(const std::string& target) {
+  if (target == "macos") startExport("export_macos.sh", nullptr);
+  else if (target == "ios-simulator") startExport("export_ios.sh", "simulator");
+  else if (target == "ios-device") startExport("export_ios.sh", "device");
+  else return false;
+  return true;
+}
+
 void Editor::refreshAssets() {
   assetFiles_.clear();
   std::error_code ec;
@@ -211,6 +274,7 @@ void Editor::buildUi() {
     viewportTexture_ = app_.device->createTexture({viewportW_, viewportH_, rhi::Format::RGBA8_SRGB,
                                                    rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled, "editor viewport"});
   }
+  flushExportLog();
   if (app_.time - assetsRefreshed_ > 2.0) {
     refreshAssets();
     assetsRefreshed_ = app_.time;
@@ -347,6 +411,13 @@ void Editor::drawMenu() {
         project_.save();
       }
       if (ImGui::MenuItem("Reload Assets")) assets_.reload();
+      if (ImGui::BeginMenu("Export", !exporting_)) {
+        if (ImGui::MenuItem("macOS app")) exportTarget("macos");
+        if (ImGui::MenuItem("iOS Simulator app")) exportTarget("ios-simulator");
+        if (ImGui::MenuItem("iOS device app (unsigned)")) exportTarget("ios-device");
+        ImGui::EndMenu();
+      }
+      if (exporting_) ImGui::TextDisabled("Exporting... (see Console)");
       ImGui::Separator();
       if (ImGui::MenuItem("Quit")) {
         SDL_Event quit{};

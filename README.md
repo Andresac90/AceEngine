@@ -85,6 +85,9 @@ glTF path. Colors in scenes are sRGB.
 
 ## Export
 
+In the editor: **File > Export** (macOS app, iOS Simulator app, unsigned iOS
+device app); progress appears in the Console. Or from a terminal:
+
 ```sh
 tools/export_macos.sh projects/pixel_demo    # -> build-export/macos/<Name>.app
 tools/export_ios.sh projects/pixel_demo      # iOS simulator .app (add "device" for an unsigned device build)

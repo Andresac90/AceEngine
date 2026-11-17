@@ -303,9 +303,9 @@ otherwise; ask the owner before installing anything.
    files `ace.save_data`/`ace.load_data` and Lua globals surviving scene
    changes are done and were tested with a throwaway project.)
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
-   outline, Build mode for placing grid blocks). Next: multi-select, copy/paste, prefabs,
-   camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), an Export
-   menu that runs the export scripts, crisp fonts on HiDPI displays, a
+   outline, Build mode, File > Export, verified with `ace_editor <project>
+   --export macos` on a path containing a space). Next: multi-select, copy/paste, prefabs,
+   camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), crisp fonts on HiDPI displays, a
    game-resolution preview, asset thumbnails.
 9. **Engine scale**: replace `Scene::children`' linear scans with cached child
    lists, GPU sub-allocation in Vulkan (VMA), frames in flight, a render graph

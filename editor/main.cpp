@@ -3,6 +3,7 @@
 //   ace_editor [project_dir]            open a project (default: projects/pixel_demo)
 //   ace_editor --new <dir>              create an empty project there and open it
 //   options: --backend metal|vulkan|d3d12, --validation,
+//            --export macos|ios-simulator|ios-device   run File > Export, exit when done
 //            --autotest   scripted interaction test; exits non-zero on failure (use a project copy)
 //            --screenshot out.png [--frames N] [--select <entity>] [--play]   (automated UI capture)
 #include "editor.h"
@@ -39,6 +40,7 @@ static bool createProject(const std::string& dir) {
 int main(int argc, char** argv) {
   std::string projectDir = "projects/pixel_demo", screenshot, select;
   bool play = false, autotest = false;
+  std::string exportTarget;
   int frames = 0;
   AppDesc desc;
   desc.title = "AceEngine Editor";
@@ -65,6 +67,7 @@ int main(int argc, char** argv) {
     else if (a == "--select") select = next();
     else if (a == "--play") play = true;
     else if (a == "--autotest") autotest = true;
+    else if (a == "--export") exportTarget = next();
     else if (a[0] != '-') projectDir = a;
     else {
       ACE_ERROR("unknown option %s", a.c_str());
@@ -86,6 +89,10 @@ int main(int argc, char** argv) {
     if (!select.empty()) editor.select(select);
     if (play) editor.play();
     editor.autotest = autotest;
+    if (!exportTarget.empty() && !editor.exportTarget(exportTarget)) {
+      ACE_ERROR("unknown export target '%s' (macos, ios-simulator, ios-device)", exportTarget.c_str());
+      return 2;
+    }
     int result = 0;
     rhi::TextureHandle shot;
     u32 shotW = 0, shotH = 0;
@@ -114,8 +121,10 @@ int main(int argc, char** argv) {
       device.endFrame();
       if (frames > 0 && ++frame >= frames) break;
       if (autotest && (result = editor.autotestResult()) != 0) break;
+      if (!exportTarget.empty() && editor.exportResult() != 0) break;
     }
     if (autotest && result != 1) return 1;
+    if (!exportTarget.empty() && editor.exportResult() != 1) return 1;
     if (shot) {
       device.waitIdle();
       std::vector<u8> pixels;

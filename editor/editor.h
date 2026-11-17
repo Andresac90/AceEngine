@@ -7,6 +7,9 @@
 #include "render/renderer.h"
 #include "runtime/project.h"
 #include "script/script.h"
+#include <atomic>
+#include <mutex>
+#include <thread>
 
 namespace ace {
 
@@ -35,6 +38,10 @@ public:
   // checks the editor reacted. Returns 0 while running, 1 on pass, -1 on failure.
   int autotestResult() const { return autotestResult_; }
   bool autotest = false;
+  // Same as the File > Export menu ("macos", "ios-simulator", "ios-device"); for scripted use.
+  bool exportTarget(const std::string& target);
+  bool exportRunning() const { return exporting_; }
+  int exportResult() const { return exportResult_; } // 0 running/none, 1 ok, -1 failed
   rhi::Format uiFormat = rhi::Format::BGRA8_SRGB;
 
 private:
@@ -66,6 +73,8 @@ private:
   void buildModeClick(vec2 uv, bool erase, ImVec2 viewPos, ImVec2 viewSize);
   bool blockPlacement(vec2 uv, vec3& center); // where a click would put a block
   void refreshAssets();
+  void startExport(const char* script, const char* extraArg);
+  void flushExportLog(); // moves the export thread's output into the log (main thread only) // runs tools/<script> on a background thread
 
   App& app_;
   Project project_;
@@ -99,6 +108,12 @@ private:
   f64 assetsRefreshed_ = -10.0;
   std::vector<std::pair<LogLevel, std::string>> console_;
   bool firstFrame_ = true;
+
+  std::thread exportThread_;
+  std::atomic<bool> exporting_{false};
+  std::atomic<int> exportResult_{0};
+  std::mutex exportMutex_;
+  std::vector<std::string> exportLines_; // produced by the export thread, logged on the main thread
 
   void autotestStep();
   ImVec2 viewPos_{0, 0}, viewSize_{0, 0}; // viewport image rectangle, ImGui coordinates
