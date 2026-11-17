@@ -284,10 +284,7 @@ Scene::RayHit Scene::raycast(vec3 origin, vec3 direction, f32 maxDistance, Entit
   return best;
 }
 
-json Scene::toJson() {
-  std::vector<Entity> order;
-  for (Entity e : reg.view<Name>()) order.push_back(e);
-  std::sort(order.begin(), order.end());
+json Scene::entitiesToJson(const std::vector<Entity>& order) {
   auto indexOf = [&](Entity e) {
     auto it = std::find(order.begin(), order.end(), e);
     return it == order.end() ? -1 : (int)(it - order.begin());
@@ -296,37 +293,84 @@ json Scene::toJson() {
   for (Entity e : order) {
     json je;
     je["name"] = reg.get<Name>(e).value;
-    je["parent"] = indexOf(reg.get<Transform>(e).parent);
+    je["parent"] = indexOf(reg.get<Transform>(e).parent); // -1 for roots and parents outside the list
     for (const ComponentType& type : componentTypes())
       if (void* c = type.get(reg, e)) je["components"][type.name] = fieldsToJson(c, type.fields);
     entities.push_back(je);
   }
-  return json{{"version", 1}, {"settings", fieldsToJson(&settings, renderSettingsFields())}, {"entities", entities}};
+  return entities;
+}
+
+std::vector<Entity> Scene::entitiesFromJson(const json& entities, Entity parent) {
+  std::vector<Entity> created;
+  std::vector<int> parents;
+  if (!entities.is_array()) return created;
+  for (const json& je : entities) {
+    if (!je.is_object()) continue;
+    Entity e = create(je.value("name", std::string("Entity")), parent);
+    created.push_back(e);
+    parents.push_back(je.contains("parent") && je["parent"].is_number_integer() ? je["parent"].get<int>() : -1);
+    if (!je.contains("components") || !je["components"].is_object()) continue;
+    for (const ComponentType& type : componentTypes()) {
+      auto it = je["components"].find(type.name);
+      if (it != je["components"].end()) fieldsFromJson(type.add(reg, e), type.fields, *it);
+    }
+    reg.get<Transform>(e).parent = parent; // the Transform component above must not override the attachment point
+  }
+  // Link parents, refusing anything that would form a cycle (a damaged file
+  // could otherwise make destroy() recurse forever).
+  for (size_t i = 0; i < created.size(); i++) {
+    int p = parents[i];
+    if (p < 0 || p >= (int)created.size() || p == (int)i) continue;
+    bool cycle = false;
+    for (Entity a = created[p]; reg.valid(a) && !cycle; a = reg.get<Transform>(a).parent) cycle = a == created[i];
+    if (cycle) ACE_WARN("entity '%s': parent link would form a cycle; ignored", reg.get<Name>(created[i]).value.c_str());
+    else reg.get<Transform>(created[i]).parent = created[p];
+  }
+  return created;
+}
+
+json Scene::toJson() {
+  std::vector<Entity> order;
+  for (Entity e : reg.view<Name>()) order.push_back(e);
+  std::sort(order.begin(), order.end());
+  return json{{"version", 1}, {"settings", fieldsToJson(&settings, renderSettingsFields())}, {"entities", entitiesToJson(order)}};
 }
 
 void Scene::fromJson(const json& j) {
   clear();
   settings = RenderSettings{};
   if (j.contains("settings")) fieldsFromJson(&settings, renderSettingsFields(), j["settings"]);
-  std::vector<Entity> created;
-  std::vector<int> parents;
-  if (j.contains("entities") && j["entities"].is_array()) {
-    for (const json& je : j["entities"]) {
-      Entity e = create(je.value("name", std::string("Entity")));
-      created.push_back(e);
-      parents.push_back(je.value("parent", -1));
-      if (!je.contains("components")) continue;
-      for (const ComponentType& type : componentTypes()) {
-        auto it = je["components"].find(type.name);
-        if (it != je["components"].end()) fieldsFromJson(type.add(reg, e), type.fields, *it);
-      }
-    }
-  }
-  for (size_t i = 0; i < created.size(); i++)
-    if (parents[i] >= 0 && parents[i] < (int)created.size() && parents[i] != (int)i)
-      reg.get<Transform>(created[i]).parent = created[parents[i]];
+  if (j.contains("entities")) entitiesFromJson(j["entities"]);
   updateTransforms();
   version++;
+}
+
+bool Scene::savePrefab(Entity root, const std::string& path) {
+  if (!reg.valid(root)) return false;
+  std::vector<Entity> subtree{root};
+  for (size_t i = 0; i < subtree.size(); i++)
+    for (Entity c : children(subtree[i])) subtree.push_back(c);
+  json j = {{"version", 1}, {"prefab", true}, {"entities", entitiesToJson(subtree)}}; // root first
+  return writeTextFile(path, j.dump(2));
+}
+
+// shortcut: re-reads and parses the file on every spawn; cache parsed prefabs if
+// spawning many per frame shows up in a profile.
+Entity Scene::instantiatePrefab(const std::string& path, Entity parent) {
+  std::string text;
+  if (!readTextFile(path, text)) {
+    ACE_ERROR("cannot open prefab %s", path.c_str());
+    return kNoEntity;
+  }
+  json j = json::parse(text, nullptr, false);
+  if (j.is_discarded() || !j.contains("entities")) {
+    ACE_ERROR("prefab %s is not valid", path.c_str());
+    return kNoEntity;
+  }
+  std::vector<Entity> created = entitiesFromJson(j["entities"], parent);
+  updateTransforms();
+  return created.empty() ? kNoEntity : created[0];
 }
 
 void Scene::clear() {

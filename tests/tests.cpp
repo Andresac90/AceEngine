@@ -2,6 +2,7 @@
 #include "render/path_tracer.h"
 #include "scene/scene.h"
 #include "script/script.h"
+#include <filesystem>
 
 using namespace ace;
 
@@ -155,6 +156,37 @@ static void testScriptParams() {
   CHECK(parseScriptParams("").empty());
 }
 
+static void testPrefabs() {
+  std::string path = (std::filesystem::temp_directory_path() / "ace_test.prefab.json").string();
+  Scene s;
+  Entity tree = s.create("Tree"), top = s.create("Top", tree);
+  s.reg.get<Transform>(tree).position = {5, 0, 5};
+  s.reg.get<Transform>(top).position = {0, 2, 0};
+  s.reg.emplace<MeshRenderer>(top).mesh = "builtin:sphere";
+  CHECK(s.savePrefab(tree, path));
+
+  Scene level;
+  Entity a = level.instantiatePrefab(path), b = level.instantiatePrefab(path);
+  CHECK(a != kNoEntity && b != kNoEntity && a != b);
+  CHECK(level.reg.get<Name>(a).value == "Tree" && level.children(a).size() == 1 && level.children(b).size() == 1);
+  Entity aTop = level.children(a)[0];
+  CHECK(level.reg.get<MeshRenderer>(aTop).mesh == "builtin:sphere");
+  level.reg.get<Transform>(a).position = {0, 0, 0}; // copies are independent
+  level.updateTransforms();
+  CHECK(glm::distance(vec3(level.reg.get<Transform>(aTop).world[3]), vec3(0, 2, 0)) < 1e-5f);
+  CHECK(level.reg.get<Transform>(b).position == vec3(5, 0, 5));
+  CHECK(level.instantiatePrefab(path + ".missing") == kNoEntity);
+  std::filesystem::remove(path);
+
+  // A damaged file with a parent cycle must load without linking the cycle.
+  Scene bad;
+  bad.fromJson(nlohmann::json::parse(R"({"entities":[{"name":"A","parent":1},{"name":"B","parent":0}]})"));
+  Entity ea = bad.find("A"), eb = bad.find("B");
+  CHECK(!(bad.reg.get<Transform>(ea).parent == eb && bad.reg.get<Transform>(eb).parent == ea));
+  bad.destroy(ea); // would recurse forever with a cycle
+  CHECK(!bad.reg.valid(ea));
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
@@ -163,6 +195,7 @@ int main() {
   testMoveAndSlide();
   testQueries();
   testScriptParams();
+  testPrefabs();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

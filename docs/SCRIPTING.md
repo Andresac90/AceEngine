@@ -70,6 +70,7 @@ Numbers become numbers, `true`/`false` become booleans, anything else is text. A
 | `ace.load_data()` | the saved table, or `nil` if there is no save yet |
 | `ace.find(name)` | entity id or `nil` |
 | `ace.spawn(name)` | new empty entity |
+| `ace.spawn_prefab(path [, x, y, z])` | a copy of a saved prefab (`prefabs/*.prefab.json`), optionally placed at x, y, z; returns its root entity |
 | `ace.destroy(e)` | destroys the entity and its children |
 | `ace.position(e)` / `ace.set_position(e, x, y, z)` | local position |
 | `ace.rotation(e)` / `ace.set_rotation(e, x, y, z)` | Euler degrees |

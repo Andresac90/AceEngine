@@ -153,6 +153,12 @@ public:
   // Non-solid colliders are hit only if includeTriggers is set.
   RayHit raycast(vec3 origin, vec3 direction, f32 maxDistance, Entity ignore = kNoEntity, bool includeTriggers = false);
 
+  // Prefabs: a saved entity subtree (*.prefab.json). Instances are independent
+  // copies: editing the prefab file later does not change them.
+  // shortcut: no live link back to the prefab; add one (prefab path + overrides) if levels need it.
+  bool savePrefab(Entity root, const std::string& path);
+  Entity instantiatePrefab(const std::string& path, Entity parent = kNoEntity); // returns the new root
+
   nlohmann::json toJson();
   void fromJson(const nlohmann::json& j); // replaces the whole scene
   bool save(const std::string& path);
@@ -162,6 +168,12 @@ public:
   // Bumped whenever geometry-affecting state may have changed; the path tracer
   // compares it to decide when to rebuild its BVH and restart accumulation.
   u64 version = 1;
+
+private:
+  // Entities in `order` as a JSON array; parents are indices into the array.
+  nlohmann::json entitiesToJson(const std::vector<Entity>& order);
+  // Creates the entities of such an array; entries without a parent attach to `parent`.
+  std::vector<Entity> entitiesFromJson(const nlohmann::json& entities, Entity parent = kNoEntity);
 };
 
 } // namespace ace

@@ -235,6 +235,18 @@ void Editor::startExport(const char* script, const char* extraArg) {
 #endif
 }
 
+Entity Editor::placePrefab(const std::string& relativePath) {
+  Entity root = scene_.instantiatePrefab(project_.path(relativePath));
+  if (root == kNoEntity) return kNoEntity;
+  // At the point the editor camera orbits around, snapped to the move grid.
+  vec3 at = camera_.target;
+  if (snap_ && snapMove_ > 0.0f) at = glm::round(at / snapMove_) * snapMove_;
+  scene_.reg.get<Transform>(root).position = vec3(at.x, scene_.reg.get<Transform>(root).position.y, at.z);
+  selected_ = root;
+  commit();
+  return root;
+}
+
 bool Editor::exportTarget(const std::string& target) {
   if (target == "macos") startExport("export_macos.sh", nullptr);
   else if (target == "ios-simulator") startExport("export_ios.sh", "simulator");
@@ -500,6 +512,18 @@ void Editor::drawHierarchyNode(Entity e) {
       commit();
     }
     if (ImGui::MenuItem("Duplicate")) g_duplicateRequest = e;
+    if (ImGui::MenuItem("Save as Prefab")) {
+      // prefabs/<name>.prefab.json, with the name reduced to safe file characters.
+      std::string file;
+      for (char c : scene_.reg.get<Name>(e).value) file += isalnum((unsigned char)c) || c == '-' || c == '_' ? c : '_';
+      if (file.empty()) file = "prefab";
+      std::error_code ec;
+      std::filesystem::create_directories(project_.path("prefabs"), ec);
+      std::string relative = "prefabs/" + file + ".prefab.json";
+      if (scene_.savePrefab(e, project_.path(relative))) ACE_INFO("saved %s (double-click it in Assets to place a copy)", relative.c_str());
+      else ACE_ERROR("could not write %s", relative.c_str());
+      assetsRefreshed_ = -10.0;
+    }
     if (ImGui::MenuItem("Delete")) g_deleteRequest = e;
     ImGui::EndPopup();
   }
@@ -664,12 +688,15 @@ void Editor::drawAssets() {
   ImGui::SetNextItemWidth(220);
   ImGui::InputTextWithHint("##filter", "filter", &filter);
   ImGui::SameLine();
-  ImGui::TextDisabled("drag onto mesh / texture / script fields; double-click a scene to open it");
+  ImGui::TextDisabled("drag onto mesh / texture / script fields; double-click a scene to open it or a prefab to place it");
   ImGui::BeginChild("files");
   for (const std::string& f : assetFiles_) {
     if (!filter.empty() && f.find(filter) == std::string::npos) continue;
     ImGui::Selectable(f.c_str(), f == scenePath_);
-    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && endsWith(f, ".scene.json")) openScene(f);
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+      if (endsWith(f, ".scene.json")) openScene(f);
+      else if (endsWith(f, ".prefab.json") && !playing_) placePrefab(f);
+    }
     if (ImGui::BeginDragDropSource()) {
       ImGui::SetDragDropPayload("ACE_ASSET", f.c_str(), f.size() + 1);
       ImGui::TextUnformatted(f.c_str());
@@ -1100,6 +1127,18 @@ void Editor::autotestStep() {
       expect(scene_.find("Block") == kNoEntity, "shift-click should remove the block");
       expect(scene_.find("Ground") != kNoEntity, "erasing must never remove non-block entities");
       buildMode_ = false;
+      // --- prefabs: save the Tower (with its roof child) and place a copy
+      {
+        std::error_code ec;
+        std::filesystem::create_directories(project_.path("prefabs"), ec);
+        expect(scene_.savePrefab(scene_.find("Tower"), project_.path("prefabs/Tower.prefab.json")), "saving a prefab should work");
+        size_t before = scene_.reg.view<Name>().size();
+        Entity copy = placePrefab("prefabs/Tower.prefab.json");
+        expect(copy != kNoEntity && selected_ == copy && scene_.children(copy).size() == 1, "placing a prefab copies the whole subtree and selects it");
+        expect(scene_.reg.view<Name>().size() == before + 2, "a two-entity prefab adds two entities");
+        undo();
+        expect(scene_.reg.view<Name>().size() == before, "placing a prefab is one undo step");
+      }
       if (autotestResult_ == 0) {
         ACE_INFO("autotest passed");
         autotestResult_ = 1;

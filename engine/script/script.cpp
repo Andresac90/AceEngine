@@ -238,6 +238,19 @@ int l_load_data(lua_State* L) {
   return 1;
 }
 
+// ace.spawn_prefab(path [, x, y, z]) -> root entity id (nil if the prefab could not be loaded)
+int l_spawn_prefab(lua_State* L) {
+  ScriptSystem& s = self(L);
+  Entity root = s.scene.instantiatePrefab(s.assets.resolve(luaL_checkstring(L, 1)));
+  if (root == kNoEntity) {
+    lua_pushnil(L);
+    return 1;
+  }
+  if (lua_gettop(L) >= 4) s.scene.reg.get<Transform>(root).position = checkVec3(L, 2);
+  lua_pushinteger(L, (lua_Integer)(u32)root);
+  return 1;
+}
+
 // ace.load_scene(path): switch level after this frame's scripts have run.
 int l_load_scene(lua_State* L) {
   self(L).pendingScene = luaL_checkstring(L, 1);
@@ -343,7 +356,7 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
       {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},               {"pointer", l_pointer},
       {"play_sound", l_play_sound}, {"stop_sound", l_stop_sound},
       {"save_data", l_save_data},  {"load_data", l_load_data},
-      {"load_scene", l_load_scene},  {"overlaps", l_overlaps},   {"raycast", l_raycast},
+      {"load_scene", l_load_scene},  {"spawn_prefab", l_spawn_prefab},  {"overlaps", l_overlaps},   {"raycast", l_raycast},
       {"gamepad_axis", l_gamepad_axis}, {"gamepad_button", l_gamepad_button}, {"gamepad_pressed", l_gamepad_pressed},
       {"text", l_text},             {"screen", l_screen},       {"text_width", l_text_width},
       {nullptr, nullptr}};

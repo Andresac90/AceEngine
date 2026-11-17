@@ -67,6 +67,7 @@ private:
   void saveScene();
   void setPlaying(bool playing);
   Entity createEntity(const char* name, const char* mesh);
+  Entity placePrefab(const std::string& relativePath); // a copy at the camera's focus point, selected
   Entity pick(vec2 uv);
   // Ray through viewport point `uv` (0..1): nearest entity, world hit point and surface normal.
   bool raycast(vec2 uv, Entity& entity, vec3& point, vec3& normal);
