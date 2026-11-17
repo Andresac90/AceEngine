@@ -4,6 +4,8 @@
 //   ace_player [project_dir] [--backend metal|vulkan|d3d12] [--scene file]
 //              [--screenshot out.png] [--frames N] [--validation]
 //              [--hold <key>]...   keep a key pressed (scripted play tests)
+//              [--fixed-dt <seconds>]   every frame advances exactly this much
+//              [--frames-to <prefix>]   save every frame as <prefix>0000.png, ... (offscreen)
 //
 // Without a project_dir it runs the "project" folder next to the executable.
 #include "platform/app.h"
@@ -15,7 +17,8 @@
 using namespace ace;
 
 int main(int argc, char** argv) {
-  std::string projectDir, sceneOverride, screenshot;
+  std::string projectDir, sceneOverride, screenshot, framesPrefix;
+  f32 fixedDt = 0.0f;
   int frames = 0;
   std::vector<SDL_Scancode> held;
   AppDesc desc;
@@ -32,6 +35,8 @@ int main(int argc, char** argv) {
     else if (a == "--screenshot") screenshot = next();
     else if (a == "--frames") frames = atoi(next().c_str());
     else if (a == "--validation") desc.validation = true;
+    else if (a == "--fixed-dt") fixedDt = (f32)atof(next().c_str());
+    else if (a == "--frames-to") framesPrefix = next();
     else if (a == "--hold") {
       std::string name = next();
       SDL_Scancode code = SDL_GetScancodeFromName(name.c_str());
@@ -48,6 +53,7 @@ int main(int argc, char** argv) {
     }
   }
   if (!screenshot.empty() && frames <= 0) frames = 8;
+  if (!framesPrefix.empty() && screenshot.empty()) screenshot = framesPrefix + "last.png";
   bool offscreen = !screenshot.empty();
 
   Project project;
@@ -61,6 +67,7 @@ int main(int argc, char** argv) {
 
   App app;
   if (!app.init(desc)) return 1;
+  app.fixedDt = fixedDt;
   rhi::Device& device = *app.device;
   ACE_INFO("%s running on %s", project.name.c_str(), rhi::backendName(device.backend()));
   {
@@ -84,7 +91,7 @@ int main(int argc, char** argv) {
 
       rhi::CommandList* cmd = device.beginFrame(!offscreen);
       if (!cmd) continue;
-      renderer.beginFrame();
+      renderer.beginFrame(app.time);
       u32 w = device.backbufferWidth(), h = device.backbufferHeight();
       CameraView view;
       if (!Renderer::findCamera(scene, view)) {
@@ -102,6 +109,16 @@ int main(int argc, char** argv) {
       }
       device.endFrame();
       scripts.gameSize = renderer.gameSize();
+      if (!framesPrefix.empty() && shot) { // every frame, for stability measurements
+        std::vector<u8> pixels;
+        char name[32];
+        snprintf(name, sizeof(name), "%04d.png", frame);
+        device.waitIdle();
+        if (!device.readTexture(shot, pixels) || !savePng(framesPrefix + name, shotW, shotH, pixels.data())) {
+          ACE_ERROR("could not write %s%s", framesPrefix.c_str(), name);
+          return 1;
+        }
+      }
 
       if (frames > 0 && ++frame >= frames) break;
     }

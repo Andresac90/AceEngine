@@ -214,7 +214,8 @@ def scene():
     ent("Door Trigger", (-2.9, 0.5, 0.15), scale=(1.2, 1.0, 0.6),
         Collider={"size": [1, 1, 1], "offset": [0, 0, 0], "solid": False},
         Script={"path": "scripts/door.lua", "params": "target = scenes/house.scene.json"})
-    settings = {"pixelArt": True, "pixelHeight": 216, "toonBands": 3, "dither": 0.6, "texelLighting": True, "texelsPerUnit": 16,
+    settings = {"worldPixels": True, "probeResolution": 384, "probeCell": 4.0,
+                "pixelArt": True, "pixelHeight": 216, "toonBands": 3, "dither": 0.6, "texelLighting": True, "texelsPerUnit": 16,
                 "palette": "assets/palette.png", "rampShading": True, "rampShadowSteps": 2, "outlines": True, "outlineStrength": 0.45, "highlightStrength": 0.0,
                 "ambient": [0.36, 0.38, 0.55], "skyTop": [0.36, 0.52, 0.77], "skyBottom": [0.90, 0.95, 0.97]}
     json.dump({"version": 1, "settings": settings, "entities": E}, open(os.path.join(ROOT, "scenes", "village.scene.json"), "w"), indent=2)

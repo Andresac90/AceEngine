@@ -82,6 +82,14 @@ struct Script {
 // How a scene is drawn. Lives in the scene file so each level owns its look.
 struct RenderSettings {
   bool pathTraced = false;  // false: rasterized toon shading
+  // World pixels (texel splatting): the scene is captured into low-resolution
+  // cube maps around a probe snapped to a world grid, and every captured texel
+  // is drawn as a small square in the 3D world. Pixels then stay put when the
+  // camera turns or moves, even with a perspective camera. Orthographic cameras
+  // use the screen-pixel path instead (grid snapping is already stable for them).
+  bool worldPixels = false;
+  int probeResolution = 384; // texels per cube face: lower = bigger pixels
+  f32 probeCell = 4.0f;      // grid spacing (world units) the stable probe snaps to; larger = fewer re-samplings
   bool pixelArt = true;     // render at low resolution and upscale with hard pixels
   int pixelHeight = 180;    // low-resolution image height when pixelArt is on
   bool integerScale = true; // adjust that height slightly so every game pixel is the same whole number of screen pixels

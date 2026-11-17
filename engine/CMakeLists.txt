@@ -6,6 +6,7 @@ set(ACE_SOURCES
   assets/assets.cpp
   render/renderer.cpp
   render/path_tracer.cpp
+  render/texel_splat.cpp
   script/script.cpp
   audio/audio.cpp
   runtime/project.cpp)

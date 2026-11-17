@@ -17,7 +17,7 @@ struct EditorCamera {
   vec3 target{0.0f, 0.5f, 0.0f};
   f32 yaw = 45.0f, pitch = -35.0f; // degrees
   f32 distance = 20.0f;
-  bool orthographic = true;
+  bool orthographic = false; // perspective by default, so world-pixel scenes preview as in the game
   f32 orthoSize = 6.0f;
   CameraView view() const;
 };

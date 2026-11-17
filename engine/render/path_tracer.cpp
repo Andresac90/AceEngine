@@ -152,7 +152,7 @@ void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 ca
   for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each())
     addMesh(assets.mesh(m.mesh), t.world, m.color, m.emissive, place(assets.texture(m.texture)), m.worldTexels ? 1 : 0, vec4(0, 0, 1, 1));
   const Mesh* quad = assets.mesh("builtin:quad");
-  f64 seconds = (f64)SDL_GetTicks() / 1000.0;
+  f64 seconds = r_.time();
   for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
     mat4 model = (s.billboard ? uprightCard(t.world, cameraRight) : t.world) * glm::scale(mat4(1.0f), vec3(s.size, 1.0f));
     addMesh(quad, model, s.color, vec3(0.0f), place(assets.texture(s.texture)), 2, spriteUvRect(s, seconds, spriteDirection(s, t.world, cameraPosition)));
@@ -211,7 +211,7 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     sh = hashBytes(sh, &m.emissive, sizeof(vec3));
     sh = hashBytes(sh, &m.worldTexels, sizeof(bool));
   }
-  f64 seconds = (f64)SDL_GetTicks() / 1000.0;
+  f64 seconds = r_.time();
   for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
     vec4 uvRect = spriteUvRect(s, seconds, spriteDirection(s, t.world, cameraPosition)); // animation frame and view angle
     sh = hashBytes(sh, &t.world, sizeof(mat4));

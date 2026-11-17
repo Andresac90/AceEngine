@@ -39,13 +39,27 @@ vec4 spriteUvRect(const SpriteRenderer& sprite, f64 seconds, int directionRow = 
 mat4 uprightCard(const mat4& world, vec3 right);
 
 class PathTracer;
+class TexelSplatter;
+
+// One raster pass target: where and from where to draw the scene.
+struct RasterView {
+  mat4 view{1.0f}, proj{1.0f};
+  rhi::TextureHandle color, normalDepth, depth;
+  vec4 viewport{0.0f}; // x, y, width, height in pixels of the targets
+  bool clear = true;   // clear the targets (first view drawn into them)
+  bool capture = false; // probe atlas: normal/depth target is RGBA32F instead of RGBA16F
+  bool meshes = true, sprites = true; // what to draw (the shadow map always includes everything)
+};
 
 class Renderer {
 public:
   explicit Renderer(rhi::Device& device);
   ~Renderer();
 
-  void beginFrame(); // once per frame, before any render()
+  // Once per frame, before any render(). `seconds` drives sprite animation and
+  // probe crossfades; pass the game clock so fixed-timestep runs are reproducible.
+  void beginFrame(f64 seconds);
+  f64 time() const { return time_; }
   void render(rhi::CommandList& cmd, Scene& scene, Assets& assets, const CameraView& view, rhi::TextureHandle target,
               rhi::Format targetFormat, u32 width, u32 height, std::span<const TextDraw> texts = {});
   // Size in game pixels of the image produced by the last render() (for UI layout).
@@ -64,7 +78,12 @@ public:
 
 private:
   void ensureTargets(u32 w, u32 h);
-  void drawRaster(rhi::CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj);
+  friend class TexelSplatter;
+  // Draws the scene into each view. Lights, the draw list and the shadow map are
+  // prepared once; billboards face `spriteCamera` (a camera-to-world matrix).
+  void drawRaster(rhi::CommandList& cmd, Scene& scene, Assets& assets, std::span<const RasterView> views, const mat4& spriteCamera);
+  // Distinct colors of the scene's palette image (max 64), sRGB; returns the count.
+  int paletteColors(Scene& scene, Assets& assets, vec4 out[64]);
   // Fits the sun's orthographic frustum around every mesh; returns the shadow texel size in world units.
   f32 fitShadowFrustum(Scene& scene, Assets& assets, vec3 lightDir, mat4& lightViewProj);
   rhi::BindGroupHandle materialGroup(const Texture* texture);
@@ -77,6 +96,7 @@ private:
   rhi::BindGroupLayoutHandle frameLayout_, drawLayout_, materialLayout_, presentLayout_;
   rhi::BindGroupHandle drawGroup_, presentGroup_;
   rhi::PipelineHandle meshPipeline_, spritePipeline_, shadowPipeline_;
+  rhi::PipelineHandle meshCapturePipeline_, spriteCapturePipeline_; // same, with an RGBA32F normal/depth target
   rhi::BindGroupHandle shadowFrameGroup_;
   rhi::TextureHandle shadowMap_, shadowDepth_;
   rhi::ShaderHandle presentVs_, presentFs_;
@@ -89,6 +109,7 @@ private:
   u32 lowWidth_ = 0, lowHeight_ = 0;
 
   std::unique_ptr<PathTracer> pathTracer_;
+  std::unique_ptr<TexelSplatter> splatter_;
 
   void drawTexts(rhi::CommandList& cmd, std::span<const TextDraw> texts, rhi::Format targetFormat, u32 width, u32 height, f32 pixelsPerGamePixel);
   rhi::ShaderHandle uiVs_, uiFs_;
@@ -97,6 +118,7 @@ private:
   rhi::BufferHandle uiVertices_;
   u64 uiCapacity_ = 0;
   vec2 gameSize_{0.0f};
+  f64 time_ = 0.0;
 };
 
 } // namespace ace

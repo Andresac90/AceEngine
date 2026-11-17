@@ -44,7 +44,7 @@ App::~App() {
 
 bool App::pump(const std::function<void(const SDL_Event&)>& hook) {
   u64 now = SDL_GetPerformanceCounter();
-  dt = glm::clamp((f32)((f64)(now - lastCounter_) / (f64)SDL_GetPerformanceFrequency()), 0.0001f, 0.1f);
+  dt = fixedDt > 0.0f ? fixedDt : glm::clamp((f32)((f64)(now - lastCounter_) / (f64)SDL_GetPerformanceFrequency()), 0.0001f, 0.1f);
   lastCounter_ = now;
   time += dt;
 

@@ -1,6 +1,9 @@
 {
   "version": 1,
   "settings": {
+    "worldPixels": true,
+    "probeResolution": 384,
+    "probeCell": 4.0,
     "pixelArt": true,
     "pixelHeight": 216,
     "toonBands": 3,

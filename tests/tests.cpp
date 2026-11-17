@@ -1,6 +1,7 @@
 // CPU-only engine tests (no window or GPU needed). Run with: ctest --test-dir build
 #include "render/path_tracer.h"
 #include "render/renderer.h"
+#include "render/texel_splat.h"
 #include "scene/scene.h"
 #include "script/script.h"
 #include <filesystem>
@@ -233,6 +234,27 @@ static void testCopyPaste() {
   CHECK(s.pasteEntities(nlohmann::json::parse("[1, 2]")).empty()); // foreign clipboard text is ignored
 }
 
+// Capture (glm::lookAt + 90 degree projection) and splatting (texel_splat.slang:
+// p = origin + (F + R*cx + U*cy) * d) must agree on where every texel is.
+static void testTexelSplatGeometry() {
+  vec3 origin(4, 2, -4);
+  mat4 proj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, 0.05f, 400.0f);
+  const vec3 points[] = {{9, 3, -3}, {-1, 1, -5}, {4.5f, 8, -3.5f}, {3, -6, -4}, {5, 2.5f, 3}, {3.5f, 1, -12}};
+  for (int f = 0; f < 6; f++) {
+    TexelSplatter::Face face = TexelSplatter::face(f);
+    mat4 view = glm::lookAt(origin, origin + face.forward, face.up);
+    vec3 p = points[f]; // each lies inside face f's frustum
+    vec4 clip = proj * view * vec4(p, 1.0f);
+    vec2 ndc = vec2(clip) / clip.w;
+    CHECK(fabsf(ndc.x) < 1.0f && fabsf(ndc.y) < 1.0f);
+    f32 d = -(view * vec4(p, 1.0f)).z; // what mesh.slang stores as depth
+    vec3 rebuilt = origin + (face.forward + face.right * ndc.x + face.up * ndc.y) * d;
+    CHECK(glm::distance(rebuilt, p) < 1e-3f);
+  }
+  CHECK(TexelSplatter::snapOrigin({1.9f, -0.1f, 6.1f}, 4.0f) == vec3(0, 0, 8));
+  CHECK(TexelSplatter::snapOrigin({2.1f, 0, 0}, 4.0f) == vec3(4, 0, 0));
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
@@ -244,6 +266,7 @@ int main() {
   testPrefabs();
   testSpriteDirections();
   testCopyPaste();
+  testTexelSplatGeometry();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

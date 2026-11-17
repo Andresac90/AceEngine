@@ -11,7 +11,7 @@ struct PresentData {
   float4 camRight;   // xyz: world-space camera right, w: texel size in world units (orthographic)
   float4 camUp;      // xyz: camera up, w: texel size per unit of depth (perspective)
   float4 camForward;
-  float4 paletteInfo;  // x: number of palette colors (0 = no palette), y: dither amount
+  float4 paletteInfo;  // x: number of palette colors (0 = no palette), y: dither amount, z: 1 = geometry colors are final (world pixels), w: sky pixel size
   float4 palette[64];  // sRGB colors
 };
 
@@ -44,8 +44,16 @@ float4 fsMain(VsOut i) : SV_Target0 {
 
   float4 nd = normalDepthTexture.Load(int3(p, 0));
   // Sky per game pixel, not per screen pixel, so it keeps the same hard grid.
-  float3 sky = lerp(data.skyTop.rgb, data.skyBottom.rgb, saturate((float(p.y) - data.rect.y + 0.5) / data.rect.w));
-  float3 color = nd.w > kSkyDepth ? sky : tonemap(colorTexture.Load(int3(p, 0)).rgb);
+  // In world-pixel mode the output is full resolution, so the sky gets its own
+  // coarse pixel grid (paletteInfo.w screen pixels per sky pixel).
+  int skyPixel = max(int(data.paletteInfo.w), 1);
+  int2 sp = p / skyPixel;
+  float3 sky = lerp(data.skyTop.rgb, data.skyBottom.rgb, saturate((float(sp.y * skyPixel) - data.rect.y + 0.5) / data.rect.w));
+  bool final = data.paletteInfo.z > 0.5;
+  bool isSky = nd.w > kSkyDepth;
+  float4 sceneColor = colorTexture.Load(int3(p, 0));
+  bool done = final && sceneColor.a < 0.5; // world-pixel splats arrive finished (alpha 0); sprites over them do not
+  float3 color = isSky ? sky : (done ? sceneColor.rgb : tonemap(sceneColor.rgb));
 
   if (data.outline.w > 0.5) {
     static const int2 offsets[4] = {int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1)};
@@ -75,8 +83,9 @@ float4 fsMain(VsOut i) : SV_Target0 {
   // on the low-resolution pixel grid. Compared in sRGB, which is closer to how
   // differences are perceived than linear light.
   int count = int(data.paletteInfo.x);
-  if (count > 0) {
-    float3 c = pow(saturate(color), 1.0 / 2.2) + (bayer4(p) - 0.5) * data.paletteInfo.y * 0.12;
+  if (count > 0 && !done) {
+    float ditherAmount = final && !isSky ? 0.0 : data.paletteInfo.y; // full-resolution sprites: no screen-space dither
+    float3 c = pow(saturate(color), 1.0 / 2.2) + (bayer4(sp) - 0.5) * ditherAmount * 0.12;
     float best = 1e9;
     float3 chosen = c;
     for (int k = 0; k < count; k++) {

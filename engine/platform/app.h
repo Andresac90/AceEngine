@@ -50,6 +50,7 @@ public:
   Input input;
   f32 dt = 1.0f / 60.0f; // seconds, clamped to avoid huge steps after a stall
   f64 time = 0.0;
+  f32 fixedDt = 0.0f; // > 0: every frame advances exactly this much (reproducible test runs)
 
 private:
   u64 lastCounter_ = 0;

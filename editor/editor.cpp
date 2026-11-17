@@ -437,7 +437,7 @@ void Editor::buildUi() {
 
 void Editor::render(rhi::CommandList& cmd, rhi::TextureHandle target) {
   ImGui::Render();
-  renderer_.beginFrame();
+  renderer_.beginFrame(app_.time);
   if (viewportTexture_) {
     CameraView view = camera_.view();
     if (playing_) Renderer::findCamera(scene_, view); // falls back to the editor camera

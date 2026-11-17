@@ -1,5 +1,6 @@
 #include "render/renderer.h"
 #include "render/path_tracer.h"
+#include "render/texel_splat.h"
 #include "render/pixel_font.h"
 #include <SDL3/SDL.h>
 
@@ -85,6 +86,13 @@ Renderer::Renderer(Device& device) : device_(device) {
   p.name = "sprite";
   p.cull = CullMode::None;
   spritePipeline_ = device_.createPipeline(p);
+  // Probe capture keeps full-precision depth: splats are placed from it.
+  p.colorFormats[1] = Format::RGBA32F;
+  p.name = "sprite capture";
+  spriteCapturePipeline_ = device_.createPipeline(p);
+  p.name = "mesh capture";
+  p.cull = CullMode::Back;
+  meshCapturePipeline_ = device_.createPipeline(p);
   PipelineDesc sp;
   sp.name = "shadow";
   sp.vertexShader = loadShader("shadow", ShaderStage::Vertex);
@@ -123,6 +131,7 @@ Renderer::Renderer(Device& device) : device_(device) {
     device_.writeTexture(font_.handle, font_.pixels.data());
   }
   pathTracer_ = std::make_unique<PathTracer>(*this);
+  splatter_ = std::make_unique<TexelSplatter>(*this);
 }
 
 Renderer::~Renderer() { device_.waitIdle(); }
@@ -135,7 +144,10 @@ ShaderHandle Renderer::loadShader(const char* name, ShaderStage stage) {
   return device_.createShader({stage, spirv, dxil, name});
 }
 
-void Renderer::beginFrame() { uniformOffset_ = 0; }
+void Renderer::beginFrame(f64 seconds) {
+  uniformOffset_ = 0;
+  time_ = seconds;
+}
 
 u32 Renderer::pushUniform(const void* data, u32 size) {
   u32 offset = uniformOffset_;
@@ -248,10 +260,9 @@ f32 Renderer::fitShadowFrustum(Scene& scene, Assets& assets, vec3 lightDir, mat4
   return 2.0f * radius / (f32)kShadowMapSize;
 }
 
-void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj) {
+void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, std::span<const RasterView> views, const mat4& spriteCamera) {
+  if (views.empty()) return;
   FrameData frame;
-  frame.view = view;
-  frame.viewProj = proj * view;
   frame.lightDir = vec4(glm::normalize(vec3(0.4f, 1.0f, 0.3f)), 0.0f);
   frame.lightColor = vec4(0.0f);
   for (auto [e, t, l] : scene.reg.view<Transform, Light>().each()) {
@@ -267,7 +278,13 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   frame.params2 = vec4(scene.settings.texelLighting ? 1.0f : 0.0f, (f32)std::max(scene.settings.texelsPerUnit, 1), ramps ? 1.0f : 0.0f,
                        (f32)glm::clamp(scene.settings.rampShadowSteps, 0, 15));
   BindGroupHandle frameGroupHandle = frameGroup(palette);
-  u32 frameOffset = pushUniform(&frame, sizeof(frame));
+  std::vector<u32> frameOffsets;
+  for (const RasterView& v : views) {
+    frame.view = v.view;
+    frame.viewProj = v.proj * v.view;
+    frameOffsets.push_back(pushUniform(&frame, sizeof(frame)));
+  }
+  u32 frameOffset = frameOffsets[0]; // the shadow pass only reads the light's matrix
 
   // Gather everything once; the shadow pass and the scene pass draw the same list.
   struct Item {
@@ -288,8 +305,8 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
     items.push_back(it);
   }
   const Mesh* quad = assets.mesh("builtin:quad");
-  mat4 camWorld = glm::inverse(view);
-  f64 seconds = (f64)SDL_GetTicks() / 1000.0;
+  const mat4& camWorld = spriteCamera;
+  f64 seconds = time_;
   for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
     auto upright = [&](vec3 right) { return uprightCard(t.world, right); };
     mat4 size = glm::scale(mat4(1.0f), vec3(s.size, 1.0f));
@@ -305,12 +322,13 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
     items.push_back(it);
   }
 
-  auto drawItems = [&](bool shadowPass) {
+  auto drawItems = [&](bool shadowPass, PipelineHandle spritePipelineHandle, u32 viewOffset, bool meshes = true, bool sprites = true) {
     bool spritePipeline = false;
     for (const Item& it : items) {
+      if (!shadowPass && !(it.sprite ? sprites : meshes)) continue;
       if (!shadowPass && it.sprite && !spritePipeline) { // sprites are last in the list
-        cmd.setPipeline(spritePipeline_);
-        cmd.setBindGroup(0, frameGroupHandle, {&frameOffset, 1});
+        cmd.setPipeline(spritePipelineHandle);
+        cmd.setBindGroup(0, frameGroupHandle, {&viewOffset, 1});
         spritePipeline = true;
       }
       DrawData d = it.data;
@@ -334,24 +352,42 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
     cmd.beginRenderPass(sp);
     cmd.setPipeline(shadowPipeline_);
     cmd.setBindGroup(0, shadowFrameGroup_, {&frameOffset, 1});
-    drawItems(true);
+    drawItems(true, {}, frameOffset);
     cmd.endRenderPass();
   }
 
-  RenderPassDesc pass;
-  pass.name = "scene";
-  pass.colorCount = 2;
-  pass.color[0].texture = color_;
-  pass.color[1].texture = normalDepth_;
-  pass.color[1].clear[3] = 10000.0f; // "sky" depth
-  pass.depth = depth_;
-  cmd.beginRenderPass(pass);
-  cmd.setViewport(0, 0, (f32)lowWidth_, (f32)lowHeight_);
-  cmd.setScissor(0, 0, lowWidth_, lowHeight_);
-  cmd.setPipeline(meshPipeline_);
-  cmd.setBindGroup(0, frameGroupHandle, {&frameOffset, 1});
-  drawItems(false);
-  cmd.endRenderPass();
+  for (size_t i = 0; i < views.size(); i++) {
+    const RasterView& v = views[i];
+    RenderPassDesc pass;
+    pass.name = v.capture ? "probe capture" : "scene";
+    pass.colorCount = 2;
+    pass.color[0].texture = v.color;
+    pass.color[1].texture = v.normalDepth;
+    pass.color[1].clear[3] = 10000.0f; // "sky" depth
+    pass.color[0].load = pass.color[1].load = v.clear ? LoadOp::Clear : LoadOp::Load;
+    pass.depth = v.depth;
+    pass.depthLoad = v.clear ? LoadOp::Clear : LoadOp::Load;
+    cmd.beginRenderPass(pass);
+    cmd.setViewport(v.viewport.x, v.viewport.y, v.viewport.z, v.viewport.w);
+    cmd.setScissor((i32)v.viewport.x, (i32)v.viewport.y, (u32)v.viewport.z, (u32)v.viewport.w);
+    cmd.setPipeline(v.capture ? meshCapturePipeline_ : meshPipeline_);
+    cmd.setBindGroup(0, frameGroupHandle, {&frameOffsets[i], 1});
+    drawItems(false, v.capture ? spriteCapturePipeline_ : spritePipeline_, frameOffsets[i], v.meshes, v.sprites);
+    cmd.endRenderPass();
+  }
+}
+
+int Renderer::paletteColors(Scene& scene, Assets& assets, vec4 out[64]) {
+  if (scene.settings.palette.empty()) return 0;
+  const Texture* pal = assets.texture(scene.settings.palette);
+  int count = 0;
+  for (size_t i = 0; i + 3 < pal->pixels.size() && count < 64; i += 4) {
+    vec4 c = vec4(pal->pixels[i], pal->pixels[i + 1], pal->pixels[i + 2], 255.0f) / 255.0f;
+    bool seen = pal->pixels[i + 3] < 128; // transparent pixels are not colors
+    for (int k = 0; k < count && !seen; k++) seen = out[k] == c;
+    if (!seen) out[count++] = c;
+  }
+  return count;
 }
 
 int Renderer::textWidth(std::string_view text) {
@@ -479,10 +515,22 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
   ensureTargets(visW + 2 * margin, visH + 2 * margin);
   mat4 proj = cam.projection(projAspect);
 
-  if (s.pathTraced) {
+  // Orthographic views keep screen pixels: grid snapping is already stable for
+  // them, and the eye probe needs a single eye point, which they do not have.
+  bool worldPixels = s.worldPixels && !s.pathTraced && !cv.camera.orthographic;
+  if (worldPixels) {
+    // Pixels live in the world (texel splatting), so the image is drawn at the
+    // output resolution; pixelHeight only sets the size of UI text.
+    ensureTargets(width, height);
+    margin = 0;
+    scroll = vec2(0.0f);
+    mat4 fullProj = cv.camera.projection(aspect);
+    splatter_->render(cmd, scene, assets, glm::inverse(cv.world), fullProj, cv.world, width, height);
+  } else if (s.pathTraced) {
     pathTracer_->render(cmd, scene, assets, view, proj, cam, color_, normalDepth_, lowWidth_, lowHeight_);
   } else {
-    drawRaster(cmd, scene, assets, view, proj);
+    RasterView rv{view, proj, color_, normalDepth_, depth_, vec4(0, 0, (f32)lowWidth_, (f32)lowHeight_), true, false};
+    drawRaster(cmd, scene, assets, {&rv, 1}, glm::inverse(view));
   }
 
   PipelineHandle& presentPipeline = presentPipelines_[targetFormat];
@@ -498,8 +546,8 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
     ACE_ASSERT(presentPipeline, "failed to create present pipeline");
   }
   PresentData pd{};
-  pd.rect = vec4((f32)margin - scroll.x, (f32)margin + scroll.y, shown.x, shown.y);
-  pd.outline = vec4(s.outlineStrength, s.highlightStrength, s.exposure, s.outlines ? 1.0f : 0.0f);
+  pd.rect = worldPixels ? vec4(0, 0, (f32)width, (f32)height) : vec4((f32)margin - scroll.x, (f32)margin + scroll.y, shown.x, shown.y);
+  pd.outline = vec4(s.outlineStrength, s.highlightStrength, s.exposure, s.outlines && !worldPixels ? 1.0f : 0.0f);
   pd.skyTop = vec4(toLinear(s.skyTop), 1.0f);
   pd.skyBottom = vec4(toLinear(s.skyBottom), 1.0f);
   f32 texelsHigh = (f32)lowHeight_; // cam.orthoSize already covers the margin rows
@@ -507,19 +555,14 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
   pd.camUp = vec4(vec3(cv.world[1]), cam.orthographic ? 0.0f : 2.0f * tanf(glm::radians(cam.fov) * 0.5f) / texelsHigh);
   pd.camForward = vec4(-vec3(cv.world[2]), 0.0f);
   // Palette: the distinct colors of the palette image, in reading order.
-  // shortcut: re-read from the cached texture every frame and searched per output
-  // pixel in the shader; move to a low-resolution pass + 3D lookup if it shows up.
-  pd.paletteInfo = vec4(0.0f, s.dither, 0, 0);
-  if (!s.palette.empty()) {
-    const Texture* pal = assets.texture(s.palette);
-    int count = 0;
-    for (size_t i = 0; i + 3 < pal->pixels.size() && count < 64; i += 4) {
-      vec4 c = vec4(pal->pixels[i], pal->pixels[i + 1], pal->pixels[i + 2], 255.0f) / 255.0f;
-      bool seen = pal->pixels[i + 3] < 128; // transparent pixels are not colors
-      for (int k = 0; k < count && !seen; k++) seen = pd.palette[k] == c;
-      if (!seen) pd.palette[count++] = c;
-    }
-    pd.paletteInfo.x = (f32)count;
+  // shortcut: searched per output pixel in the shader; move to a low-resolution
+  // pass + 3D lookup if it shows up in a profile.
+  pd.paletteInfo = vec4((f32)paletteColors(scene, assets, pd.palette), s.dither, 0, 0);
+  pd.paletteInfo.w = 1.0f;
+  if (worldPixels) { // geometry colors are final; the sky is drawn on a pixelHeight-sized grid
+    pd.paletteInfo.y = s.dither;
+    pd.paletteInfo.z = 1.0f;
+    pd.paletteInfo.w = (f32)std::max(1, (int)lroundf((f32)height / (f32)glm::clamp(s.pixelHeight, 16, 2160)));
   }
   u32 offset = pushUniform(&pd, sizeof(pd));
 
