@@ -38,6 +38,7 @@ const std::vector<ComponentType>& componentTypes() {
       makeType<Camera>("Camera", {ACE_FIELD(Camera, orthographic, Bool), ACE_FIELD(Camera, orthoSize, Float), ACE_FIELD(Camera, fov, Float),
                                   ACE_FIELD(Camera, nearPlane, Float), ACE_FIELD(Camera, farPlane, Float)}),
       makeType<Light>("Light", {ACE_FIELD(Light, color, Color3), ACE_FIELD(Light, intensity, Float)}),
+      makeType<Collider>("Collider", {ACE_FIELD(Collider, size, Vec3), ACE_FIELD(Collider, offset, Vec3), ACE_FIELD(Collider, solid, Bool)}),
       makeType<Script>("Script", {ACE_FIELD(Script, path, Asset)}),
   };
   return types;
@@ -181,6 +182,55 @@ static void updateWorld(Scene& s, Entity e, const mat4& parentWorld) {
 // cached child list once scenes reach thousands.
 void Scene::updateTransforms() {
   for (Entity root : children(kNoEntity)) updateWorld(*this, root, mat4(1.0f));
+}
+
+Aabb Scene::colliderBounds(Entity e) {
+  Aabb box;
+  const Collider* c = reg.valid(e) ? reg.try_get<Collider>(e) : nullptr;
+  if (!c) return box;
+  const mat4& world = reg.get<Transform>(e).world;
+  vec3 scale(glm::length(vec3(world[0])), glm::length(vec3(world[1])), glm::length(vec3(world[2])));
+  vec3 center = vec3(world[3]) + c->offset * scale, half = glm::abs(c->size * scale) * 0.5f;
+  box.min = center - half;
+  box.max = center + half;
+  return box;
+}
+
+vec3 Scene::moveAndSlide(Entity e, vec3 delta) {
+  Aabb me = colliderBounds(e);
+  if (me.min.x > me.max.x) { // no collider: move freely
+    reg.get<Transform>(e).position += delta;
+    return delta;
+  }
+  std::vector<Aabb> others;
+  for (auto [o, c] : reg.view<Collider>().each())
+    if (o != e && c.solid) others.push_back(colliderBounds(o));
+
+  const f32 skin = 1e-4f; // touching is not overlapping
+  vec3 moved(0.0f);
+  for (int axis = 0; axis < 3; axis++) {
+    f32 d = delta[axis];
+    if (d == 0.0f) continue;
+    int u = (axis + 1) % 3, v = (axis + 2) % 3;
+    for (const Aabb& o : others) {
+      if (me.max[u] <= o.min[u] + skin || me.min[u] >= o.max[u] - skin || me.max[v] <= o.min[v] + skin || me.min[v] >= o.max[v] - skin) continue;
+      if (d > 0.0f) {
+        f32 gap = o.min[axis] - me.max[axis];
+        if (gap >= -skin && gap < d) d = std::max(gap, 0.0f);
+      } else {
+        f32 gap = o.max[axis] - me.min[axis];
+        if (gap <= skin && gap > d) d = std::min(gap, 0.0f);
+      }
+    }
+    me.min[axis] += d;
+    me.max[axis] += d;
+    moved[axis] = d;
+  }
+  // shortcut: applies the world-space move to the local position, which is exact
+  // only for entities whose parents are not rotated or scaled.
+  reg.get<Transform>(e).position += moved;
+  reg.get<Transform>(e).world[3] += vec4(moved, 0.0f);
+  return moved;
 }
 
 json Scene::toJson() {

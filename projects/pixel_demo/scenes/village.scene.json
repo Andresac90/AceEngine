@@ -275,6 +275,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -315,6 +328,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -355,6 +381,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -395,6 +434,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -435,6 +487,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -475,6 +540,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -515,6 +593,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -555,6 +646,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -595,6 +699,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -635,6 +752,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -675,6 +805,19 @@
             0
           ],
           "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -755,6 +898,19 @@
             0
           ],
           "worldTexels": false
+        },
+        "Collider": {
+          "size": [
+            0.5,
+            2,
+            0.5
+          ],
+          "offset": [
+            0,
+            1,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -795,6 +951,19 @@
             0
           ],
           "worldTexels": false
+        },
+        "Collider": {
+          "size": [
+            0.5,
+            2,
+            0.5
+          ],
+          "offset": [
+            0,
+            1,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -835,6 +1004,19 @@
             0
           ],
           "worldTexels": false
+        },
+        "Collider": {
+          "size": [
+            0.5,
+            2,
+            0.5
+          ],
+          "offset": [
+            0,
+            1,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -875,6 +1057,19 @@
             0
           ],
           "worldTexels": false
+        },
+        "Collider": {
+          "size": [
+            0.5,
+            2,
+            0.5
+          ],
+          "offset": [
+            0,
+            1,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -915,6 +1110,19 @@
             0
           ],
           "worldTexels": false
+        },
+        "Collider": {
+          "size": [
+            0.5,
+            2,
+            0.5
+          ],
+          "offset": [
+            0,
+            1,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -955,6 +1163,19 @@
             0
           ],
           "worldTexels": false
+        },
+        "Collider": {
+          "size": [
+            0.5,
+            2,
+            0.5
+          ],
+          "offset": [
+            0,
+            1,
+            0
+          ],
+          "solid": true
         }
       }
     },
@@ -1001,6 +1222,19 @@
         },
         "Script": {
           "path": "scripts/hero.lua"
+        },
+        "Collider": {
+          "size": [
+            0.5,
+            1.375,
+            0.3
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
         }
       }
     },

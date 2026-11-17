@@ -34,6 +34,7 @@ return Mover
 | `ace.position(e)` / `ace.set_position(e, x, y, z)` | local position |
 | `ace.rotation(e)` / `ace.set_rotation(e, x, y, z)` | Euler degrees |
 | `ace.scale(e)` / `ace.set_scale(e, x, y, z)` | |
+| `ace.move(e, dx, dy, dz)` | moves by a world-space delta, stopping at solid **Collider** boxes and sliding along them; returns the movement applied. Without a Collider on `e` it moves freely |
 | `ace.set_mesh(e, mesh [, r, g, b])` | adds/updates a MeshRenderer |
 | `ace.set_color(e, r, g, b)` | MeshRenderer color (sRGB 0..1) |
 | `ace.set_sprite(e, frame [, fps [, flip_x]])` | SpriteRenderer sheet frame; `fps > 0` loops the sheet; `flip_x` mirrors it |

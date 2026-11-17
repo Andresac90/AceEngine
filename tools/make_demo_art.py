@@ -144,9 +144,11 @@ def scene():
     def ent(name, pos=(0, 0, 0), rot=(0, 0, 0, 1), scale=(1, 1, 1), parent=-1, **components):
         c = {"Transform": {"position": list(pos), "rotation": list(rot), "scale": list(scale)}}
         c.update(components); E.append({"name": name, "parent": parent, "components": c}); return len(E) - 1
+    SOLID = {"Collider": {"size": [1, 1, 1], "offset": [0, 0, 0], "solid": True}}
     def box(name, tex, pos, scale, rot=(0, 0, 0, 1), mesh="builtin:cube", parent=-1):
+        solid = SOLID if mesh == "builtin:cube" else {}   # ground planes are walked on, not into
         return ent(name, pos, rot, scale, parent, MeshRenderer={"mesh": mesh, "texture": "assets/" + tex, "color": [1, 1, 1, 1],
-                                                                "emissive": [0, 0, 0], "worldTexels": True})
+                                                                "emissive": [0, 0, 0], "worldTexels": True}, **solid)
     eye, target = (10.5, 6.5, 12.5), (0.0, 1.0, 0.0)
     ent("Camera", eye, look_at(eye, target), Camera={"orthographic": False, "fov": 32, "orthoSize": 5, "nearPlane": 0.1, "farPlane": 120},
         Script={"path": "scripts/camera_follow.lua"})
@@ -170,11 +172,12 @@ def scene():
         MeshRenderer={"mesh": "builtin:cube", "texture": "", "color": [1, 0.84, 0.35, 1], "emissive": [3.5, 2.2, 0.7], "worldTexels": False})
     for i, (x, z, s) in enumerate([(-8, -6, 1.6), (-9.5, 1.5, 1.3), (7, 4.5, 1.4), (2.5, -8, 1.8), (-5.5, 6.5, 1.1), (10, -8.5, 1.7)]):
         ent("Pine %d" % (i + 1), (x, 0, z), scale=(s, s, s),
-            MeshRenderer={"mesh": "assets/pine.gltf", "texture": "", "color": [1, 1, 1, 1], "emissive": [0, 0, 0], "worldTexels": False})
+            MeshRenderer={"mesh": "assets/pine.gltf", "texture": "", "color": [1, 1, 1, 1], "emissive": [0, 0, 0], "worldTexels": False},
+            Collider={"size": [0.5, 2, 0.5], "offset": [0, 1, 0], "solid": True})   # just the trunk
     # 16x22 texel sprite at 16 texels per unit, feet on the ground.
     ent("Hero", (1.6, 0.6875, 3.2), SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True,
                                                  "columns": 4, "rows": 1, "frame": 0, "fps": 0, "flipX": False},
-        Script={"path": "scripts/hero.lua"})
+        Script={"path": "scripts/hero.lua"}, Collider={"size": [0.5, 1.375, 0.3], "offset": [0, 0, 0], "solid": True})
     for i, (x, z) in enumerate([(-0.5, 5.2), (3.4, 4.0), (-2.2, 1.6), (5.8, 1.8), (0.2, -2.5)]):
         ent("Flower %d" % (i + 1), (x, 0.25, z), SpriteRenderer={"texture": "assets/flower.png", "color": [1, 1, 1, 1], "size": [0.5, 0.5], "billboard": True})
     settings = {"pixelArt": True, "pixelHeight": 216, "toonBands": 3, "dither": 0.6, "texelLighting": True, "texelsPerUnit": 16,

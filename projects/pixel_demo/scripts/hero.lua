@@ -24,7 +24,7 @@ function Hero:update(dt)
   end
   local dx, dz = fx * up - fz * right, fz * up + fx * right
   local len = math.sqrt(dx * dx + dz * dz)
-  ace.set_position(self.entity, x + dx / len * self.speed * dt, y, z + dz / len * self.speed * dt)
+  ace.move(self.entity, dx / len * self.speed * dt, 0, dz / len * self.speed * dt) -- slides along walls
 
   if right ~= 0 then self.facing_left = right < 0 end
   ace.set_sprite(self.entity, 0, 8, self.facing_left)

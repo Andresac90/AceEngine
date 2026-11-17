@@ -98,11 +98,34 @@ static void testBvh() {
   CHECK(nodes.size() == 1 && nodes[0].count == 0);
 }
 
+static void testMoveAndSlide() {
+  Scene s;
+  Entity player = s.create("player"), wall = s.create("wall");
+  s.reg.emplace<Collider>(player).size = vec3(1.0f);
+  s.reg.emplace<Collider>(wall).size = vec3(1.0f, 1.0f, 10.0f);
+  s.reg.get<Transform>(wall).position = {3, 0, 0};
+  s.updateTransforms();
+  // Walking diagonally into the wall: X stops at contact (gap of 2), Z keeps going.
+  vec3 moved = s.moveAndSlide(player, {5, 0, 1});
+  CHECK(fabsf(moved.x - 2.0f) < 1e-4f && moved.z == 1.0f);
+  CHECK(fabsf(s.reg.get<Transform>(player).position.x - 2.0f) < 1e-4f);
+  // Already touching: cannot go further in, can back away, and never tunnels.
+  CHECK(s.moveAndSlide(player, {0.5f, 0, 0}).x == 0.0f);
+  CHECK(s.moveAndSlide(player, {100, 0, 0}).x == 0.0f);
+  CHECK(s.moveAndSlide(player, {-1, 0, 0}).x == -1.0f);
+  // Non-solid colliders and missing colliders do not block.
+  s.reg.get<Collider>(wall).solid = false;
+  CHECK(s.moveAndSlide(player, {10, 0, 0}).x == 10.0f);
+  Entity ghost = s.create("ghost");
+  CHECK(s.moveAndSlide(ghost, {1, 2, 3}) == vec3(1, 2, 3));
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
   testHierarchy();
   testBvh();
+  testMoveAndSlide();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

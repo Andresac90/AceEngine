@@ -3,6 +3,7 @@
 //
 //   ace_player [project_dir] [--backend metal|vulkan|d3d12] [--scene file]
 //              [--screenshot out.png] [--frames N] [--validation]
+//              [--hold <key>]...   keep a key pressed (scripted play tests)
 //
 // Without a project_dir it runs the "project" folder next to the executable.
 #include "platform/app.h"
@@ -16,6 +17,7 @@ using namespace ace;
 int main(int argc, char** argv) {
   std::string projectDir, sceneOverride, screenshot;
   int frames = 0;
+  std::vector<SDL_Scancode> held;
   AppDesc desc;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
@@ -30,6 +32,15 @@ int main(int argc, char** argv) {
     else if (a == "--screenshot") screenshot = next();
     else if (a == "--frames") frames = atoi(next().c_str());
     else if (a == "--validation") desc.validation = true;
+    else if (a == "--hold") {
+      std::string name = next();
+      SDL_Scancode code = SDL_GetScancodeFromName(name.c_str());
+      if (code == SDL_SCANCODE_UNKNOWN) {
+        ACE_ERROR("unknown key '%s' (use SDL key names such as W, Space, Left)", name.c_str());
+        return 2;
+      }
+      held.push_back(code);
+    }
     else if (a[0] != '-') projectDir = a;
     else {
       ACE_ERROR("unknown option %s", a.c_str());
@@ -61,6 +72,7 @@ int main(int argc, char** argv) {
     u32 shotW = 0, shotH = 0;
     int frame = 0;
     while (app.pump()) {
+      for (SDL_Scancode code : held) app.input.down[code] = true;
       scripts.update(app.dt);
       scene.updateTransforms();
 

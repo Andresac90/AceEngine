@@ -87,6 +87,9 @@ int l_set_color(lua_State* L) {
   return 0;
 }
 
+// ace.move(e, dx, dy, dz) -> moved x, y, z. Slides along solid colliders.
+int l_move(lua_State* L) { return pushVec3(L, self(L).scene.moveAndSlide(checkEntity(L, 1), checkVec3(L, 2))); }
+
 // ace.set_sprite(e, frame [, fps [, flip_x]]): fps > 0 loops the whole sheet from `frame`.
 int l_set_sprite(lua_State* L) {
   if (auto* s = self(L).scene.reg.try_get<SpriteRenderer>(checkEntity(L, 1))) {
@@ -142,7 +145,7 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
       {"log", l_log},           {"key", l_key},           {"key_pressed", l_key_pressed}, {"time", l_time},
       {"find", l_find},         {"spawn", l_spawn},       {"destroy", l_destroy},         {"position", l_position},
       {"set_position", l_set_position}, {"rotation", l_rotation}, {"set_rotation", l_set_rotation}, {"scale", l_scale},
-      {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},
+      {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},
       {nullptr, nullptr}};
   lua_newtable(L_);
   lua_pushlightuserdata(L_, this);

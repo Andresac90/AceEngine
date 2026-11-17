@@ -62,6 +62,16 @@ struct Light {
   f32 intensity = 3.0f;
 };
 
+// Axis-aligned box used by Scene::moveAndSlide. Follows the entity's position
+// and scale; rotation is ignored.
+// shortcut: boxes only, no rotation, no dynamics. Replace with a physics
+// library (Jolt was the candidate) when the game needs slopes, pushing or stacking.
+struct Collider {
+  vec3 size{1.0f};   // full extents before the entity's scale
+  vec3 offset{0.0f}; // center, relative to the entity
+  bool solid = true; // false: ignored by moveAndSlide (reserved for triggers)
+};
+
 struct Script {
   std::string path; // Lua file, project-relative
 };
@@ -122,6 +132,12 @@ public:
   void setParent(Entity child, Entity parent); // refuses cycles
   std::vector<Entity> children(Entity parent); // kNoEntity = roots, in creation order
   void updateTransforms();
+
+  // Moves an entity that has a Collider by `delta` (world units), stopping at
+  // solid colliders one axis at a time so it slides along walls. Returns the
+  // movement actually applied. Uses world transforms from the last updateTransforms().
+  vec3 moveAndSlide(Entity e, vec3 delta);
+  Aabb colliderBounds(Entity e); // world space; empty (min > max) if it has no Collider
 
   nlohmann::json toJson();
   void fromJson(const nlohmann::json& j); // replaces the whole scene

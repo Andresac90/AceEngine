@@ -66,12 +66,18 @@ looking at screenshots produced with `--screenshot`:
   (world-space texel mapping, texel-space lighting, dithering, palette, billboard
   sprites) in `scenes/village.scene.json`: Metal and Vulkan images are identical.
 
+- Gameplay end to end with `ace_player projects/pixel_demo --hold W --frames 420
+  --screenshot x.png`: key input -> `hero.lua` -> `ace.move` -> the hero walks,
+  animates from its sprite sheet, is stopped by the house's colliders, and the
+  camera script follows. `--hold <key>` exists for exactly this kind of test.
+- Sprite sheets/animation, sprite shadows, `Collider` + `Scene::moveAndSlide`
+  (unit-tested).
+
 **Not verified — treat as unknown until someone tries it:**
 
 - Editor interactions the autotest does not cover: pan, drag-and-drop
   re-parenting and asset assignment, Save As, New Scene, the menus, text fields.
   Nobody has used the editor by hand yet.
-- `player.lua` keyboard movement (needs real key input).
 - **iOS.** `tools/export_ios.sh projects/pixel_demo simulator` builds and the
   app installs and starts in the simulator (Metal device and pipelines are
   created; one crash was fixed: SPIRV-Cross needs
@@ -240,8 +246,8 @@ otherwise; ask the owner before installing anything.
    `shortcut:` in `Renderer::fitShadowFrustum`). Still open: sprites do not
    cast shadows.
 2b. **Pixel-art look, next steps** (the owner's main interest): sprites casting
-   shadows and receiving texel lighting; sprite sheets + animation and 8-way
-   directional character sprites; per-material color ramps (shade by picking
+   8-way directional character sprites (sheets, animation and sprite shadows
+   are done); per-material color ramps (shade by picking
    the next ramp color instead of multiplying, the way ink-studio does); a
    palette editor panel; water and foliage; make the path tracer honor
    textures, palette and texel lighting so both modes share one look. Compare
@@ -271,8 +277,10 @@ otherwise; ask the owner before installing anything.
    paint tool, sprite sorting, text rendering (the repo has
    `assets/fonts/font_atlas.png` + `.meta` from the old project), an in-game
    UI layer drawn at native resolution after the present pass.
-7. **Gameplay basics**: collision/physics (evaluate Jolt for 3D and Box2D for
-   2D before writing anything), audio (SDL3 audio streams or miniaudio),
+7. **Gameplay basics**: physics. A minimal kinematic layer exists (`Collider`
+   boxes + `Scene::moveAndSlide`, exposed as `ace.move`); it has no rotation,
+   triggers, raycasts or dynamics. Evaluate Jolt (3D) and Box2D (2D) before
+   extending it. Also: audio (SDL3 audio streams or miniaudio),
    skeletal animation from glTF, Lua hot reload on file change, more `ace.*`
    API (input axes, gamepad, raycasts, scene loading).
 8. **Editor power features**: multi-select, copy/paste, prefabs, snapping,
