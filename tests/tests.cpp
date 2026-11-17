@@ -210,6 +210,29 @@ static void testSpriteDirections() {
   CHECK(fabsf(r.x - 0.25f) < 1e-6f && fabsf(r.y - 0.5f) < 1e-6f && fabsf(r.z - 0.25f) < 1e-6f && fabsf(r.w - 0.25f) < 1e-6f);
 }
 
+static void testCopyPaste() {
+  Scene s;
+  Entity parent = s.create("Parent"), child = s.create("Child", parent), grandchild = s.create("Grandchild", child);
+  s.reg.get<Transform>(parent).position = {10, 0, 0};
+  s.reg.get<Transform>(parent).rotation = glm::angleAxis(glm::radians(90.0f), vec3(0, 1, 0));
+  s.reg.get<Transform>(child).position = {0, 0, -2};
+  s.reg.emplace<Collider>(grandchild).size = vec3(3.0f);
+  s.updateTransforms();
+  vec3 childWorld = vec3(s.reg.get<Transform>(child).world[3]);
+
+  nlohmann::json copied = s.copyEntities({child, grandchild}); // grandchild is inside child: copied once
+  std::vector<Entity> roots = s.pasteEntities(nlohmann::json::parse(copied.dump())); // through text, like the clipboard
+  CHECK(roots.size() == 1);
+  if (roots.size() == 1) {
+    Entity pasted = roots[0];
+    CHECK(!s.reg.valid(s.reg.get<Transform>(pasted).parent)); // pasted at the top level...
+    CHECK(glm::distance(vec3(s.reg.get<Transform>(pasted).world[3]), childWorld) < 1e-4f); // ...where it was
+    std::vector<Entity> kids = s.children(pasted);
+    CHECK(kids.size() == 1 && kids.size() == 1 && s.reg.get<Collider>(kids[0]).size == vec3(3.0f));
+  }
+  CHECK(s.pasteEntities(nlohmann::json::parse("[1, 2]")).empty()); // foreign clipboard text is ignored
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
@@ -220,6 +243,7 @@ int main() {
   testScriptParams();
   testPrefabs();
   testSpriteDirections();
+  testCopyPaste();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

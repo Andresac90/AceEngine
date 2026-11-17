@@ -61,7 +61,10 @@ looking at screenshots produced with `--screenshot`:
 - Editor interactions, by `tools/autotest.sh` on Metal and Vulkan (it injects
   real mouse/keyboard input): orbit, wheel zoom, viewport click-select, gizmo
   X-axis drag, one undo step per drag, undo/redo, duplicate, delete, save to
-  disk, play/stop restoring the scene, Build mode place and Shift-erase.
+  disk, play/stop restoring the scene, Build mode place and Shift-erase,
+  prefab save/place/undo, Shift+click multi-select, copy/paste through the
+  system clipboard (the test saves and restores the user's clipboard), delete
+  of a multi-selection, and a group gizmo drag.
   When you add an editor feature, add steps to `Editor::autotestStep`.
 - Raster sun shadows, direct sampling of emissive triangles in the path tracer,
   a hand-made glTF model (`assets/pine.gltf`), and the pixel-art feature set
@@ -345,7 +348,8 @@ otherwise; ask the owner before installing anything.
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
    outline, Build mode, File > Export, verified with `ace_editor <project>
    --export macos` on a path containing a space; prefabs, which are
-   independent copies with no live link to the file). Next: multi-select, copy/paste,
+   independent copies with no live link to the file; multi-select; copy/paste).
+   Next: box (marquee) selection,
    camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), crisp fonts on HiDPI displays, a
    game-resolution preview, asset thumbnails.
 9. **Engine scale**: replace `Scene::children`' linear scans with cached child

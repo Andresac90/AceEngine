@@ -159,6 +159,10 @@ public:
   // copies: editing the prefab file later does not change them.
   // shortcut: no live link back to the prefab; add one (prefab path + overrides) if levels need it.
   bool savePrefab(Entity root, const std::string& path);
+  // Copy/paste: the subtrees under `roots` as JSON, with each root's transform
+  // stored in world space so it lands in the same place when pasted at the top level.
+  nlohmann::json copyEntities(const std::vector<Entity>& roots);
+  std::vector<Entity> pasteEntities(const nlohmann::json& copied); // returns the new roots
   Entity instantiatePrefab(const std::string& path, Entity parent = kNoEntity); // returns the new root
 
   nlohmann::json toJson();

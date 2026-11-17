@@ -86,7 +86,17 @@ private:
   std::unique_ptr<ScriptSystem> scripts_;
 
   std::string scenePath_; // project-relative
-  Entity selected_ = kNoEntity;
+  Entity selected_ = kNoEntity;          // primary selection: the inspector and gizmo follow it
+  std::vector<Entity> extraSelection_;   // further entities selected with Shift/Cmd-click
+  Entity lastPrimary_ = kNoEntity;       // when selected_ changes any other way, extras are dropped
+  bool isSelected(Entity e) const;
+  void toggleSelected(Entity e);         // additive click
+  std::vector<Entity> selectionRoots();  // selected entities that are not inside another selected one
+  void selectAll(const std::vector<Entity>& entities);
+  void deleteSelection();
+  void duplicateSelection();
+  void copySelection();
+  void paste();
   EditorCamera camera_;
   int gizmoOp_ = 0; // 0 move, 1 rotate, 2 scale
   bool snap_ = true;      // gizmo snapping: move by snapMove_, rotate by 15 degrees, scale by 0.25
@@ -119,6 +129,9 @@ private:
   void autotestStep();
   ImVec2 viewPos_{0, 0}, viewSize_{0, 0}; // viewport image rectangle, ImGui coordinates
   int autotestFrame_ = 0, autotestResult_ = 0;
+  std::string savedClipboard_;
+  size_t entityCountBefore_ = 0;
+  vec3 groupBefore_{0.0f};
 };
 
 } // namespace ace

@@ -37,6 +37,8 @@ Add `--backend vulkan` (or `metal`) to pick the GPU backend.
 | --- | --- |
 | Orbit / pan / zoom | right-drag / middle-drag or Shift+right-drag / wheel |
 | Select | click in the viewport or the Hierarchy |
+| Select several | Shift+click in the viewport; Cmd+click (Ctrl on Windows) or Shift+click in the Hierarchy. The gizmo, delete, duplicate and copy act on all of them |
+| Copy / paste | Cmd+C / Cmd+V, also between scenes (uses the system clipboard; pasted entities keep their world position) |
 | Move / rotate / scale | W / E / R, then drag the gizmo |
 | Snap the gizmo to a grid | Snap checkbox + step in the toolbar |
 | Build levels from blocks | tick **Build**, pick a texture and block size, click any surface to add a block there; Shift+click removes a block |

@@ -17,8 +17,8 @@ constexpr size_t kMaxUndoSteps = 100;
 constexpr size_t kMaxConsoleLines = 500;
 
 // Requests raised while iterating the hierarchy, applied after the loop.
-Entity g_deleteRequest = kNoEntity;
-Entity g_duplicateRequest = kNoEntity;
+bool g_deleteRequest = false;
+bool g_duplicateRequest = false;
 
 std::vector<Entity> orderedEntities(Scene& scene) {
   std::vector<Entity> out;
@@ -235,6 +235,80 @@ void Editor::startExport(const char* script, const char* extraArg) {
 #endif
 }
 
+bool Editor::isSelected(Entity e) const {
+  return e != kNoEntity && (e == selected_ || std::find(extraSelection_.begin(), extraSelection_.end(), e) != extraSelection_.end());
+}
+
+void Editor::toggleSelected(Entity e) {
+  if (e == selected_) { // drop the primary; the most recent extra takes over
+    selected_ = extraSelection_.empty() ? kNoEntity : extraSelection_.back();
+    if (!extraSelection_.empty()) extraSelection_.pop_back();
+  } else if (isSelected(e)) {
+    std::erase(extraSelection_, e);
+  } else {
+    if (selected_ != kNoEntity) extraSelection_.push_back(selected_);
+    selected_ = e;
+  }
+  lastPrimary_ = selected_; // keep the extras
+}
+
+std::vector<Entity> Editor::selectionRoots() {
+  std::vector<Entity> all;
+  if (selected_ != kNoEntity) all.push_back(selected_);
+  all.insert(all.end(), extraSelection_.begin(), extraSelection_.end());
+  std::vector<Entity> roots;
+  for (Entity e : all) {
+    bool inside = false;
+    for (Entity p = scene_.reg.get<Transform>(e).parent; scene_.reg.valid(p) && !inside; p = scene_.reg.get<Transform>(p).parent)
+      inside = isSelected(p);
+    if (!inside) roots.push_back(e);
+  }
+  return roots;
+}
+
+void Editor::selectAll(const std::vector<Entity>& entities) {
+  selected_ = entities.empty() ? kNoEntity : entities[0];
+  extraSelection_.assign(entities.size() > 1 ? entities.begin() + 1 : entities.end(), entities.end());
+  lastPrimary_ = selected_;
+}
+
+void Editor::deleteSelection() {
+  std::vector<Entity> roots = selectionRoots();
+  if (roots.empty()) return;
+  for (Entity e : roots) scene_.destroy(e);
+  selectAll({});
+  commit();
+}
+
+void Editor::duplicateSelection() {
+  std::vector<Entity> copies;
+  for (Entity e : selectionRoots()) copies.push_back(scene_.duplicate(e));
+  if (copies.empty()) return;
+  selectAll(copies);
+  commit();
+}
+
+void Editor::copySelection() {
+  std::vector<Entity> roots = selectionRoots();
+  if (roots.empty()) return;
+  nlohmann::json j = scene_.copyEntities(roots);
+  j["ace_clipboard"] = 1; // marks clipboard text as ours
+  SDL_SetClipboardText(j.dump().c_str());
+  ACE_INFO("copied %zu entit%s", roots.size(), roots.size() == 1 ? "y" : "ies");
+}
+
+void Editor::paste() {
+  if (playing_) return;
+  char* text = SDL_GetClipboardText();
+  nlohmann::json j = nlohmann::json::parse(text ? text : "", nullptr, false);
+  SDL_free(text);
+  if (j.is_discarded() || !j.is_object() || !j.contains("ace_clipboard")) return; // not something we copied
+  std::vector<Entity> roots = scene_.pasteEntities(j);
+  if (roots.empty()) return;
+  selectAll(roots);
+  commit();
+}
+
 Entity Editor::placePrefab(const std::string& relativePath) {
   Entity root = scene_.instantiatePrefab(project_.path(relativePath));
   if (root == kNoEntity) return kNoEntity;
@@ -320,6 +394,11 @@ void Editor::buildUi() {
   }
 
   if (!scene_.reg.valid(selected_)) selected_ = kNoEntity;
+  if (selected_ != lastPrimary_) { // a plain click, pick, undo...: the selection is just the new primary
+    extraSelection_.clear();
+    lastPrimary_ = selected_;
+  }
+  std::erase_if(extraSelection_, [&](Entity e) { return !scene_.reg.valid(e) || e == selected_; });
   handleShortcuts();
   drawMenu();
   drawHierarchy();
@@ -329,16 +408,13 @@ void Editor::buildUi() {
   drawConsole();
   drawViewport();
 
-  if (g_deleteRequest != kNoEntity) {
-    scene_.destroy(g_deleteRequest);
-    if (!scene_.reg.valid(selected_)) selected_ = kNoEntity;
-    g_deleteRequest = kNoEntity;
-    commit();
+  if (g_deleteRequest) {
+    g_deleteRequest = false;
+    deleteSelection();
   }
-  if (g_duplicateRequest != kNoEntity) {
-    selected_ = scene_.duplicate(g_duplicateRequest);
-    g_duplicateRequest = kNoEntity;
-    commit();
+  if (g_duplicateRequest) {
+    g_duplicateRequest = false;
+    duplicateSelection();
   }
 
   if (playing_) {
@@ -387,9 +463,11 @@ void Editor::handleShortcuts() {
   else if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Z)) undo();
   if (ImGui::IsKeyPressed(ImGuiKey_F5)) setPlaying(!playing_);
   if (playing_) return; // the keys below belong to the game while it runs
+  if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_V)) paste();
   if (selected_ != kNoEntity) {
-    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_D)) g_duplicateRequest = selected_;
-    if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Backspace)) g_deleteRequest = selected_;
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_D)) g_duplicateRequest = true;
+    if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_C)) copySelection();
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_Backspace)) g_deleteRequest = true;
     if (ImGui::IsKeyPressed(ImGuiKey_F)) camera_.target = vec3(scene_.reg.get<Transform>(selected_).world[3]);
   }
   if (!ImGui::IsMouseDown(ImGuiMouseButton_Right) && !io.KeyCtrl) {
@@ -442,8 +520,10 @@ void Editor::drawMenu() {
       if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !playing_ && undoIndex_ > 0)) undo();
       if (ImGui::MenuItem("Redo", "Ctrl+Shift+Z", false, !playing_ && undoIndex_ + 1 < undoStack_.size())) redo();
       ImGui::Separator();
-      if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, selected_ != kNoEntity)) g_duplicateRequest = selected_;
-      if (ImGui::MenuItem("Delete", "Del", false, selected_ != kNoEntity)) g_deleteRequest = selected_;
+      if (ImGui::MenuItem("Copy", "Ctrl+C", false, selected_ != kNoEntity)) copySelection();
+      if (ImGui::MenuItem("Paste", "Ctrl+V")) paste();
+      if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, selected_ != kNoEntity)) g_duplicateRequest = true;
+      if (ImGui::MenuItem("Delete", "Del", false, selected_ != kNoEntity)) g_deleteRequest = true;
       ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Entity")) {
@@ -488,10 +568,14 @@ void Editor::drawHierarchyNode(Entity e) {
   std::vector<Entity> kids = scene_.children(e);
   ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
   if (kids.empty()) flags |= ImGuiTreeNodeFlags_Leaf;
-  if (e == selected_) flags |= ImGuiTreeNodeFlags_Selected;
+  if (isSelected(e)) flags |= ImGuiTreeNodeFlags_Selected;
   ImGui::PushID((int)(u32)e);
   bool open = ImGui::TreeNodeEx("##node", flags, "%s", scene_.reg.get<Name>(e).value.c_str());
-  if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) selected_ = e;
+  if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.KeyCtrl || io.KeyShift) toggleSelected(e); // Cmd-click on macOS arrives as Ctrl
+    else selected_ = e;
+  }
   if (ImGui::BeginDragDropSource()) {
     ImGui::SetDragDropPayload("ACE_ENTITY", &e, sizeof(e));
     ImGui::TextUnformatted(scene_.reg.get<Name>(e).value.c_str());
@@ -505,13 +589,14 @@ void Editor::drawHierarchyNode(Entity e) {
     ImGui::EndDragDropTarget();
   }
   if (ImGui::BeginPopupContextItem()) {
-    selected_ = e;
+    if (!isSelected(e)) selected_ = e; // right-click inside a multi-selection keeps it
     if (ImGui::MenuItem("Add Child")) {
       Entity child = scene_.create("Entity", e);
       selected_ = child;
       commit();
     }
-    if (ImGui::MenuItem("Duplicate")) g_duplicateRequest = e;
+    if (ImGui::MenuItem("Copy")) copySelection();
+    if (ImGui::MenuItem("Duplicate")) g_duplicateRequest = true;
     if (ImGui::MenuItem("Save as Prefab")) {
       // prefabs/<name>.prefab.json, with the name reduced to safe file characters.
       std::string file;
@@ -524,7 +609,7 @@ void Editor::drawHierarchyNode(Entity e) {
       else ACE_ERROR("could not write %s", relative.c_str());
       assetsRefreshed_ = -10.0;
     }
-    if (ImGui::MenuItem("Delete")) g_deleteRequest = e;
+    if (ImGui::MenuItem("Delete")) g_deleteRequest = true;
     ImGui::EndPopup();
   }
   if (open) {
@@ -642,6 +727,8 @@ void Editor::drawInspector() {
     return;
   }
   bool finished = false;
+  if (!extraSelection_.empty())
+    ImGui::TextDisabled("%zu more selected: the gizmo, delete, duplicate and copy apply to all", extraSelection_.size());
   ImGui::InputText("Name", &scene_.reg.get<Name>(selected_).value);
   finished |= ImGui::IsItemDeactivatedAfterEdit();
   for (const ComponentType& type : componentTypes()) {
@@ -922,14 +1009,32 @@ void Editor::drawViewport() {
         f32 step = gizmoOp_ == 0 ? std::max(snapMove_, 0.0001f) : gizmoOp_ == 1 ? 15.0f : 0.25f;
         f32 snapValues[3] = {step, step, step};
         // Collider outline of the selection, so blocking volumes can be lined up by eye.
+        for (Entity e : extraSelection_) { // outline the rest of a multi-selection
+          Aabb b = scene_.colliderBounds(e);
+          if (b.min.x > b.max.x) {
+            const MeshRenderer* m = scene_.reg.try_get<MeshRenderer>(e);
+            if (!m) continue;
+            const Aabb& local = assets_.mesh(m->mesh)->bounds;
+            const mat4& w = scene_.reg.get<Transform>(e).world;
+            for (int c = 0; c < 8; c++) b.grow(vec3(w * vec4(c & 1 ? local.max.x : local.min.x, c & 2 ? local.max.y : local.min.y, c & 4 ? local.max.z : local.min.z, 1.0f)));
+          }
+          wireBox(b, IM_COL32(255, 200, 80, 200));
+        }
         Aabb box = scene_.colliderBounds(selected_);
         if (box.min.x <= box.max.x) wireBox(box, IM_COL32(90, 255, 140, 220));
         if (ImGuizmo::Manipulate(&view[0][0], &proj[0][0], ops[gizmoOp_], gizmoOp_ == 2 ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world[0][0],
                                  nullptr, snap_ ? snapValues : nullptr)) {
-          mat4 parentWorld = scene_.reg.valid(t.parent) ? scene_.reg.get<Transform>(t.parent).world : mat4(1.0f);
-          vec3 skew;
-          vec4 persp;
-          glm::decompose(glm::inverse(parentWorld) * world, t.scale, t.rotation, t.position, skew, persp);
+          // The same world-space change, applied to every selected root.
+          mat4 delta = world * glm::inverse(t.world);
+          for (Entity e : selectionRoots()) {
+            Transform& et = scene_.reg.get<Transform>(e);
+            mat4 parentWorld = scene_.reg.valid(et.parent) ? scene_.reg.get<Transform>(et.parent).world : mat4(1.0f);
+            mat4 target = e == selected_ ? world : delta * et.world;
+            vec3 skew;
+            vec4 persp;
+            glm::decompose(glm::inverse(parentWorld) * target, et.scale, et.rotation, et.position, skew, persp);
+          }
+          scene_.updateTransforms();
           dirty_ = true;
         }
         gizmoActive = ImGuizmo::IsUsing();
@@ -937,7 +1042,11 @@ void Editor::drawViewport() {
         gizmoWasUsing_ = gizmoActive;
       }
       if (!buildMode_ && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !gizmoActive && !(selected_ != kNoEntity && ImGuizmo::IsOver()))
-        selected_ = pick(mouseUv);
+      {
+        Entity hit = pick(mouseUv);
+        if (io.KeyShift && hit != kNoEntity) toggleSelected(hit); // Shift+click adds to / removes from the selection
+        else selected_ = hit;
+      }
     }
   }
   ImGui::End();
@@ -1139,11 +1248,69 @@ void Editor::autotestStep() {
         undo();
         expect(scene_.reg.view<Name>().size() == before, "placing a prefab is one undo step");
       }
+      // --- multi-select: Player is primary, Shift+click the Rock in the viewport
+      selected_ = scene_.find("Player");
+      lastPrimary_ = selected_;
+      extraSelection_.clear();
+      {
+        ImVec2 p = toScreen(vec3(scene_.reg.get<Transform>(scene_.find("Rock")).world[3]));
+        moveTo(p.x, p.y);
+      }
+      io.AddKeyEvent(ImGuiMod_Shift, true);
+      break;
+    case 29:
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+      break;
+    case 30: {
+      io.AddKeyEvent(ImGuiMod_Shift, false);
+      expect(isSelected(scene_.find("Player")) && isSelected(scene_.find("Rock")) && extraSelection_.size() == 1,
+             "Shift+click should add the Rock to the selection");
+      char* saved = SDL_GetClipboardText(); // the test must not clobber the user's clipboard
+      savedClipboard_ = saved ? saved : "";
+      SDL_free(saved);
+      entityCountBefore_ = scene_.reg.view<Name>().size();
+      moveTo(viewPos_.x + 5, viewPos_.y + 5);
+      key(ImGuiKey_C, true);
+      break;
+    }
+    case 31: key(ImGuiKey_V, true); break;
+    case 32: {
+      size_t players = 0;
+      for (auto [e, n] : scene_.reg.view<Name>().each()) players += n.value == "Player";
+      expect(scene_.reg.view<Name>().size() == entityCountBefore_ + 2 && players == 2, "Ctrl+C, Ctrl+V should paste both entities");
+      expect(extraSelection_.size() == 1 && scene_.reg.get<Name>(selected_).value != "", "the pasted entities become the selection");
+      SDL_SetClipboardText(savedClipboard_.c_str());
+      key(ImGuiKey_Delete);
+      break;
+    }
+    case 33: {
+      expect(scene_.reg.view<Name>().size() == entityCountBefore_, "Delete removes every selected entity");
+      // Drag the gizmo with Player + Rock selected: both move by the same amount.
+      selectAll({scene_.find("Player"), scene_.find("Rock")});
+      before = positionOf("Player");
+      groupBefore_ = positionOf("Rock");
+      vec3 origin = vec3(scene_.reg.get<Transform>(scene_.find("Player")).world[3]);
+      ImVec2 a = toScreen(origin), b = toScreen(origin + vec3(1, 0, 0));
+      f32 len = sqrtf((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y));
+      dragDir = ImVec2((b.x - a.x) / len, (b.y - a.y) / len);
+      grab = ImVec2(a.x + dragDir.x * 45.0f, a.y + dragDir.y * 45.0f);
+      moveTo(grab.x, grab.y);
+      break;
+    }
+    case 34: io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); break;
+    case 35: moveTo(grab.x + dragDir.x * 30.0f, grab.y + dragDir.y * 30.0f); break;
+    case 36: moveTo(grab.x + dragDir.x * 60.0f, grab.y + dragDir.y * 60.0f); break;
+    case 37: io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); break;
+    case 38: {
+      vec3 movedA = positionOf("Player") - before, movedB = positionOf("Rock") - groupBefore_;
+      expect(movedA.x > 0.2f && glm::distance(movedA, movedB) < 1e-3f, "a gizmo drag moves every selected entity by the same amount");
       if (autotestResult_ == 0) {
         ACE_INFO("autotest passed");
         autotestResult_ = 1;
       }
       break;
+    }
     default: break;
   }
 }

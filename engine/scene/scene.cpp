@@ -346,12 +346,45 @@ void Scene::fromJson(const json& j) {
   version++;
 }
 
+json Scene::copyEntities(const std::vector<Entity>& roots) {
+  updateTransforms();
+  std::vector<Entity> list;
+  std::vector<size_t> rootIndex;
+  for (Entity r : roots) {
+    if (!reg.valid(r) || std::find(list.begin(), list.end(), r) != list.end()) continue;
+    rootIndex.push_back(list.size());
+    size_t first = list.size();
+    list.push_back(r);
+    for (size_t i = first; i < list.size(); i++)
+      for (Entity c : children(list[i])) list.push_back(c);
+  }
+  json entities = entitiesToJson(list);
+  for (size_t i : rootIndex) {
+    Transform world;
+    vec3 skew;
+    vec4 persp;
+    glm::decompose(reg.get<Transform>(list[i]).world, world.scale, world.rotation, world.position, skew, persp);
+    for (const ComponentType& type : componentTypes())
+      if (strcmp(type.name, "Transform") == 0) entities[i]["components"]["Transform"] = fieldsToJson(&world, type.fields);
+    entities[i]["parent"] = -1;
+  }
+  return json{{"version", 1}, {"entities", entities}};
+}
+
+std::vector<Entity> Scene::pasteEntities(const json& copied) {
+  std::vector<Entity> roots;
+  if (!copied.is_object() || !copied.contains("entities")) return roots;
+  std::vector<Entity> created = entitiesFromJson(copied["entities"]);
+  for (Entity e : created)
+    if (!reg.valid(reg.get<Transform>(e).parent)) roots.push_back(e);
+  updateTransforms();
+  return roots;
+}
+
 bool Scene::savePrefab(Entity root, const std::string& path) {
   if (!reg.valid(root)) return false;
-  std::vector<Entity> subtree{root};
-  for (size_t i = 0; i < subtree.size(); i++)
-    for (Entity c : children(subtree[i])) subtree.push_back(c);
-  json j = {{"version", 1}, {"prefab", true}, {"entities", entitiesToJson(subtree)}}; // root first
+  json j = copyEntities({root}); // root first, in world space
+  j["prefab"] = true;
   return writeTextFile(path, j.dump(2));
 }
 
