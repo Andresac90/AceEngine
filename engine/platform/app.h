@@ -13,7 +13,8 @@ namespace ace {
 struct Input {
   bool down[SDL_SCANCODE_COUNT] = {};
   bool pressed[SDL_SCANCODE_COUNT] = {}; // went down this frame
-  vec2 mouse{0.0f};                      // window pixels
+  vec2 mouse{0.0f};                      // window points (same units as windowSize)
+  vec2 windowSize{1.0f};
   vec2 mouseDelta{0.0f};
   f32 wheel = 0.0f;
   bool mouseDown[4] = {};

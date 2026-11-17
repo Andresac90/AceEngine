@@ -18,6 +18,9 @@ end
 return Mover
 ```
 
+Scripts reload automatically when you save the file while the game is running
+(the instance restarts: `start` runs again, entity transforms are kept).
+
 `self.entity` is this entity's id. A script that raises an error is logged
 (with a traceback) and stops running; other scripts continue.
 
@@ -28,6 +31,7 @@ return Mover
 | `ace.log(value)` | prints to the console |
 | `ace.time()` | seconds since play started |
 | `ace.key(name)` / `ace.key_pressed(name)` | held / went down this frame. Names are SDL key names: `"A"`, `"Space"`, `"Left"`, `"Return"`, `"Left Shift"` |
+| `ace.pointer()` | returns `down, x, y`: left mouse button or a finger on a touch screen; `x`, `y` run 0..1 across the window |
 | `ace.find(name)` | entity id or `nil` |
 | `ace.spawn(name)` | new empty entity |
 | `ace.destroy(e)` | destroys the entity and its children |

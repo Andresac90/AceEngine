@@ -25,7 +25,13 @@ public:
 private:
   bool instantiate(Entity e, const std::string& path);
   lua_State* L_ = nullptr;
-  std::unordered_map<u32, int> instances_; // entity -> registry ref, or -1 if the script failed
+  struct Instance {
+    int ref = -1;      // Lua registry reference, or -1 if the script failed to load or errored
+    std::string path;
+    i64 modified = 0;  // file time when loaded, to detect edits
+  };
+  std::unordered_map<u32, Instance> instances_;
+  f64 lastReloadCheck_ = 0.0;
 };
 
 } // namespace ace

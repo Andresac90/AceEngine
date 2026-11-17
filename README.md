@@ -82,7 +82,7 @@ glTF path. Colors in scenes are sRGB.
 
 ```sh
 tools/export_macos.sh projects/pixel_demo    # -> build-export/macos/<Name>.app
-tools/export_ios.sh projects/pixel_demo      # iOS simulator build (work in progress, see docs/HANDOFF.md)
+tools/export_ios.sh projects/pixel_demo      # iOS simulator .app (add "device" for an unsigned device build)
 tools/autotest.sh                            # scripted editor interaction test on each backend
 ```
 

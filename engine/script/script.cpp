@@ -1,4 +1,5 @@
 #include "script/script.h"
+#include <filesystem>
 
 extern "C" {
 #include <lauxlib.h>
@@ -87,6 +88,15 @@ int l_set_color(lua_State* L) {
   return 0;
 }
 
+// ace.pointer() -> down, x, y. Mouse button or finger; x and y are 0..1 across the window.
+int l_pointer(lua_State* L) {
+  const Input& in = self(L).input;
+  lua_pushboolean(L, in.mouseDown[SDL_BUTTON_LEFT]);
+  lua_pushnumber(L, in.mouse.x / in.windowSize.x);
+  lua_pushnumber(L, in.mouse.y / in.windowSize.y);
+  return 3;
+}
+
 // ace.move(e, dx, dy, dz) -> moved x, y, z. Slides along solid colliders.
 int l_move(lua_State* L) { return pushVec3(L, self(L).scene.moveAndSlide(checkEntity(L, 1), checkVec3(L, 2))); }
 
@@ -145,7 +155,7 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
       {"log", l_log},           {"key", l_key},           {"key_pressed", l_key_pressed}, {"time", l_time},
       {"find", l_find},         {"spawn", l_spawn},       {"destroy", l_destroy},         {"position", l_position},
       {"set_position", l_set_position}, {"rotation", l_rotation}, {"set_rotation", l_set_rotation}, {"scale", l_scale},
-      {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},
+      {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},               {"pointer", l_pointer},
       {nullptr, nullptr}};
   lua_newtable(L_);
   lua_pushlightuserdata(L_, this);
@@ -182,12 +192,35 @@ bool ScriptSystem::instantiate(Entity e, const std::string& path) {
   lua_setmetatable(L_, -2);
   int ref = luaL_ref(L_, LUA_REGISTRYINDEX);
   lua_pop(L_, 2); // class, traceback
-  instances_[(u32)e] = ref;
+  instances_[(u32)e].ref = ref;
   return callMethod(L_, ref, "start", 0, 0.0f);
+}
+
+// Modification time of a script file, or 0 if it cannot be read as a plain file
+// (for example inside an Android package, where hot reload does not apply).
+static i64 fileTime(const std::string& path) {
+  std::error_code ec;
+  auto t = std::filesystem::last_write_time(path, ec);
+  return ec ? 0 : (i64)t.time_since_epoch().count();
 }
 
 void ScriptSystem::update(f32 dt) {
   time += dt;
+  // Hot reload: twice a second, restart any script whose file changed on disk.
+  // The instance starts fresh (its `start` runs again); entity state is kept.
+  if (time - lastReloadCheck_ > 0.5) {
+    lastReloadCheck_ = time;
+    for (auto it = instances_.begin(); it != instances_.end();) {
+      i64 now = fileTime(assets.resolve(it->second.path));
+      if (now != 0 && now != it->second.modified) {
+        ACE_INFO("reloading %s", it->second.path.c_str());
+        if (it->second.ref >= 0) luaL_unref(L_, LUA_REGISTRYINDEX, it->second.ref);
+        it = instances_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
   // Copy first: scripts may spawn or destroy entities while we iterate.
   std::vector<std::pair<Entity, std::string>> scripts;
   for (auto [e, s] : scene.reg.view<Script>().each())
@@ -195,12 +228,14 @@ void ScriptSystem::update(f32 dt) {
   for (auto& [e, path] : scripts) {
     if (!scene.reg.valid(e)) continue;
     auto it = instances_.find((u32)e);
-    if (it == instances_.end()) {
-      if (!instantiate(e, path)) instances_[(u32)e] = -1;
+    if (it == instances_.end() || it->second.path != path) {
+      Instance& inst = instances_[(u32)e];
+      inst = Instance{-1, path, fileTime(assets.resolve(path))};
+      if (!instantiate(e, path)) instances_[(u32)e].ref = -1;
       it = instances_.find((u32)e);
     }
-    if (it->second < 0) continue; // failed earlier; stay quiet instead of spamming every frame
-    if (!callMethod(L_, it->second, "update", 1, dt)) it->second = -1;
+    if (it->second.ref < 0) continue; // failed earlier; stay quiet instead of spamming every frame
+    if (!callMethod(L_, it->second.ref, "update", 1, dt)) it->second.ref = -1;
   }
 }
 

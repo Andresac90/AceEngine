@@ -88,8 +88,8 @@ looking at screenshots produced with `--screenshot`:
   Nobody has used the editor by hand yet.
 - **iOS on a real device.** The simulator works (see above); a device build
   (`tools/export_ios.sh <project> device`) is produced unsigned and has never
-  been installed. The demo has no touch controls yet (the hero script reads
-  keys), so on a phone the scene renders but cannot be played.
+  been installed. Touch control (`ace.pointer`, hold to walk) is written but
+  has only been exercised with scripted keys, never with a finger or mouse.
 - Vulkan on a real Vulkan driver (Android, Windows, Linux). Only MoltenVK ran.
 - glTF loading: `loadGltf` has never been given a real file.
 - Path tracing with a perspective camera.
@@ -273,8 +273,7 @@ otherwise; ask the owner before installing anything.
    input in the demo, an app icon and launch screen), **Android** (Gradle project using SDL3's `android-project` template;
    assets inside the APK are already readable because all file reads go through
    `SDL_LoadFile`; honor `currentTransform`, see the shortcut in
-   `createSwapchain`), then **iOS** (Xcode generator, Metal only, bundle
-   resources like the macOS script; touch already arrives as mouse events).
+   `createSwapchain`).
    The Android NDK and a JDK are not installed on this machine.
 6. **2D feature set**: sprite sheets and animation, tilemaps with an editor
    paint tool, sprite sorting, text rendering (the repo has

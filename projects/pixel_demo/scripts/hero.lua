@@ -8,6 +8,12 @@ function Hero:update(dt)
   if ace.key("D") or ace.key("Right") then right = right + 1 end
   if ace.key("W") or ace.key("Up") then up = up + 1 end
   if ace.key("S") or ace.key("Down") then up = up - 1 end
+  -- Touch / mouse: hold anywhere to walk in that direction from the screen centre.
+  local down, px, py = ace.pointer()
+  if down then
+    local tx, ty = px - 0.5, 0.5 - py
+    if math.abs(tx) > 0.05 or math.abs(ty) > 0.05 then right, up = tx, ty end
+  end
   if right == 0 and up == 0 then
     ace.set_sprite(self.entity, 0, 0, self.facing_left) -- stand still on the first frame
     return
@@ -26,7 +32,7 @@ function Hero:update(dt)
   local len = math.sqrt(dx * dx + dz * dz)
   ace.move(self.entity, dx / len * self.speed * dt, 0, dz / len * self.speed * dt) -- slides along walls
 
-  if right ~= 0 then self.facing_left = right < 0 end
+  if math.abs(right) > 0.2 then self.facing_left = right < 0 end
   ace.set_sprite(self.entity, 0, 8, self.facing_left)
 end
 

@@ -52,6 +52,10 @@ bool App::pump(const std::function<void(const SDL_Event&)>& hook) {
   input.mouseDelta = vec2(0.0f);
   input.wheel = 0.0f;
 
+  int windowW = 1, windowH = 1;
+  SDL_GetWindowSize(window, &windowW, &windowH);
+  input.windowSize = vec2((f32)std::max(windowW, 1), (f32)std::max(windowH, 1));
+
   bool running = true;
   SDL_Event e;
   while (SDL_PollEvent(&e)) {
