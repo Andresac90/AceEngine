@@ -81,6 +81,7 @@ struct RenderSettings {
   bool pathTraced = false;  // false: rasterized toon shading
   bool pixelArt = true;     // render at low resolution and upscale with hard pixels
   int pixelHeight = 180;    // low-resolution image height when pixelArt is on
+  bool integerScale = true; // adjust that height slightly so every game pixel is the same whole number of screen pixels
   bool pixelSnap = true;    // snap orthographic cameras to the texel grid (no shimmer)
   int toonBands = 3;        // 0 = smooth lighting
   f32 dither = 0.6f;        // ordered dithering between light bands and palette colors (0 = none)

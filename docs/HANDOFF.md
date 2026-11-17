@@ -81,6 +81,9 @@ looking at screenshots produced with `--screenshot`:
   simulator down and use a fresh device; the first attempt hit stale state.
 - The path tracer with textures, world texel mapping, cutout sprites, palette
   and per-texel light gathering: `village` with `pathTraced` on, both backends.
+- Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
+  screenshots, every row and column edge falls on a multiple of the scale (7 in
+  `village`, 8 in `main`). The sky gradient is computed per game pixel.
 
 **Not verified — treat as unknown until someone tries it:**
 

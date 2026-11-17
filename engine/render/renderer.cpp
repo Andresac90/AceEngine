@@ -322,6 +322,19 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
   // gives the present pass room to scroll by the sub-texel remainder.
   u32 visH = s.pixelArt ? (u32)glm::clamp(s.pixelHeight, 16, 2160) : height;
   u32 visW = s.pixelArt ? std::max(1u, (u32)lroundf(visH * aspect)) : width;
+  vec2 shown((f32)visW, (f32)visH); // texels visible in the output (may end on a partial texel)
+  if (s.pixelArt && s.integerScale) {
+    // Pick the whole-number scale closest to the requested height. The last row
+    // and column may be cut off part-way; the camera is widened to compensate, so
+    // the framing stays what the scene asked for.
+    u32 scale = std::max(1u, (u32)lroundf((f32)height / (f32)visH));
+    shown = vec2((f32)width, (f32)height) / (f32)scale;
+    visW = (u32)ceilf(shown.x);
+    visH = (u32)ceilf(shown.y);
+    f32 grow = (f32)visH / shown.y;
+    cam.orthoSize *= grow;
+    cam.fov = glm::degrees(2.0f * atanf(tanf(glm::radians(cam.fov) * 0.5f) * grow));
+  }
   bool snap = s.pixelArt && s.pixelSnap && cam.orthographic;
   u32 margin = snap ? 1 : 0;
   vec2 scroll{0.0f};
@@ -359,7 +372,7 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
     ACE_ASSERT(presentPipeline, "failed to create present pipeline");
   }
   PresentData pd{};
-  pd.rect = vec4((f32)margin - scroll.x, (f32)margin + scroll.y, (f32)visW, (f32)visH);
+  pd.rect = vec4((f32)margin - scroll.x, (f32)margin + scroll.y, shown.x, shown.y);
   pd.outline = vec4(s.outlineStrength, s.highlightStrength, s.exposure, s.outlines ? 1.0f : 0.0f);
   pd.skyTop = vec4(toLinear(s.skyTop), 1.0f);
   pd.skyBottom = vec4(toLinear(s.skyBottom), 1.0f);

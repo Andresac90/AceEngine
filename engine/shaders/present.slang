@@ -43,7 +43,8 @@ float4 fsMain(VsOut i) : SV_Target0 {
   int2 p = clamp(int2(floor(data.rect.xy + i.uv * data.rect.zw)), int2(0, 0), size - 1);
 
   float4 nd = normalDepthTexture.Load(int3(p, 0));
-  float3 sky = lerp(data.skyTop.rgb, data.skyBottom.rgb, saturate(i.uv.y));
+  // Sky per game pixel, not per screen pixel, so it keeps the same hard grid.
+  float3 sky = lerp(data.skyTop.rgb, data.skyBottom.rgb, saturate((float(p.y) - data.rect.y + 0.5) / data.rect.w));
   float3 color = nd.w > kSkyDepth ? sky : tonemap(colorTexture.Load(int3(p, 0)).rgb);
 
   if (data.outline.w > 0.5) {
