@@ -1,23 +1,60 @@
 #include "audio/audio.h"
 #include <SDL3/SDL.h>
+#include <thread>
 
 namespace ace {
 
 constexpr size_t kMaxVoices = 64; // beyond this, new sounds are dropped (with a warning)
 
-Audio::Audio(std::string projectDir) : root_(std::move(projectDir)) {
+Audio::Audio(std::string projectDir) : root_(std::move(projectDir)), opener_(std::make_shared<Opener>()) {
   if (!root_.empty() && root_.back() != '/') root_ += '/';
   if (!SDL_WasInit(SDL_INIT_AUDIO) && !SDL_InitSubSystem(SDL_INIT_AUDIO)) {
     ACE_WARN("audio disabled: %s", SDL_GetError());
+    opener_->done = true;
     return;
   }
-  device_ = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
-  if (!device_) ACE_WARN("audio disabled: no playback device (%s)", SDL_GetError());
+  std::thread([shared = opener_] {
+    u32 device = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
+    std::lock_guard<std::mutex> lock(shared->mutex);
+    if (shared->abandoned) { // the Audio object is gone: clean up here
+      if (device) SDL_CloseAudioDevice(device);
+      return;
+    }
+    shared->device = device;
+    if (!device) shared->error = SDL_GetError();
+    shared->done = true;
+  }).detach();
 }
 
 Audio::~Audio() {
   for (auto& [id, v] : voices_) SDL_DestroyAudioStream(v.stream);
-  if (device_) SDL_CloseAudioDevice(device_);
+  std::lock_guard<std::mutex> lock(opener_->mutex);
+  if (!opener_->done) opener_->abandoned = true; // the thread closes the device if it ever opens
+  else if (opener_->device) SDL_CloseAudioDevice(opener_->device);
+}
+
+bool Audio::checkOpener() {
+  if (device_) return true;
+  std::lock_guard<std::mutex> lock(opener_->mutex);
+  if (!opener_->done) return false;
+  if (!opener_->error.empty()) {
+    ACE_WARN("audio disabled: no playback device (%s)", opener_->error.c_str()); // logged on the main thread
+    opener_->error.clear();
+  }
+  device_ = opener_->device;
+  return device_ != 0;
+}
+
+bool Audio::waitForDevice(u32 timeoutMs) {
+  for (u32 waited = 0; !checkOpener(); waited += 5) {
+    {
+      std::lock_guard<std::mutex> lock(opener_->mutex);
+      if (opener_->done) return checkOpener();
+    }
+    if (waited >= timeoutMs) return false;
+    SDL_Delay(5);
+  }
+  return true;
 }
 
 const Audio::Clip* Audio::load(const std::string& path) {
@@ -41,7 +78,7 @@ const Audio::Clip* Audio::load(const std::string& path) {
 }
 
 u32 Audio::play(const std::string& path, f32 volume, bool loop) {
-  if (!device_) return 0;
+  if (!checkOpener()) return 0; // still opening, or no device
   const Clip* clip = load(path);
   if (!clip) return 0;
   if (voices_.size() >= kMaxVoices) {
@@ -77,6 +114,7 @@ void Audio::stop(u32 id) {
 }
 
 void Audio::update() {
+  checkOpener();
   for (auto it = voices_.begin(); it != voices_.end();) {
     Voice& v = it->second;
     int queued = SDL_GetAudioStreamQueued(v.stream);

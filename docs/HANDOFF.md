@@ -91,6 +91,14 @@ looking at screenshots produced with `--screenshot`:
   step at the requested volume. This session had no usable speaker
   (CoreAudio refused to start), so nobody has *heard* it; the engine logs one
   warning and stays silent when there is no device.
+- Directional sprites (`directions`): unit-tested direction choice; the demo
+  hero shows back, side and front views when walking away, sideways and
+  towards the camera (`--hold W/A/S` screenshots).
+- Offscreen frames (`Device::beginFrame(false)`): `--screenshot`, `--autotest`
+  and `--export` runs use a hidden window and never touch the swapchain, so they
+  work while the display is asleep. Before this, such runs could stall forever
+  at night: macOS stops handing out drawables for an invisible window, so every
+  frame was skipped. (A real game skipping frames while hidden is correct.)
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
@@ -263,8 +271,8 @@ otherwise; ask the owner before installing anything.
    `shortcut:` in `Renderer::fitShadowFrustum`). Still open: sprites do not
    cast shadows.
 2b. **Pixel-art look, next steps** (the owner's main interest): sprites casting
-   8-way directional character sprites (sheets, animation, sprite shadows and
-   palette-ramp shading in both render modes are done; in path-traced mode
+   Done: sheets, animation, sprite shadows, 4/8-direction sprites, and
+   palette-ramp shading in both render modes; in path-traced mode
    ramp shading uses the amount of light, not its color, so colored light such
    as the lantern's warm glow is lost — tint the ramp choice by light hue if the
    owner wants it back); a palette editor panel; water and foliage. (The path tracer already honors

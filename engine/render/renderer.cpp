@@ -155,10 +155,24 @@ bool Renderer::findCamera(Scene& scene, CameraView& out) {
   return false;
 }
 
-vec4 spriteUvRect(const SpriteRenderer& s, f64 seconds) {
-  int columns = std::max(s.columns, 1), rows = std::max(s.rows, 1), count = columns * rows;
+int spriteDirection(const SpriteRenderer& s, const mat4& world, vec3 cameraPosition) {
+  if (s.directions <= 1) return 0;
+  vec2 forward = -vec2(world[2].x, world[2].z);
+  vec2 toViewer = vec2(cameraPosition.x - world[3].x, cameraPosition.z - world[3].z);
+  if (glm::length(forward) < 1e-6f || glm::length(toViewer) < 1e-6f) return 0;
+  // Counter-clockwise seen from above (+Y) in x/z: the sign is flipped because +Z points towards the viewer.
+  f32 angle = atan2f(forward.x * toViewer.y - forward.y * toViewer.x, glm::dot(forward, toViewer));
+  int row = (int)lroundf(-angle / (glm::two_pi<f32>() / (f32)s.directions));
+  return ((row % s.directions) + s.directions) % s.directions;
+}
+
+vec4 spriteUvRect(const SpriteRenderer& s, f64 seconds, int directionRow) {
+  bool directional = s.directions > 1;
+  int columns = std::max(s.columns, 1), rows = directional ? s.directions : std::max(s.rows, 1);
+  int count = directional ? columns : columns * rows; // directional sheets animate along their row
   int index = (s.frame + (s.fps > 0.0f ? (int)(seconds * s.fps) : 0)) % count;
   if (index < 0) index += count;
+  if (directional) index += directionRow * columns;
   vec2 cell(1.0f / columns, 1.0f / rows), corner((f32)(index % columns) * cell.x, (f32)(index / columns) * cell.y);
   return s.flipX ? vec4(corner.x + cell.x, corner.y, -cell.x, cell.y) : vec4(corner, cell);
 }
@@ -287,7 +301,7 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
     it.data.flags = vec4(1, 0, 0, 0);
     // Lit from where it stands: the bottom edge of the card.
     it.data.origin = vec4(vec3(t.world[3]) - vec3(0.0f, 0.5f * s.size.y * glm::length(vec3(t.world[1])), 0.0f), 0.0f);
-    it.data.uvRect = spriteUvRect(s, seconds);
+    it.data.uvRect = spriteUvRect(s, seconds, spriteDirection(s, t.world, vec3(camWorld[3])));
     items.push_back(it);
   }
 

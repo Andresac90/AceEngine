@@ -75,6 +75,10 @@ int main(int argc, char** argv) {
     }
   }
   if (!screenshot.empty() && frames <= 0) frames = 10;
+  // Automated runs render offscreen into a hidden window: no window flashes up,
+  // and they keep working while the display is asleep.
+  bool offscreen = !screenshot.empty() || autotest || !exportTarget.empty();
+  desc.hidden = offscreen;
 
   Project project;
   if (!project.load(projectDir)) {
@@ -99,22 +103,19 @@ int main(int argc, char** argv) {
     int frame = 0;
     while (app.pump([&](const SDL_Event& e) { editor.onEvent(e); })) {
       editor.buildUi();
-      rhi::CommandList* cmd = device.beginFrame();
+      rhi::CommandList* cmd = device.beginFrame(!offscreen);
       if (!cmd) {
         ImGui::EndFrame();
         continue;
       }
-      if (!screenshot.empty()) {
+      if (offscreen) {
         if (!shot) {
           shotW = device.backbufferWidth();
           shotH = device.backbufferHeight();
-          shot = device.createTexture({shotW, shotH, rhi::Format::BGRA8_SRGB, rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled, "ui shot"});
+          // Same format as the window would use, so the UI pipeline matches.
+          shot = device.createTexture({shotW, shotH, device.backbufferFormat(), rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled, "offscreen ui"});
         }
         editor.render(*cmd, shot);
-        rhi::RenderPassDesc clear;
-        clear.color[0].texture = device.backbuffer();
-        cmd->beginRenderPass(clear);
-        cmd->endRenderPass();
       } else {
         editor.render(*cmd, device.backbuffer());
       }
@@ -125,11 +126,13 @@ int main(int argc, char** argv) {
     }
     if (autotest && result != 1) return 1;
     if (!exportTarget.empty() && editor.exportResult() != 1) return 1;
-    if (shot) {
+    if (shot && !screenshot.empty()) {
       device.waitIdle();
       std::vector<u8> pixels;
       if (device.readTexture(shot, pixels)) {
-        for (size_t i = 0; i + 3 < pixels.size(); i += 4) std::swap(pixels[i], pixels[i + 2]); // BGRA -> RGBA
+        rhi::Format f = device.backbufferFormat();
+        if (f == rhi::Format::BGRA8 || f == rhi::Format::BGRA8_SRGB)
+          for (size_t i = 0; i + 3 < pixels.size(); i += 4) std::swap(pixels[i], pixels[i + 2]); // BGRA -> RGBA
         savePng(screenshot, shotW, shotH, pixels.data());
         ACE_INFO("wrote %s", screenshot.c_str());
       }

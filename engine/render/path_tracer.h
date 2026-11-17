@@ -26,7 +26,7 @@ public:
   static void buildBvh(std::vector<Triangle>& tris, std::vector<Node>& nodes);
 
 private:
-  void rebuild(Scene& scene, Assets& assets, vec3 cameraRight);
+  void rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 cameraPosition);
   Renderer& r_;
   rhi::BindGroupLayoutHandle layout_;
   rhi::BindGroupHandle group_;

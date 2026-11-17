@@ -1,6 +1,8 @@
--- Walks the hero with WASD / arrow keys, relative to the camera, and plays the
--- walk cycle from its sprite sheet while moving.
-local Hero = { speed = 3.5, facing_left = false, step_timer = 0 }
+-- Walks the hero relative to the camera with WASD / arrow keys, a gamepad stick
+-- or touch, turns it to face where it walks (its sprite sheet has a row per
+-- viewing direction, so the engine shows front, side or back), plays the walk
+-- cycle and footsteps.
+local Hero = { speed = 3.5, step_timer = 0 }
 
 function Hero:update(dt)
   local right, up = 0, 0
@@ -18,7 +20,7 @@ function Hero:update(dt)
     if math.abs(tx) > 0.05 or math.abs(ty) > 0.05 then right, up = tx, ty end
   end
   if right == 0 and up == 0 then
-    ace.set_sprite(self.entity, 0, 0, self.facing_left) -- stand still on the first frame
+    ace.set_sprite(self.entity, 0, 0) -- stand still on the first frame
     return
   end
 
@@ -33,10 +35,12 @@ function Hero:update(dt)
   end
   local dx, dz = fx * up - fz * right, fz * up + fx * right
   local len = math.sqrt(dx * dx + dz * dz)
-  ace.move(self.entity, dx / len * self.speed * dt, 0, dz / len * self.speed * dt) -- slides along walls
+  dx, dz = dx / len, dz / len
+  ace.move(self.entity, dx * self.speed * dt, 0, dz * self.speed * dt) -- slides along walls
 
-  if math.abs(right) > 0.2 then self.facing_left = right < 0 end
-  ace.set_sprite(self.entity, 0, 8, self.facing_left)
+  -- Face the walking direction (entities face their local -Z).
+  ace.set_rotation(self.entity, 0, math.deg(math.atan(-dx, -dz)), 0)
+  ace.set_sprite(self.entity, 0, 8)
 
   -- A footstep on every other frame of the 8 fps walk cycle.
   self.step_timer = self.step_timer - dt

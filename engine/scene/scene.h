@@ -42,6 +42,8 @@ struct SpriteRenderer {
   bool billboard = false; // always face the camera, staying upright
   // Sprite sheet: a grid of equally sized frames, read left to right, top to bottom.
   int columns = 1, rows = 1;
+  // Directional sheet: 4 or 8 rows, one per viewing angle (see renderer.h); columns are the animation frames.
+  int directions = 1;
   int frame = 0;          // first (or only) frame shown
   f32 fps = 0.0f;         // > 0 plays all frames in a loop starting at `frame`
   bool flipX = false;

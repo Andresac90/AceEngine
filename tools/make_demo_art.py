@@ -120,9 +120,34 @@ def art():
     stand = ["....obBBbo", "....obBbBo", "....ob.obo", "....ol.olo", "...oll.ollo", "...ooo.oooo"]
     step_a = ["....obBBbo", "...obBbbBo", "..obb..obo", "..oll..olo", "..ooo..ollo", ".......oooo"]
     step_b = ["....obBBbo", "....obBbbBo", "....obo..bbo", "....olo..llo", "...ollo..ooo", "...oooo"]
-    # Walk cycle as a 4-frame sheet: stand, step, stand, other step.
-    frames = [body + [r.ljust(16, ".")[:16] for r in legs] for legs in (stand, step_a, stand, step_b)]
-    sprite("hero.png", ["".join(f[y] for f in frames) for y in range(len(frames[0]))], k)
+    back = [
+        "....oooooo......", "...ohHHHHho.....", "..ohHHHHHHho....", "..ohHHHHHHho....", "..ohHHHHHHho....",
+        "..ohHHHHHHho....", "..odHHHHHHdo....", "...ohHHHHho.....", "....osSSso......", "...onBBBBno.....",
+        "..onBBBBBBno....", ".onBBBBBBBBno...", ".osnBBBBBBnso...", ".osnBBBBBBnso...", ".osonBBBBnoso...",
+        "..o.onnnno.o....",
+    ]
+    side = [  # facing screen-left
+        "....oooooo......", "...ohHHHHHo.....", "..ohHHHHHHHo....", "..osSSHHHHHo....", "..oSoSSHHHHo....",
+        ".oSSSSSsHHo.....", "..odSSSSso......", "...odSSdo.......", "....osso........", "....onBBno......",
+        "...onBBBBno.....", "...onBBBBBo.....", "...onBsBBBo.....", "...onBsBBno.....", "...onBBBBno.....",
+        "....onnnno......",
+    ]
+    side_stand = ["....obBBo", "....obBBo", "....obBo", "....olo", "...ollo", "...oooo"]
+    side_a = ["....obBBo", "...obBbBo", "..obo.obo", "..olo.olo", ".ollo.ollo", ".oooo.oooo"]
+    side_b = ["....obBBo", "...obBbBo", "...obobo", "...ololo", "..olloollo", "..oooooooo"]
+    def frames(upper, legs_cycle):
+        return [upper + [r.ljust(16, ".")[:16] for r in legs] for legs in legs_cycle]
+    walk = (stand, step_a, stand, step_b)
+    rows = [frames(body, walk),                                     # front
+            frames(side, (side_stand, side_a, side_stand, side_b)),  # left side: faces screen-left
+            frames(back, walk),                                     # back
+            None]                                                   # right side: mirrored below
+    rows[3] = [[r[::-1] for r in f] for f in rows[1]]
+    # Sheet: 4 walk frames across, one row per viewing direction (front, left, back, right).
+    sheet = []
+    for row in rows:
+        sheet += ["".join(f[y] for f in row) for y in range(len(row[0]))]
+    sprite("hero.png", sheet, k)
     f = {"g": R["grass"][1], "G": R["grass"][3], "r": R["roof"][3], "R": R["roof"][4], "y": R["cloth"][3], "o": R["grass"][0]}
     sprite("flower.png", ["...rR...", "..rRyR..", "...rRr..", "....G...", ".g..G...", ".Gg.G.g.", "..GgGgG.", "...oGo.."], f)
 
@@ -177,8 +202,11 @@ def scene():
             MeshRenderer={"mesh": "assets/pine.gltf", "texture": "", "color": [1, 1, 1, 1], "emissive": [0, 0, 0], "worldTexels": False},
             Collider={"size": [0.5, 2, 0.5], "offset": [0, 1, 0], "solid": True})   # just the trunk
     # 16x22 texel sprite at 16 texels per unit, feet on the ground.
-    ent("Hero", (1.6, 0.6875, 3.2), SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True,
-                                                 "columns": 4, "rows": 1, "frame": 0, "fps": 0, "flipX": False},
+    # Starts facing the camera (entities face their local -Z).
+    hero_yaw = math.degrees(math.atan2(-(eye[0] - 1.6), -(eye[2] - 3.2)))
+    ent("Hero", (1.6, 0.6875, 3.2), yaw(hero_yaw),
+        SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True,
+                        "columns": 4, "rows": 1, "directions": 4, "frame": 0, "fps": 0, "flipX": False},
         Script={"path": "scripts/hero.lua"}, Collider={"size": [0.5, 1.375, 0.3], "offset": [0, 0, 0], "solid": True})
     for i, (x, z) in enumerate([(-0.5, 5.2), (3.4, 4.0), (-2.2, 1.6), (5.8, 1.8), (0.2, -2.5)]):
         ent("Flower %d" % (i + 1), (x, 0.25, z), SpriteRenderer={"texture": "assets/flower.png", "color": [1, 1, 1, 1], "size": [0.5, 0.5], "billboard": True})
@@ -215,8 +243,9 @@ def house():
     box("Shelf", "planks.png", (-3.2, 1.0, -2.6), (1.2, 2.0, 0.8))
     ent("Lantern", (1.6, 1.05, -1.2), scale=(0.25, 0.5, 0.25),
         MeshRenderer={"mesh": "builtin:cube", "texture": "", "color": [1, 0.84, 0.35, 1], "emissive": [3.5, 2.2, 0.7], "worldTexels": False})
-    ent("Hero", (0.0, 0.6875, 2.2), SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True,
-                                                   "columns": 4, "rows": 1, "frame": 0, "fps": 0, "flipX": False},
+    ent("Hero", (0.0, 0.6875, 2.2), yaw(math.degrees(math.atan2(-(eye[0] - 0.0), -(eye[2] - 2.2)))),
+        SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True,
+                        "columns": 4, "rows": 1, "directions": 4, "frame": 0, "fps": 0, "flipX": False},
         Script={"path": "scripts/hero.lua"}, Collider={"size": [0.5, 1.375, 0.3], "offset": [0, 0, 0], "solid": True})
     ent("Exit Trigger", (0.0, 0.5, 4.3), scale=(2.0, 1.0, 0.6), Collider={"size": [1, 1, 1], "offset": [0, 0, 0], "solid": False},
         Script={"path": "scripts/door.lua", "params": "target = scenes/village.scene.json"})

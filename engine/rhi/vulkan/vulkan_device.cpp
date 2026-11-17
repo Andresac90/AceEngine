@@ -514,12 +514,24 @@ public:
 
   // ------------------------------------------------------------ frame
 
-  CommandList* beginFrame() override {
+  CommandList* beginFrame(bool present) override {
     int w = 0, h = 0;
     SDL_GetWindowSizeInPixels(window_, &w, &h);
     if (w <= 0 || h <= 0) return nullptr;
     VK_CHECK(vkWaitForFences(device_, 1, &frameFence_, VK_TRUE, UINT64_MAX)); // one frame in flight
     flushDeletions();
+    presenting_ = present;
+    if (!present) { // offscreen frame: no swapchain image
+      width_ = (u32)w;
+      height_ = (u32)h;
+      textures_.get(backbuffer_.id) = Texture{};
+      VK_CHECK(vkResetCommandBuffer(list_.cmd, 0));
+      VkCommandBufferBeginInfo begin{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
+      begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+      VK_CHECK(vkBeginCommandBuffer(list_.cmd, &begin));
+      inFrame_ = true;
+      return &list_;
+    }
     if (!swapchain_ || (u32)w != width_ || (u32)h != height_) createSwapchain();
     if (!swapchain_) return nullptr;
     VkResult r = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, acquired_, VK_NULL_HANDLE, &imageIndex_);
@@ -545,6 +557,16 @@ public:
   }
 
   void endFrame() override {
+    if (!presenting_) {
+      VK_CHECK(vkEndCommandBuffer(list_.cmd));
+      inFrame_ = false;
+      VkSubmitInfo submit{VK_STRUCTURE_TYPE_SUBMIT_INFO};
+      submit.commandBufferCount = 1;
+      submit.pCommandBuffers = &list_.cmd;
+      VK_CHECK(vkResetFences(device_, 1, &frameFence_));
+      VK_CHECK(vkQueueSubmit(queue_, 1, &submit, frameFence_));
+      return;
+    }
     ACE_ASSERT(backbufferWritten_, "a frame must render to the backbuffer before endFrame");
     VK_CHECK(vkEndCommandBuffer(list_.cmd));
     inFrame_ = false;
@@ -656,6 +678,7 @@ public:
   std::vector<std::function<void()>> deletions_;
   TextureHandle backbuffer_;
   bool backbufferWritten_ = false;
+  bool presenting_ = true;
 
 private:
   static VkDescriptorType descriptorType(BindingType t) {

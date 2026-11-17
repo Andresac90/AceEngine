@@ -95,7 +95,7 @@ void PathTracer::buildBvh(std::vector<Triangle>& tris, std::vector<Node>& nodes)
   }
 }
 
-void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight) {
+void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 cameraPosition) {
   // Pack every texture in use into the atlas, left to right in rows ("shelves").
   // shortcut: fixed 1024x1024 atlas, rebuilt with the BVH; textures that do not
   // fit are drawn untextured (with a warning). Grow or page it when that happens.
@@ -155,7 +155,7 @@ void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight) {
   f64 seconds = (f64)SDL_GetTicks() / 1000.0;
   for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
     mat4 model = (s.billboard ? uprightCard(t.world, cameraRight) : t.world) * glm::scale(mat4(1.0f), vec3(s.size, 1.0f));
-    addMesh(quad, model, s.color, vec3(0.0f), place(assets.texture(s.texture)), 2, spriteUvRect(s, seconds));
+    addMesh(quad, model, s.color, vec3(0.0f), place(assets.texture(s.texture)), 2, spriteUvRect(s, seconds, spriteDirection(s, t.world, cameraPosition)));
   }
   r_.device().writeTexture(atlas_, atlasPixels.data());
 
@@ -201,6 +201,7 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
                         TextureHandle color, TextureHandle normalDepth, u32 width, u32 height) {
   // Anything that changes the geometry or its materials forces a BVH rebuild.
   vec3 cameraRight = vec3(glm::inverse(view)[0]);
+  vec3 cameraPosition = vec3(glm::inverse(view)[3]);
   u64 sh = 14695981039346656037ull;
   for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
     sh = hashBytes(sh, &t.world, sizeof(mat4));
@@ -212,7 +213,7 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   }
   f64 seconds = (f64)SDL_GetTicks() / 1000.0;
   for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
-    vec4 uvRect = spriteUvRect(s, seconds); // changes as the animation advances
+    vec4 uvRect = spriteUvRect(s, seconds, spriteDirection(s, t.world, cameraPosition)); // animation frame and view angle
     sh = hashBytes(sh, &t.world, sizeof(mat4));
     sh = hashBytes(sh, s.texture.data(), s.texture.size());
     sh = hashBytes(sh, &s.color, sizeof(vec4));
@@ -223,7 +224,7 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   bool reset = false;
   if (sh != sceneHash_ || !nodeBuffer_) {
     sceneHash_ = sh;
-    rebuild(scene, assets, cameraRight);
+    rebuild(scene, assets, cameraRight, cameraPosition);
     // Moving objects: keep a short history instead of restarting, trading a
     // little ghosting for far less noise.
     // shortcut: replace with motion-vector reprojection + a spatial denoiser.

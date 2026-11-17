@@ -34,6 +34,7 @@ struct AppDesc {
   rhi::Backend backend = rhi::defaultBackend();
   bool validation = false;
   bool resizable = true;
+  bool hidden = false; // for screenshots and automated tests: render offscreen without showing a window
 };
 
 class App {

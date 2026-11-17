@@ -584,9 +584,9 @@
           ],
           "rotation": [
             0,
+            -0.936300417390439,
             0,
-            0,
-            1
+            0.3512001258463466
           ],
           "scale": [
             1,
@@ -609,6 +609,7 @@
           "billboard": true,
           "columns": 4,
           "rows": 1,
+          "directions": 4,
           "frame": 0,
           "fps": 0,
           "flipX": false

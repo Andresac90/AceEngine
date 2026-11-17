@@ -48,6 +48,7 @@ int main(int argc, char** argv) {
     }
   }
   if (!screenshot.empty() && frames <= 0) frames = 8;
+  bool offscreen = !screenshot.empty();
 
   Project project;
   // The project is looked up before SDL starts, so resolve the base path by hand.
@@ -56,6 +57,7 @@ int main(int argc, char** argv) {
   desc.title = project.name;
   desc.width = project.width;
   desc.height = project.height;
+  desc.hidden = offscreen;
 
   App app;
   if (!app.init(desc)) return 1;
@@ -80,7 +82,7 @@ int main(int argc, char** argv) {
       }
       scene.updateTransforms();
 
-      rhi::CommandList* cmd = device.beginFrame();
+      rhi::CommandList* cmd = device.beginFrame(!offscreen);
       if (!cmd) continue;
       renderer.beginFrame();
       u32 w = device.backbufferWidth(), h = device.backbufferHeight();
@@ -95,10 +97,6 @@ int main(int argc, char** argv) {
           shot = device.createTexture({w, h, rhi::Format::RGBA8_SRGB, rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled, "screenshot"});
         }
         renderer.render(*cmd, scene, assets, view, shot, rhi::Format::RGBA8_SRGB, shotW, shotH, scripts.texts);
-        rhi::RenderPassDesc clear;
-        clear.color[0].texture = device.backbuffer();
-        cmd->beginRenderPass(clear);
-        cmd->endRenderPass();
       } else {
         renderer.render(*cmd, scene, assets, view, device.backbuffer(), device.backbufferFormat(), w, h, scripts.texts);
       }

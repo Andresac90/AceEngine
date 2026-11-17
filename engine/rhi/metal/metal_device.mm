@@ -273,29 +273,32 @@ public:
     return true;
   }
 
-  CommandList* beginFrame() override {
+  CommandList* beginFrame(bool present) override {
     int w = 0, h = 0;
     SDL_GetWindowSizeInPixels(window_, &w, &h);
     if (w <= 0 || h <= 0) return nullptr;
     waitIdle(); // one frame in flight: see Device::beginFrame
     pool_ = objc_autoreleasePoolPush();
-    if ((int)layer_.drawableSize.width != w || (int)layer_.drawableSize.height != h) layer_.drawableSize = CGSizeMake(w, h);
-    drawable_ = [layer_ nextDrawable];
-    if (!drawable_) {
-      objc_autoreleasePoolPop(pool_);
-      return nullptr;
+    if (present) {
+      if ((int)layer_.drawableSize.width != w || (int)layer_.drawableSize.height != h) layer_.drawableSize = CGSizeMake(w, h);
+      // Blocks up to a second and returns nil when the window cannot be shown.
+      drawable_ = [layer_ nextDrawable];
+      if (!drawable_) {
+        objc_autoreleasePoolPop(pool_);
+        return nullptr;
+      }
     }
     width_ = (u32)w;
     height_ = (u32)h;
     Texture& bb = textures_.get(backbuffer_.id);
-    bb.tex = drawable_.texture;
+    bb.tex = present ? drawable_.texture : nil;
     bb.desc = TextureDesc{width_, height_, Format::BGRA8_SRGB, TextureUsage_RenderTarget, "backbuffer"};
     list_.cmd = [queue_ commandBuffer];
     return &list_;
   }
 
   void endFrame() override {
-    [list_.cmd presentDrawable:drawable_];
+    if (drawable_) [list_.cmd presentDrawable:drawable_];
     [list_.cmd commit];
     lastCommit_ = list_.cmd;
     list_.cmd = nil;

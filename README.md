@@ -65,6 +65,7 @@ five things working together, all controlled per scene or per entity:
 | Every on-screen color taken from one palette | Render Settings `palette` (an image; up to 64 distinct colors) |
 | Shading by hand-picked color ramps instead of darkening | Render Settings `rampShading`, `rampShadowSteps`: each palette **row** is a ramp, darkest on the left; lit surfaces step one color right, shadowed ones step left |
 | Characters and props as sprites in the 3D world | SpriteRenderer with `billboard` |
+| Characters seen from front, side and back | SpriteRenderer `directions` = 4 or 8: one sheet row per view (front, left, back, right; 8 adds the diagonals), animation frames across. Turn the entity to face where it goes; the engine picks the row from the camera |
 
 Draw textures and sprites from the same palette image, using each ramp's
 middle colors (ramp shading needs room to step both ways). Size sprites so one

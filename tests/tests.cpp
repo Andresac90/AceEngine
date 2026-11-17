@@ -1,5 +1,6 @@
 // CPU-only engine tests (no window or GPU needed). Run with: ctest --test-dir build
 #include "render/path_tracer.h"
+#include "render/renderer.h"
 #include "scene/scene.h"
 #include "script/script.h"
 #include <filesystem>
@@ -187,6 +188,28 @@ static void testPrefabs() {
   CHECK(!bad.reg.valid(ea));
 }
 
+static void testSpriteDirections() {
+  SpriteRenderer s;
+  s.directions = 4;
+  s.columns = 4;
+  mat4 world(1.0f); // at the origin, facing -Z
+  CHECK(spriteDirection(s, world, {0, 2, -5}) == 0); // viewer in front
+  CHECK(spriteDirection(s, world, {-5, 2, 0}) == 1); // viewer on the entity's left (it faces -Z, so its left is -X)
+  CHECK(spriteDirection(s, world, {0, 2, 5}) == 2);  // behind
+  CHECK(spriteDirection(s, world, {5, 2, 0}) == 3);  // right
+  mat4 turned = glm::rotate(mat4(1.0f), glm::radians(90.0f), vec3(0, 1, 0)); // now faces -X
+  CHECK(spriteDirection(s, turned, {-5, 0, 0}) == 0);
+  s.directions = 8;
+  CHECK(spriteDirection(s, world, {-5, 0, -5}) == 1); // front-left diagonal
+  s.directions = 1;
+  CHECK(spriteDirection(s, world, {0, 0, 5}) == 0);
+  // Frame selection: row from the direction, column from the animation.
+  s.directions = 4;
+  s.frame = 1;
+  vec4 r = spriteUvRect(s, 0.0, 2);
+  CHECK(fabsf(r.x - 0.25f) < 1e-6f && fabsf(r.y - 0.5f) < 1e-6f && fabsf(r.z - 0.25f) < 1e-6f && fabsf(r.w - 0.25f) < 1e-6f);
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
@@ -196,6 +219,7 @@ int main() {
   testQueries();
   testScriptParams();
   testPrefabs();
+  testSpriteDirections();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

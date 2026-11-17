@@ -192,7 +192,10 @@ public:
   // rewritten every frame without tearing.
   // shortcut: one frame in flight; move to per-frame resource rings if CPU/GPU
   // overlap ever shows up as the bottleneck.
-  virtual CommandList* beginFrame() = 0;
+  // present = false: an offscreen frame that never touches the window (no
+  // backbuffer). Works while the window is hidden, minimised or the display is
+  // asleep, which is what screenshots and automated tests need.
+  virtual CommandList* beginFrame(bool present = true) = 0;
   virtual void endFrame() = 0;
   virtual TextureHandle backbuffer() = 0; // valid between beginFrame and endFrame
   virtual Format backbufferFormat() const = 0;

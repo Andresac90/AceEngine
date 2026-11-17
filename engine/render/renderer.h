@@ -28,8 +28,13 @@ struct CameraView {
   Camera camera;
 };
 
+// Directional sprites: which row of the sheet to show. The entity faces its
+// local -Z; row k is the view from k * (360 / directions) degrees counter-
+// clockwise (seen from above) around the entity, starting in front of it. So
+// 4 rows are front, left side, back, right side; 8 rows add the diagonals.
+int spriteDirection(const SpriteRenderer& sprite, const mat4& world, vec3 cameraPosition);
 // Sheet frame shown at `seconds`, as (offset.xy, scale.zw) applied to the quad's UVs.
-vec4 spriteUvRect(const SpriteRenderer& sprite, f64 seconds);
+vec4 spriteUvRect(const SpriteRenderer& sprite, f64 seconds, int directionRow = 0);
 // Upright card facing horizontally along `right`, at the entity's position and scale.
 mat4 uprightCard(const mat4& world, vec3 right);
 

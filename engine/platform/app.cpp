@@ -24,6 +24,7 @@ bool App::init(const AppDesc& desc) {
   }
   SDL_WindowFlags flags = SDL_WINDOW_HIGH_PIXEL_DENSITY | (SDL_WindowFlags)rhi::windowFlagsFor(desc.backend);
   if (desc.resizable) flags |= SDL_WINDOW_RESIZABLE;
+  if (desc.hidden) flags |= SDL_WINDOW_HIDDEN;
   window = SDL_CreateWindow(desc.title.c_str(), desc.width, desc.height, flags);
   if (!window) {
     ACE_ERROR("SDL_CreateWindow failed: %s", SDL_GetError());

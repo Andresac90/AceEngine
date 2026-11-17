@@ -33,7 +33,7 @@ const std::vector<ComponentType>& componentTypes() {
       makeType<SpriteRenderer>("SpriteRenderer", {ACE_FIELD(SpriteRenderer, texture, Asset), ACE_FIELD(SpriteRenderer, color, Color4),
                                                   ACE_FIELD(SpriteRenderer, size, Vec2), ACE_FIELD(SpriteRenderer, billboard, Bool),
                                                   ACE_FIELD(SpriteRenderer, columns, Int), ACE_FIELD(SpriteRenderer, rows, Int),
-                                                  ACE_FIELD(SpriteRenderer, frame, Int), ACE_FIELD(SpriteRenderer, fps, Float),
+                                                  ACE_FIELD(SpriteRenderer, directions, Int), ACE_FIELD(SpriteRenderer, frame, Int), ACE_FIELD(SpriteRenderer, fps, Float),
                                                   ACE_FIELD(SpriteRenderer, flipX, Bool)}),
       makeType<Camera>("Camera", {ACE_FIELD(Camera, orthographic, Bool), ACE_FIELD(Camera, orthoSize, Float), ACE_FIELD(Camera, fov, Float),
                                   ACE_FIELD(Camera, nearPlane, Float), ACE_FIELD(Camera, farPlane, Float)}),
