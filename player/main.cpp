@@ -74,6 +74,10 @@ int main(int argc, char** argv) {
     while (app.pump()) {
       for (SDL_Scancode code : held) app.input.down[code] = true;
       scripts.update(app.dt);
+      if (!scripts.pendingScene.empty()) {
+        std::string next = std::exchange(scripts.pendingScene, std::string());
+        if (scene.load(project.path(next))) scripts.restart(); // on failure the current level keeps running
+      }
       scene.updateTransforms();
 
       rhi::CommandList* cmd = device.beginFrame();

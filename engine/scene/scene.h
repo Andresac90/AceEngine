@@ -73,7 +73,8 @@ struct Collider {
 };
 
 struct Script {
-  std::string path; // Lua file, project-relative
+  std::string path;   // Lua file, project-relative
+  std::string params; // "key=value; key=value": set as fields on the script instance (numbers, true/false, or text)
 };
 
 // How a scene is drawn. Lives in the scene file so each level owns its look.
@@ -141,6 +142,16 @@ public:
   // movement actually applied. Uses world transforms from the last updateTransforms().
   vec3 moveAndSlide(Entity e, vec3 delta);
   Aabb colliderBounds(Entity e); // world space; empty (min > max) if it has no Collider
+  // Entities whose Collider overlaps e's (solid or not): triggers, pickups, doors.
+  std::vector<Entity> overlapping(Entity e);
+  struct RayHit {
+    Entity entity = kNoEntity;
+    f32 distance = 0.0f;
+    vec3 point{0.0f}, normal{0.0f};
+  };
+  // Nearest Collider hit by the ray within maxDistance; `ignore` is skipped.
+  // Non-solid colliders are hit only if includeTriggers is set.
+  RayHit raycast(vec3 origin, vec3 direction, f32 maxDistance, Entity ignore = kNoEntity, bool includeTriggers = false);
 
   nlohmann::json toJson();
   void fromJson(const nlohmann::json& j); // replaces the whole scene

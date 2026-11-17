@@ -83,7 +83,33 @@ bool App::pump(const std::function<void(const SDL_Event&)>& hook) {
         input.mouse = {e.button.x, e.button.y};
         break;
       case SDL_EVENT_MOUSE_WHEEL: input.wheel += e.wheel.y; break;
+      case SDL_EVENT_GAMEPAD_ADDED:
+        if (!gamepad_) {
+          gamepad_ = SDL_OpenGamepad(e.gdevice.which);
+          if (gamepad_) ACE_INFO("gamepad connected: %s", SDL_GetGamepadName(gamepad_));
+        }
+        break;
+      case SDL_EVENT_GAMEPAD_REMOVED:
+        if (gamepad_ && SDL_GetGamepadID(gamepad_) == e.gdevice.which) {
+          SDL_CloseGamepad(gamepad_);
+          gamepad_ = nullptr;
+          memset(input.gamepadAxis, 0, sizeof(input.gamepadAxis));
+          memset(input.gamepadDown, 0, sizeof(input.gamepadDown));
+        }
+        break;
       default: break;
+    }
+  }
+  memset(input.gamepadPressed, 0, sizeof(input.gamepadPressed));
+  if (gamepad_) {
+    for (int a = 0; a < SDL_GAMEPAD_AXIS_COUNT; a++) {
+      f32 v = (f32)SDL_GetGamepadAxis(gamepad_, (SDL_GamepadAxis)a) / 32767.0f;
+      input.gamepadAxis[a] = fabsf(v) < 0.15f ? 0.0f : glm::clamp(v, -1.0f, 1.0f); // dead zone
+    }
+    for (int b = 0; b < SDL_GAMEPAD_BUTTON_COUNT; b++) {
+      bool down = SDL_GetGamepadButton(gamepad_, (SDL_GamepadButton)b);
+      input.gamepadPressed[b] = down && !input.gamepadDown[b];
+      input.gamepadDown[b] = down;
     }
   }
   return running;

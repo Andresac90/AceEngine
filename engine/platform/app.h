@@ -19,6 +19,11 @@ struct Input {
   f32 wheel = 0.0f;
   bool mouseDown[4] = {};
   bool mousePressed[4] = {};
+  // First connected gamepad (all zero when none). Indexed by SDL_GamepadAxis /
+  // SDL_GamepadButton; sticks are -1..1 with a small dead zone, triggers 0..1.
+  f32 gamepadAxis[SDL_GAMEPAD_AXIS_COUNT] = {};
+  bool gamepadDown[SDL_GAMEPAD_BUTTON_COUNT] = {};
+  bool gamepadPressed[SDL_GAMEPAD_BUTTON_COUNT] = {};
   bool keyDown(const char* name) const;
   bool keyPressed(const char* name) const;
 };
@@ -47,6 +52,7 @@ public:
 
 private:
   u64 lastCounter_ = 0;
+  SDL_Gamepad* gamepad_ = nullptr;
 };
 
 // Parses "--backend metal|vulkan|d3d12" style values. Returns false if unknown or not compiled in.

@@ -182,12 +182,50 @@ def scene():
         Script={"path": "scripts/hero.lua"}, Collider={"size": [0.5, 1.375, 0.3], "offset": [0, 0, 0], "solid": True})
     for i, (x, z) in enumerate([(-0.5, 5.2), (3.4, 4.0), (-2.2, 1.6), (5.8, 1.8), (0.2, -2.5)]):
         ent("Flower %d" % (i + 1), (x, 0.25, z), SpriteRenderer={"texture": "assets/flower.png", "color": [1, 1, 1, 1], "size": [0.5, 0.5], "billboard": True})
+    # Walking into the doorway goes inside.
+    ent("Door Trigger", (-2.9, 0.5, 0.15), scale=(1.2, 1.0, 0.6),
+        Collider={"size": [1, 1, 1], "offset": [0, 0, 0], "solid": False},
+        Script={"path": "scripts/door.lua", "params": "target = scenes/house.scene.json"})
     settings = {"pixelArt": True, "pixelHeight": 216, "toonBands": 3, "dither": 0.6, "texelLighting": True, "texelsPerUnit": 16,
                 "palette": "assets/palette.png", "rampShading": True, "rampShadowSteps": 2, "outlines": True, "outlineStrength": 0.45, "highlightStrength": 0.0,
                 "ambient": [0.36, 0.38, 0.55], "skyTop": [0.36, 0.52, 0.77], "skyBottom": [0.90, 0.95, 0.97]}
     json.dump({"version": 1, "settings": settings, "entities": E}, open(os.path.join(ROOT, "scenes", "village.scene.json"), "w"), indent=2)
 
+def house():
+    """A one-room interior with a doorway back outside."""
+    E = []
+    def ent(name, pos=(0, 0, 0), rot=(0, 0, 0, 1), scale=(1, 1, 1), parent=-1, **components):
+        c = {"Transform": {"position": list(pos), "rotation": list(rot), "scale": list(scale)}}
+        c.update(components); E.append({"name": name, "parent": parent, "components": c})
+    def box(name, tex, pos, scale, solid=True):
+        extra = {"Collider": {"size": [1, 1, 1], "offset": [0, 0, 0], "solid": True}} if solid else {}
+        ent(name, pos, scale=scale, MeshRenderer={"mesh": "builtin:cube", "texture": "assets/" + tex, "color": [1, 1, 1, 1],
+                                                  "emissive": [0, 0, 0], "worldTexels": True}, **extra)
+    eye, target = (5.5, 7.5, 8.5), (0.0, 0.5, 0.5)
+    ent("Camera", eye, look_at(eye, target), Camera={"orthographic": False, "fov": 34, "orthoSize": 5, "nearPlane": 0.1, "farPlane": 60})
+    ent("Sun", rot=look_at((0, 0, 0), (-0.3, -0.85, -0.45)), Light={"color": [1, 0.92, 0.8], "intensity": 2.6})
+    ent("HUD", Script={"path": "scripts/hud.lua", "params": "title = Home"})
+    box("Floor", "planks.png", (0, -0.25, 0), (8, 0.5, 7), solid=False)
+    box("Back Wall", "bricks.png", (0, 1.25, -3.75), (8, 2.5, 0.5))
+    box("Left Wall", "bricks.png", (-4.25, 1.25, 0), (0.5, 2.5, 8))
+    box("Right Wall", "bricks.png", (4.25, 1.25, 0), (0.5, 2.5, 8))
+    box("Front Wall Left", "bricks.png", (-2.5, 0.4, 3.75), (3.0, 0.8, 0.5))
+    box("Front Wall Right", "bricks.png", (2.5, 0.4, 3.75), (3.0, 0.8, 0.5))
+    box("Table", "planks.png", (1.6, 0.4, -1.2), (1.6, 0.8, 1.0))
+    box("Shelf", "planks.png", (-3.2, 1.0, -2.6), (1.2, 2.0, 0.8))
+    ent("Lantern", (1.6, 1.05, -1.2), scale=(0.25, 0.5, 0.25),
+        MeshRenderer={"mesh": "builtin:cube", "texture": "", "color": [1, 0.84, 0.35, 1], "emissive": [3.5, 2.2, 0.7], "worldTexels": False})
+    ent("Hero", (0.0, 0.6875, 2.2), SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True,
+                                                   "columns": 4, "rows": 1, "frame": 0, "fps": 0, "flipX": False},
+        Script={"path": "scripts/hero.lua"}, Collider={"size": [0.5, 1.375, 0.3], "offset": [0, 0, 0], "solid": True})
+    ent("Exit Trigger", (0.0, 0.5, 4.3), scale=(2.0, 1.0, 0.6), Collider={"size": [1, 1, 1], "offset": [0, 0, 0], "solid": False},
+        Script={"path": "scripts/door.lua", "params": "target = scenes/village.scene.json"})
+    settings = json.load(open(os.path.join(ROOT, "scenes", "village.scene.json")))["settings"]
+    settings.update({"ambient": [0.30, 0.28, 0.40], "skyTop": [0.10, 0.08, 0.14], "skyBottom": [0.18, 0.14, 0.20]})
+    json.dump({"version": 1, "settings": settings, "entities": E}, open(os.path.join(ROOT, "scenes", "house.scene.json"), "w"), indent=2)
+
 if __name__ == "__main__":
     art()
     scene()
+    house()
     print("wrote art to", os.path.normpath(ART))

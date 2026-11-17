@@ -265,7 +265,16 @@ void Editor::buildUi() {
     commit();
   }
 
-  if (playing_) scripts_->update(app_.dt);
+  if (playing_) {
+    scripts_->update(app_.dt);
+    if (!scripts_->pendingScene.empty()) { // level change during play: temporary, like every play-mode change
+      std::string next = std::exchange(scripts_->pendingScene, std::string());
+      if (scene_.load(project_.path(next))) {
+        scripts_->restart();
+        selected_ = kNoEntity;
+      }
+    }
+  }
   if (!scene_.reg.valid(selected_)) selected_ = kNoEntity; // a script may have destroyed it
   scene_.updateTransforms();
 

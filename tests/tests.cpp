@@ -1,6 +1,7 @@
 // CPU-only engine tests (no window or GPU needed). Run with: ctest --test-dir build
 #include "render/path_tracer.h"
 #include "scene/scene.h"
+#include "script/script.h"
 
 using namespace ace;
 
@@ -120,12 +121,48 @@ static void testMoveAndSlide() {
   CHECK(s.moveAndSlide(ghost, {1, 2, 3}) == vec3(1, 2, 3));
 }
 
+static void testQueries() {
+  Scene s;
+  Entity box = s.create("box"), trigger = s.create("trigger"), player = s.create("player");
+  s.reg.emplace<Collider>(box).size = vec3(2.0f);
+  s.reg.get<Transform>(box).position = {0, 0, -10};
+  Collider& tc = s.reg.emplace<Collider>(trigger);
+  tc.solid = false;
+  tc.size = vec3(4.0f);
+  s.reg.emplace<Collider>(player);
+  s.reg.get<Transform>(player).position = {1, 0, 0};
+  s.updateTransforms();
+
+  Scene::RayHit hit = s.raycast({0, 0, 0}, {0, 0, -5}, 100.0f, player); // direction need not be unit length
+  CHECK(hit.entity == box && fabsf(hit.distance - 9.0f) < 1e-4f && hit.normal == vec3(0, 0, 1));
+  CHECK(fabsf(hit.point.z + 9.0f) < 1e-4f);
+  CHECK(s.raycast({0, 0, 0}, {0, 0, -1}, 5.0f, player).entity == kNoEntity);       // out of range
+  CHECK(s.raycast({0, 0, 0}, {0, 1, 0}, 100.0f, player).entity == kNoEntity);      // triggers skipped...
+  CHECK(s.raycast({0, 5, 0}, {0, -1, 0}, 100.0f, player, true).entity == trigger); // ...unless asked for
+
+  std::vector<Entity> over = s.overlapping(player);
+  CHECK(over.size() == 1 && over[0] == trigger);
+  s.reg.get<Transform>(player).position = {10, 0, 0};
+  s.updateTransforms();
+  CHECK(s.overlapping(player).empty());
+}
+
+static void testScriptParams() {
+  auto p = parseScriptParams(" target = scenes/house.scene.json ; speed=2.5;\nloop=true;bad name=1;entity=3;=x;novalue");
+  CHECK(p.size() == 3);
+  CHECK(p.size() >= 3 && p[0].first == "target" && p[0].second == "scenes/house.scene.json");
+  CHECK(p.size() >= 3 && p[1].first == "speed" && p[1].second == "2.5" && p[2].first == "loop" && p[2].second == "true");
+  CHECK(parseScriptParams("").empty());
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
   testHierarchy();
   testBvh();
   testMoveAndSlide();
+  testQueries();
+  testScriptParams();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

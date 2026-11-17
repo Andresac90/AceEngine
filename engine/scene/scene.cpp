@@ -39,7 +39,7 @@ const std::vector<ComponentType>& componentTypes() {
                                   ACE_FIELD(Camera, nearPlane, Float), ACE_FIELD(Camera, farPlane, Float)}),
       makeType<Light>("Light", {ACE_FIELD(Light, color, Color3), ACE_FIELD(Light, intensity, Float)}),
       makeType<Collider>("Collider", {ACE_FIELD(Collider, size, Vec3), ACE_FIELD(Collider, offset, Vec3), ACE_FIELD(Collider, solid, Bool)}),
-      makeType<Script>("Script", {ACE_FIELD(Script, path, Asset)}),
+      makeType<Script>("Script", {ACE_FIELD(Script, path, Asset), ACE_FIELD(Script, params, String)}),
   };
   return types;
 }
@@ -232,6 +232,56 @@ vec3 Scene::moveAndSlide(Entity e, vec3 delta) {
   reg.get<Transform>(e).position += moved;
   reg.get<Transform>(e).world[3] += vec4(moved, 0.0f);
   return moved;
+}
+
+std::vector<Entity> Scene::overlapping(Entity e) {
+  std::vector<Entity> out;
+  Aabb me = colliderBounds(e);
+  if (me.min.x > me.max.x) return out;
+  for (auto [o, c] : reg.view<Collider>().each()) {
+    if (o == e) continue;
+    Aabb b = colliderBounds(o);
+    if (glm::all(glm::lessThan(me.min, b.max)) && glm::all(glm::greaterThan(me.max, b.min))) out.push_back(o);
+  }
+  std::sort(out.begin(), out.end());
+  return out;
+}
+
+Scene::RayHit Scene::raycast(vec3 origin, vec3 direction, f32 maxDistance, Entity ignore, bool includeTriggers) {
+  RayHit best;
+  f32 len = glm::length(direction);
+  if (len <= 0.0f) return best;
+  vec3 d = direction / len;
+  best.distance = maxDistance;
+  for (auto [o, c] : reg.view<Collider>().each()) {
+    if (o == ignore || (!c.solid && !includeTriggers)) continue;
+    Aabb b = colliderBounds(o);
+    f32 t0 = 0.0f, t1 = best.distance;
+    int axis = -1;
+    bool miss = false;
+    for (int a = 0; a < 3 && !miss; a++) {
+      if (fabsf(d[a]) < 1e-12f) {
+        miss = origin[a] < b.min[a] || origin[a] > b.max[a];
+        continue;
+      }
+      f32 lo = (b.min[a] - origin[a]) / d[a], hi = (b.max[a] - origin[a]) / d[a];
+      if (lo > hi) std::swap(lo, hi);
+      if (lo > t0) {
+        t0 = lo;
+        axis = a;
+      }
+      t1 = std::min(t1, hi);
+      miss = t0 > t1;
+    }
+    if (miss || t0 >= best.distance) continue;
+    best.entity = o;
+    best.distance = t0;
+    best.normal = vec3(0.0f);
+    if (axis >= 0) best.normal[axis] = d[axis] > 0.0f ? -1.0f : 1.0f; // axis < 0: the ray started inside
+  }
+  if (best.entity == kNoEntity) return RayHit{};
+  best.point = origin + d * best.distance;
+  return best;
 }
 
 json Scene::toJson() {

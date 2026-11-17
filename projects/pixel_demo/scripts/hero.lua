@@ -8,6 +8,9 @@ function Hero:update(dt)
   if ace.key("D") or ace.key("Right") then right = right + 1 end
   if ace.key("W") or ace.key("Up") then up = up + 1 end
   if ace.key("S") or ace.key("Down") then up = up - 1 end
+  -- Gamepad left stick.
+  local sx, sy = ace.gamepad_axis("leftx"), ace.gamepad_axis("lefty")
+  if sx ~= 0 or sy ~= 0 then right, up = sx, -sy end
   -- Touch / mouse: hold anywhere to walk in that direction from the screen centre.
   local down, px, py = ace.pointer()
   if down then

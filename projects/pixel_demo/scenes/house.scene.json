@@ -1,0 +1,676 @@
+{
+  "version": 1,
+  "settings": {
+    "pixelArt": true,
+    "pixelHeight": 216,
+    "toonBands": 3,
+    "dither": 0.6,
+    "texelLighting": true,
+    "texelsPerUnit": 16,
+    "palette": "assets/palette.png",
+    "rampShading": true,
+    "rampShadowSteps": 2,
+    "outlines": true,
+    "outlineStrength": 0.45,
+    "highlightStrength": 0.0,
+    "ambient": [
+      0.3,
+      0.28,
+      0.4
+    ],
+    "skyTop": [
+      0.1,
+      0.08,
+      0.14
+    ],
+    "skyBottom": [
+      0.18,
+      0.14,
+      0.2
+    ]
+  },
+  "entities": [
+    {
+      "name": "Camera",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            5.5,
+            7.5,
+            8.5
+          ],
+          "rotation": [
+            -0.29346929955061246,
+            0.28226047492659573,
+            0.09114857209264886,
+            0.9087886070593957
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Camera": {
+          "orthographic": false,
+          "fov": 34,
+          "orthoSize": 5,
+          "nearPlane": 0.1,
+          "farPlane": 60
+        }
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            -0.46058828637418886,
+            0.2540220075336562,
+            0.13945491213883157,
+            0.838977697929933
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Light": {
+          "color": [
+            1,
+            0.92,
+            0.8
+          ],
+          "intensity": 2.6
+        }
+      }
+    },
+    {
+      "name": "HUD",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Script": {
+          "path": "scripts/hud.lua",
+          "params": "title = Home"
+        }
+      }
+    },
+    {
+      "name": "Floor",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            -0.25,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            8,
+            0.5,
+            7
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "assets/planks.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ],
+          "worldTexels": true
+        }
+      }
+    },
+    {
+      "name": "Back Wall",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            1.25,
+            -3.75
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            8,
+            2.5,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "assets/bricks.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ],
+          "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
+        }
+      }
+    },
+    {
+      "name": "Left Wall",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            -4.25,
+            1.25,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            0.5,
+            2.5,
+            8
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "assets/bricks.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ],
+          "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
+        }
+      }
+    },
+    {
+      "name": "Right Wall",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            4.25,
+            1.25,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            0.5,
+            2.5,
+            8
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "assets/bricks.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ],
+          "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
+        }
+      }
+    },
+    {
+      "name": "Front Wall Left",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            -2.5,
+            0.4,
+            3.75
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            3.0,
+            0.8,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "assets/bricks.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ],
+          "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
+        }
+      }
+    },
+    {
+      "name": "Front Wall Right",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            2.5,
+            0.4,
+            3.75
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            3.0,
+            0.8,
+            0.5
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "assets/bricks.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ],
+          "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
+        }
+      }
+    },
+    {
+      "name": "Table",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            1.6,
+            0.4,
+            -1.2
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1.6,
+            0.8,
+            1.0
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "assets/planks.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ],
+          "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
+        }
+      }
+    },
+    {
+      "name": "Shelf",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            -3.2,
+            1.0,
+            -2.6
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1.2,
+            2.0,
+            0.8
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "assets/planks.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "emissive": [
+            0,
+            0,
+            0
+          ],
+          "worldTexels": true
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
+        }
+      }
+    },
+    {
+      "name": "Lantern",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            1.6,
+            1.05,
+            -1.2
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            0.25,
+            0.5,
+            0.25
+          ]
+        },
+        "MeshRenderer": {
+          "mesh": "builtin:cube",
+          "texture": "",
+          "color": [
+            1,
+            0.84,
+            0.35,
+            1
+          ],
+          "emissive": [
+            3.5,
+            2.2,
+            0.7
+          ],
+          "worldTexels": false
+        }
+      }
+    },
+    {
+      "name": "Hero",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0.0,
+            0.6875,
+            2.2
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "SpriteRenderer": {
+          "texture": "assets/hero.png",
+          "color": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "size": [
+            1.0,
+            1.375
+          ],
+          "billboard": true,
+          "columns": 4,
+          "rows": 1,
+          "frame": 0,
+          "fps": 0,
+          "flipX": false
+        },
+        "Script": {
+          "path": "scripts/hero.lua"
+        },
+        "Collider": {
+          "size": [
+            0.5,
+            1.375,
+            0.3
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": true
+        }
+      }
+    },
+    {
+      "name": "Exit Trigger",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0.0,
+            0.5,
+            4.3
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            2.0,
+            1.0,
+            0.6
+          ]
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": false
+        },
+        "Script": {
+          "path": "scripts/door.lua",
+          "params": "target = scenes/village.scene.json"
+        }
+      }
+    }
+  ]
+}

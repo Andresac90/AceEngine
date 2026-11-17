@@ -81,6 +81,11 @@ looking at screenshots produced with `--screenshot`:
   simulator down and use a fresh device; the first attempt hit stale state.
 - The path tracer with textures, world texel mapping, cutout sprites, palette
   and per-texel light gathering: `village` with `pathTraced` on, both backends.
+- Level switching end to end: `ace_player projects/pixel_demo --hold W
+  --frames 420` walks the hero into the village door trigger (`door.lua`,
+  `ace.overlaps`), `ace.load_scene` loads `house.scene.json`, and the HUD shows
+  that scene's title from Script `params`. Raycasts, overlaps and params parsing
+  are unit-tested. Gamepad input is written but no gamepad was connected.
 - Sound (`engine/audio`, `ace.play_sound`): with `SDL_AUDIO_DRIVER=disk
   SDL_AUDIO_DISK_OUTPUT_FILE=out.raw`, a walk produced one footstep burst per
   step at the requested volume. This session had no usable speaker
@@ -292,9 +297,11 @@ otherwise; ask the owner before installing anything.
 7. **Gameplay basics**: physics. A minimal kinematic layer exists (`Collider`
    boxes + `Scene::moveAndSlide`, exposed as `ace.move`); it has no rotation,
    triggers, raycasts or dynamics. Evaluate Jolt (3D) and Box2D (2D) before
-   extending it. Sound (WAV) and Lua hot reload are done. Still to do:
-   skeletal animation from glTF, compressed audio (OGG; stb_vorbis), and more
-   `ace.*` API (input axes, gamepad, raycasts, scene loading).
+   extending it. Done: sound (WAV), Lua hot reload, scene loading, trigger
+   overlaps, raycasts, gamepad, per-entity script params. Still to do:
+   skeletal animation from glTF, compressed audio (OGG; stb_vorbis), save
+   games (persisting data between sessions), passing state between scenes
+   (`ace.load_scene` currently starts the new scene fresh).
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
    outline, Build mode for placing grid blocks). Next: multi-select, copy/paste, prefabs,
    camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), an Export

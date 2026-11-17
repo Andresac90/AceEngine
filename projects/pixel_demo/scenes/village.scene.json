@@ -1456,6 +1456,47 @@
           "billboard": true
         }
       }
+    },
+    {
+      "name": "Door Trigger",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            -2.9,
+            0.5,
+            0.15
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1.2,
+            1.0,
+            0.6
+          ]
+        },
+        "Collider": {
+          "size": [
+            1,
+            1,
+            1
+          ],
+          "offset": [
+            0,
+            0,
+            0
+          ],
+          "solid": false
+        },
+        "Script": {
+          "path": "scripts/door.lua",
+          "params": "target = scenes/house.scene.json"
+        }
+      }
     }
   ]
 }

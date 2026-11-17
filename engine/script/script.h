@@ -13,6 +13,9 @@ struct lua_State;
 
 namespace ace {
 
+// "a=1; name=Bob" -> {{a, 1}, {name, Bob}}. Exposed for tests.
+std::vector<std::pair<std::string, std::string>> parseScriptParams(std::string_view text);
+
 class ScriptSystem {
 public:
   ScriptSystem(Scene& scene, Assets& assets, const Input& input);
@@ -25,6 +28,8 @@ public:
   f64 time = 0.0;
   Audio audio; // sounds started by scripts; they stop when this system is destroyed
   std::vector<TextDraw> texts; // queued by ace.text during update(); hand them to Renderer::render
+  std::string pendingScene; // set by ace.load_scene; the host loads it after update() and calls restart()
+  void restart();            // drop every script instance (after the scene was replaced)
   vec2 gameSize{320.0f, 180.0f}; // game pixels on screen; the host updates it from Renderer::gameSize()
 
 private:

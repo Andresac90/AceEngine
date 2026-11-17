@@ -132,6 +132,50 @@ int l_text_width(lua_State* L) {
   return 1;
 }
 
+// ace.load_scene(path): switch level after this frame's scripts have run.
+int l_load_scene(lua_State* L) {
+  self(L).pendingScene = luaL_checkstring(L, 1);
+  return 0;
+}
+// ace.overlaps(e) -> array of entity ids whose colliders overlap e's
+int l_overlaps(lua_State* L) {
+  std::vector<Entity> hits = self(L).scene.overlapping(checkEntity(L, 1));
+  lua_createtable(L, (int)hits.size(), 0);
+  for (size_t i = 0; i < hits.size(); i++) {
+    lua_pushinteger(L, (lua_Integer)(u32)hits[i]);
+    lua_rawseti(L, -2, (lua_Integer)i + 1);
+  }
+  return 1;
+}
+// ace.raycast(ox, oy, oz, dx, dy, dz [, max_distance [, ignore_entity]]) -> entity, distance, x, y, z  (nil if nothing)
+int l_raycast(lua_State* L) {
+  Entity ignore = lua_isnoneornil(L, 8) ? kNoEntity : checkEntity(L, 8);
+  Scene::RayHit hit = self(L).scene.raycast(checkVec3(L, 1), checkVec3(L, 4), (f32)luaL_optnumber(L, 7, 1000.0), ignore);
+  if (hit.entity == kNoEntity) {
+    lua_pushnil(L);
+    return 1;
+  }
+  lua_pushinteger(L, (lua_Integer)(u32)hit.entity);
+  lua_pushnumber(L, hit.distance);
+  pushVec3(L, hit.point);
+  return 5;
+}
+// ace.gamepad_axis(name) -> -1..1 ("leftx", "lefty", "rightx", "righty", "left_trigger", "right_trigger")
+int l_gamepad_axis(lua_State* L) {
+  SDL_GamepadAxis a = SDL_GetGamepadAxisFromString(luaL_checkstring(L, 1));
+  lua_pushnumber(L, a == SDL_GAMEPAD_AXIS_INVALID ? 0.0 : self(L).input.gamepadAxis[a]);
+  return 1;
+}
+// ace.gamepad_button(name) / ace.gamepad_pressed(name) ("south" = A on Xbox, "east", "start", "dpup", ...)
+int gamepadButton(lua_State* L, bool pressed) {
+  SDL_GamepadButton b = SDL_GetGamepadButtonFromString(luaL_checkstring(L, 1));
+  const Input& in = self(L).input;
+  lua_pushboolean(L, b != SDL_GAMEPAD_BUTTON_INVALID && (pressed ? in.gamepadPressed[b] : in.gamepadDown[b]));
+  return 1;
+}
+int l_gamepad_button(lua_State* L) { return gamepadButton(L, false); }
+int l_gamepad_pressed(lua_State* L) { return gamepadButton(L, true); }
+
 // ace.move(e, dx, dy, dz) -> moved x, y, z. Slides along solid colliders.
 int l_move(lua_State* L) { return pushVec3(L, self(L).scene.moveAndSlide(checkEntity(L, 1), checkVec3(L, 2))); }
 
@@ -192,6 +236,8 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
       {"set_position", l_set_position}, {"rotation", l_rotation}, {"set_rotation", l_set_rotation}, {"scale", l_scale},
       {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},               {"pointer", l_pointer},
       {"play_sound", l_play_sound}, {"stop_sound", l_stop_sound},
+      {"load_scene", l_load_scene},  {"overlaps", l_overlaps},   {"raycast", l_raycast},
+      {"gamepad_axis", l_gamepad_axis}, {"gamepad_button", l_gamepad_button}, {"gamepad_pressed", l_gamepad_pressed},
       {"text", l_text},             {"screen", l_screen},       {"text_width", l_text_width},
       {nullptr, nullptr}};
   lua_newtable(L_);
@@ -201,6 +247,35 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
 }
 
 ScriptSystem::~ScriptSystem() { lua_close(L_); }
+
+void ScriptSystem::restart() {
+  for (auto& [e, inst] : instances_)
+    if (inst.ref >= 0) luaL_unref(L_, LUA_REGISTRYINDEX, inst.ref);
+  instances_.clear();
+  texts.clear();
+}
+
+std::vector<std::pair<std::string, std::string>> parseScriptParams(std::string_view text) {
+  std::vector<std::pair<std::string, std::string>> out;
+  auto trim = [](std::string_view s) {
+    while (!s.empty() && isspace((unsigned char)s.front())) s.remove_prefix(1);
+    while (!s.empty() && isspace((unsigned char)s.back())) s.remove_suffix(1);
+    return std::string(s);
+  };
+  while (!text.empty()) {
+    size_t end = text.find_first_of(";\n");
+    std::string_view item = text.substr(0, end);
+    text = end == std::string_view::npos ? std::string_view() : text.substr(end + 1);
+    size_t eq = item.find('=');
+    if (eq == std::string_view::npos) continue;
+    std::string key = trim(item.substr(0, eq));
+    bool identifier = !key.empty() && !isdigit((unsigned char)key[0]) && key != "entity";
+    for (char c : key) identifier &= isalnum((unsigned char)c) || c == '_';
+    if (identifier) out.emplace_back(key, trim(item.substr(eq + 1)));
+    else ACE_WARN("script params: ignoring '%.*s' (need name=value; 'entity' is reserved)", (int)item.size(), item.data());
+  }
+  return out;
+}
 
 bool ScriptSystem::instantiate(Entity e, const std::string& path) {
   std::string source;
@@ -223,6 +298,15 @@ bool ScriptSystem::instantiate(Entity e, const std::string& path) {
   lua_newtable(L_);
   lua_pushinteger(L_, (lua_Integer)(u32)e);
   lua_setfield(L_, -2, "entity");
+  // Per-entity parameters from the Script component override the class defaults.
+  for (auto& [key, value] : parseScriptParams(scene.reg.get<Script>(e).params)) {
+    char* end = nullptr;
+    double number = strtod(value.c_str(), &end);
+    if (value == "true" || value == "false") lua_pushboolean(L_, value == "true");
+    else if (!value.empty() && end && *end == '\0') lua_pushnumber(L_, number);
+    else lua_pushlstring(L_, value.data(), value.size());
+    lua_setfield(L_, -2, key.c_str());
+  }
   lua_newtable(L_);
   lua_pushvalue(L_, -3);
   lua_setfield(L_, -2, "__index");
