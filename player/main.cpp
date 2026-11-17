@@ -90,15 +90,16 @@ int main(int argc, char** argv) {
           shotH = h;
           shot = device.createTexture({w, h, rhi::Format::RGBA8_SRGB, rhi::TextureUsage_RenderTarget | rhi::TextureUsage_Sampled, "screenshot"});
         }
-        renderer.render(*cmd, scene, assets, view, shot, rhi::Format::RGBA8_SRGB, shotW, shotH);
+        renderer.render(*cmd, scene, assets, view, shot, rhi::Format::RGBA8_SRGB, shotW, shotH, scripts.texts);
         rhi::RenderPassDesc clear;
         clear.color[0].texture = device.backbuffer();
         cmd->beginRenderPass(clear);
         cmd->endRenderPass();
       } else {
-        renderer.render(*cmd, scene, assets, view, device.backbuffer(), device.backbufferFormat(), w, h);
+        renderer.render(*cmd, scene, assets, view, device.backbuffer(), device.backbufferFormat(), w, h, scripts.texts);
       }
       device.endFrame();
+      scripts.gameSize = renderer.gameSize();
 
       if (frames > 0 && ++frame >= frames) break;
     }

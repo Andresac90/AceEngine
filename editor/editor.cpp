@@ -280,7 +280,10 @@ void Editor::render(rhi::CommandList& cmd, rhi::TextureHandle target) {
   if (viewportTexture_) {
     CameraView view = camera_.view();
     if (playing_) Renderer::findCamera(scene_, view); // falls back to the editor camera
-    renderer_.render(cmd, scene_, assets_, view, viewportTexture_, rhi::Format::RGBA8_SRGB, viewportW_, viewportH_);
+    std::span<const TextDraw> texts;
+    if (playing_) texts = scripts_->texts;
+    renderer_.render(cmd, scene_, assets_, view, viewportTexture_, rhi::Format::RGBA8_SRGB, viewportW_, viewportH_, texts);
+    if (playing_) scripts_->gameSize = renderer_.gameSize();
   }
   rhi::RenderPassDesc pass;
   pass.name = "editor ui";

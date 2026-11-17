@@ -34,6 +34,9 @@ Scripts reload automatically when you save the file while the game is running
 | `ace.pointer()` | returns `down, x, y`: left mouse button or a finger on a touch screen; `x`, `y` run 0..1 across the window |
 | `ace.play_sound(path [, volume [, loop]])` | plays a project `.wav`; returns an id (0 if it could not play). Sounds stop when play mode stops |
 | `ace.stop_sound(id)` | |
+| `ace.text(text, x, y [, r, g, b [, scale]])` | draws text for this frame with the built-in pixel font; `x`, `y` in game pixels from the top-left; `\n` starts a new line; lowercase prints as uppercase |
+| `ace.screen()` | returns `width, height` of the screen in game pixels, for laying out text |
+| `ace.text_width(text)` | width in game pixels at scale 1 (for centring) |
 | `ace.find(name)` | entity id or `nil` |
 | `ace.spawn(name)` | new empty entity |
 | `ace.destroy(e)` | destroys the entity and its children |

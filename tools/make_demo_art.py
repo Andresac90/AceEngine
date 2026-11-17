@@ -153,6 +153,7 @@ def scene():
     eye, target = (10.5, 6.5, 12.5), (0.0, 1.0, 0.0)
     ent("Camera", eye, look_at(eye, target), Camera={"orthographic": False, "fov": 32, "orthoSize": 5, "nearPlane": 0.1, "farPlane": 120},
         Script={"path": "scripts/camera_follow.lua"})
+    ent("HUD", Script={"path": "scripts/hud.lua"})
     sun = (-0.45, -0.75, -0.5)
     ent("Sun", rot=look_at((0, 0, 0), sun), Light={"color": [1, 0.95, 0.82], "intensity": 3.4})
     box("Ground", "grass.png", (0, 0, 0), (30, 1, 30), mesh="builtin:plane")

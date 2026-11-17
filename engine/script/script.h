@@ -4,6 +4,7 @@
 #pragma once
 #include "assets/assets.h"
 #include "audio/audio.h"
+#include "render/renderer.h"
 #include "platform/app.h"
 #include "scene/scene.h"
 #include <unordered_map>
@@ -23,6 +24,8 @@ public:
   const Input& input;
   f64 time = 0.0;
   Audio audio; // sounds started by scripts; they stop when this system is destroyed
+  std::vector<TextDraw> texts; // queued by ace.text during update(); hand them to Renderer::render
+  vec2 gameSize{320.0f, 180.0f}; // game pixels on screen; the host updates it from Renderer::gameSize()
 
 private:
   bool instantiate(Entity e, const std::string& path);

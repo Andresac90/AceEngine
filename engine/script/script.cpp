@@ -109,6 +109,29 @@ int l_stop_sound(lua_State* L) {
   return 0;
 }
 
+// ace.text(text, x, y [, r, g, b [, scale]]): draw text this frame, in game pixels from the top-left.
+int l_text(lua_State* L) {
+  TextDraw t;
+  t.text = luaL_checkstring(L, 1);
+  t.position = vec2((f32)luaL_checknumber(L, 2), (f32)luaL_checknumber(L, 3));
+  if (lua_gettop(L) >= 6) t.color = vec4((f32)luaL_checknumber(L, 4), (f32)luaL_checknumber(L, 5), (f32)luaL_checknumber(L, 6), 1.0f);
+  t.scale = (int)luaL_optinteger(L, 7, 1);
+  auto& texts = self(L).texts;
+  if (texts.size() < 1024) texts.push_back(std::move(t)); // bound a runaway loop
+  return 0;
+}
+// ace.screen() -> width, height in game pixels
+int l_screen(lua_State* L) {
+  lua_pushnumber(L, self(L).gameSize.x);
+  lua_pushnumber(L, self(L).gameSize.y);
+  return 2;
+}
+// ace.text_width(text) -> width in game pixels at scale 1
+int l_text_width(lua_State* L) {
+  lua_pushinteger(L, Renderer::textWidth(luaL_checkstring(L, 1)));
+  return 1;
+}
+
 // ace.move(e, dx, dy, dz) -> moved x, y, z. Slides along solid colliders.
 int l_move(lua_State* L) { return pushVec3(L, self(L).scene.moveAndSlide(checkEntity(L, 1), checkVec3(L, 2))); }
 
@@ -169,6 +192,7 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
       {"set_position", l_set_position}, {"rotation", l_rotation}, {"set_rotation", l_set_rotation}, {"scale", l_scale},
       {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},               {"pointer", l_pointer},
       {"play_sound", l_play_sound}, {"stop_sound", l_stop_sound},
+      {"text", l_text},             {"screen", l_screen},       {"text_width", l_text_width},
       {nullptr, nullptr}};
   lua_newtable(L_);
   lua_pushlightuserdata(L_, this);
@@ -219,6 +243,7 @@ static i64 fileTime(const std::string& path) {
 
 void ScriptSystem::update(f32 dt) {
   time += dt;
+  texts.clear();
   audio.update();
   // Hot reload: twice a second, restart any script whose file changed on disk.
   // The instance starts fresh (its `start` runs again); entity state is kept.

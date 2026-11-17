@@ -283,16 +283,18 @@ otherwise; ask the owner before installing anything.
    `SDL_LoadFile`; honor `currentTransform`, see the shortcut in
    `createSwapchain`).
    The Android NDK and a JDK are not installed on this machine.
-6. **2D feature set**: sprite sheets and animation, tilemaps with an editor
-   paint tool, sprite sorting, text rendering (the repo has
-   `assets/fonts/font_atlas.png` + `.meta` from the old project), an in-game
-   UI layer drawn at native resolution after the present pass.
+6. **2D feature set**: done: sprite sheets/animation, screen text with a
+   built-in 5x7 pixel font (`render/pixel_font.h`, `ace.text`). Next: tilemaps
+   with an editor paint tool, sprite sorting for overlapping transparent
+   sprites, images/panels for UI (`ace.image`), lowercase glyphs. The old
+   anti-aliased `assets/fonts/font_atlas.png` is unused (it clashes with
+   pixel art); delete it once the owner agrees.
 7. **Gameplay basics**: physics. A minimal kinematic layer exists (`Collider`
    boxes + `Scene::moveAndSlide`, exposed as `ace.move`); it has no rotation,
    triggers, raycasts or dynamics. Evaluate Jolt (3D) and Box2D (2D) before
-   extending it. Also: audio (SDL3 audio streams or miniaudio),
-   skeletal animation from glTF, more `ace.*`
-   API (sound and Lua hot reload are done) (input axes, gamepad, raycasts, scene loading).
+   extending it. Sound (WAV) and Lua hot reload are done. Still to do:
+   skeletal animation from glTF, compressed audio (OGG; stb_vorbis), and more
+   `ace.*` API (input axes, gamepad, raycasts, scene loading).
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
    outline, Build mode for placing grid blocks). Next: multi-select, copy/paste, prefabs,
    camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), an Export

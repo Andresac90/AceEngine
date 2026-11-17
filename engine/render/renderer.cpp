@@ -1,5 +1,6 @@
 #include "render/renderer.h"
 #include "render/path_tracer.h"
+#include "render/pixel_font.h"
 #include <SDL3/SDL.h>
 
 namespace ace {
@@ -103,6 +104,24 @@ Renderer::Renderer(Device& device) : device_(device) {
 
   presentVs_ = loadShader("present", ShaderStage::Vertex);
   presentFs_ = loadShader("present", ShaderStage::Fragment);
+  uiVs_ = loadShader("imgui", ShaderStage::Vertex);
+  uiFs_ = loadShader("imgui", ShaderStage::Fragment);
+
+  // Font atlas: glyphs side by side in ASCII order starting at ' ', white with alpha.
+  {
+    const int count = 95;
+    font_.width = (u32)(count * pixel_font::kGlyphW);
+    font_.height = (u32)pixel_font::kGlyphH;
+    font_.pixels.assign((size_t)font_.width * font_.height * 4, 0);
+    for (const pixel_font::Glyph& g : pixel_font::kGlyphs) {
+      int index = g.c - ' ';
+      for (int y = 0; y < pixel_font::kGlyphH; y++)
+        for (int x = 0; x < pixel_font::kGlyphW; x++)
+          if (g.rows[y][x] == '#') memset(&font_.pixels[((size_t)y * font_.width + index * pixel_font::kGlyphW + x) * 4], 255, 4);
+    }
+    font_.handle = device_.createTexture({font_.width, font_.height, Format::RGBA8, TextureUsage_Sampled, "pixel font"});
+    device_.writeTexture(font_.handle, font_.pixels.data());
+  }
   pathTracer_ = std::make_unique<PathTracer>(*this);
 }
 
@@ -321,8 +340,90 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   cmd.endRenderPass();
 }
 
+int Renderer::textWidth(std::string_view text) {
+  int best = 0, line = 0;
+  for (char c : text) {
+    line = c == '\n' ? 0 : line + pixel_font::kAdvance;
+    best = std::max(best, line);
+  }
+  return best > 0 ? best - 1 : 0; // no spacing after the last glyph
+}
+
+void Renderer::drawTexts(CommandList& cmd, std::span<const TextDraw> texts, Format targetFormat, u32 width, u32 height, f32 ppg) {
+  struct UiVertex {
+    vec2 pos, uv;
+    u8 color[4];
+  };
+  std::vector<UiVertex> verts;
+  auto quad = [&](vec2 p0, vec2 p1, vec2 uv0, vec2 uv1, const u8* color) {
+    UiVertex v[4] = {{p0, uv0, {}}, {{p1.x, p0.y}, {uv1.x, uv0.y}, {}}, {p1, uv1, {}}, {{p0.x, p1.y}, {uv0.x, uv1.y}, {}}};
+    for (UiVertex& x : v) memcpy(x.color, color, 4);
+    for (int i : {0, 1, 2, 0, 2, 3}) verts.push_back(v[i]);
+  };
+  for (const TextDraw& t : texts) {
+    int scale = std::max(t.scale, 1);
+    for (int pass = t.shadow ? 0 : 1; pass < 2; pass++) {
+      vec4 c = pass == 0 ? vec4(0.05f, 0.05f, 0.1f, t.color.a * 0.85f) : t.color;
+      u8 color[4];
+      for (int i = 0; i < 4; i++) color[i] = (u8)(glm::clamp(c[i], 0.0f, 1.0f) * 255.0f + 0.5f);
+      vec2 pen = glm::floor(t.position) + (pass == 0 ? vec2((f32)scale) : vec2(0.0f));
+      f32 lineStart = pen.x;
+      for (char ch : t.text) {
+        if (ch == '\n') {
+          pen = vec2(lineStart, pen.y + pixel_font::kLineHeight * scale);
+          continue;
+        }
+        unsigned char u = (unsigned char)(ch >= 'a' && ch <= 'z' ? ch - 32 : ch);
+        int index = u >= 32 && u < 127 ? u - 32 : '?' - 32;
+        if (index != 0) {
+          vec2 uv0((f32)(index * pixel_font::kGlyphW) / (f32)font_.width, 0.0f);
+          vec2 uv1((f32)((index + 1) * pixel_font::kGlyphW) / (f32)font_.width, 1.0f);
+          vec2 size((f32)(pixel_font::kGlyphW * scale), (f32)(pixel_font::kGlyphH * scale));
+          quad(pen * ppg, (pen + size) * ppg, uv0, uv1, color);
+        }
+        pen.x += (f32)(pixel_font::kAdvance * scale);
+      }
+    }
+  }
+  if (verts.empty()) return;
+
+  PipelineHandle& pipeline = uiPipelines_[targetFormat];
+  if (!pipeline) {
+    PipelineDesc p;
+    p.name = "ui text";
+    p.vertexShader = uiVs_;
+    p.fragmentShader = uiFs_;
+    p.attributes[0] = {0, VertexFormat::Float2, offsetof(UiVertex, pos)};
+    p.attributes[1] = {1, VertexFormat::Float2, offsetof(UiVertex, uv)};
+    p.attributes[2] = {2, VertexFormat::UByte4Norm, offsetof(UiVertex, color)};
+    p.attributeCount = 3;
+    p.vertexStride = sizeof(UiVertex);
+    p.bindGroupLayouts[0] = drawLayout_; // one uniform buffer: scale + translate
+    p.bindGroupLayouts[1] = materialLayout_;
+    p.colorFormats[0] = targetFormat;
+    p.cull = CullMode::None;
+    p.blend[0] = BlendMode::Alpha;
+    pipeline = device_.createPipeline(p);
+    ACE_ASSERT(pipeline, "failed to create the text pipeline");
+  }
+  u64 bytes = verts.size() * sizeof(UiVertex);
+  if (bytes > uiCapacity_) {
+    if (uiVertices_) device_.destroy(uiVertices_);
+    uiCapacity_ = bytes * 2;
+    uiVertices_ = device_.createBuffer({uiCapacity_, BufferUsage_Vertex, "ui text"});
+  }
+  device_.writeBuffer(uiVertices_, 0, verts.data(), bytes);
+  vec4 st(2.0f / (f32)width, -2.0f / (f32)height, -1.0f, 1.0f); // pixels -> clip space, +Y up
+  u32 offset = pushUniform(&st, sizeof(st));
+  cmd.setPipeline(pipeline);
+  cmd.setBindGroup(0, drawGroup_, {&offset, 1});
+  cmd.setBindGroup(1, materialGroup(&font_));
+  cmd.setVertexBuffer(uiVertices_);
+  cmd.draw((u32)verts.size());
+}
+
 void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const CameraView& cv, TextureHandle target, Format targetFormat,
-                      u32 width, u32 height) {
+                      u32 width, u32 height, std::span<const TextDraw> texts) {
   if (width == 0 || height == 0) return;
   const RenderSettings& s = scene.settings;
   f32 aspect = (f32)width / (f32)height;
@@ -417,6 +518,8 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
   cmd.setPipeline(presentPipeline);
   cmd.setBindGroup(0, presentGroup_, {&offset, 1});
   cmd.draw(3);
+  gameSize_ = shown;
+  if (!texts.empty()) drawTexts(cmd, texts, targetFormat, width, height, (f32)height / shown.y);
   cmd.endRenderPass();
 }
 

@@ -65,6 +65,33 @@
       }
     },
     {
+      "name": "HUD",
+      "parent": -1,
+      "components": {
+        "Transform": {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0,
+            1
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ]
+        },
+        "Script": {
+          "path": "scripts/hud.lua"
+        }
+      }
+    },
+    {
       "name": "Sun",
       "parent": -1,
       "components": {
@@ -242,7 +269,7 @@
     },
     {
       "name": "Walls",
-      "parent": 5,
+      "parent": 6,
       "components": {
         "Transform": {
           "position": [
@@ -295,7 +322,7 @@
     },
     {
       "name": "Roof",
-      "parent": 5,
+      "parent": 6,
       "components": {
         "Transform": {
           "position": [
@@ -348,7 +375,7 @@
     },
     {
       "name": "Roof Top",
-      "parent": 5,
+      "parent": 6,
       "components": {
         "Transform": {
           "position": [
@@ -401,7 +428,7 @@
     },
     {
       "name": "Door",
-      "parent": 5,
+      "parent": 6,
       "components": {
         "Transform": {
           "position": [
@@ -454,7 +481,7 @@
     },
     {
       "name": "Chimney",
-      "parent": 5,
+      "parent": 6,
       "components": {
         "Transform": {
           "position": [

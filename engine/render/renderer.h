@@ -13,6 +13,16 @@
 
 namespace ace {
 
+// Screen text in game pixels: (0, 0) is the top-left corner, and one font pixel
+// is one game pixel times `scale`, so text matches the pixel art.
+struct TextDraw {
+  std::string text;
+  vec2 position{0.0f};
+  vec4 color{1.0f}; // sRGB
+  int scale = 1;
+  bool shadow = true; // dark copy one pixel down-right, for legibility over the scene
+};
+
 struct CameraView {
   mat4 world{1.0f}; // camera-to-world transform
   Camera camera;
@@ -32,7 +42,11 @@ public:
 
   void beginFrame(); // once per frame, before any render()
   void render(rhi::CommandList& cmd, Scene& scene, Assets& assets, const CameraView& view, rhi::TextureHandle target,
-              rhi::Format targetFormat, u32 width, u32 height);
+              rhi::Format targetFormat, u32 width, u32 height, std::span<const TextDraw> texts = {});
+  // Size in game pixels of the image produced by the last render() (for UI layout).
+  vec2 gameSize() const { return gameSize_; }
+  // Width in font pixels of `text` at scale 1 (longest line).
+  static int textWidth(std::string_view text);
 
   // First entity with a Camera component. Returns false if the scene has none.
   static bool findCamera(Scene& scene, CameraView& out);
@@ -70,6 +84,14 @@ private:
   u32 lowWidth_ = 0, lowHeight_ = 0;
 
   std::unique_ptr<PathTracer> pathTracer_;
+
+  void drawTexts(rhi::CommandList& cmd, std::span<const TextDraw> texts, rhi::Format targetFormat, u32 width, u32 height, f32 pixelsPerGamePixel);
+  rhi::ShaderHandle uiVs_, uiFs_;
+  std::map<rhi::Format, rhi::PipelineHandle> uiPipelines_;
+  Texture font_; // built-in pixel font atlas (not owned by Assets)
+  rhi::BufferHandle uiVertices_;
+  u64 uiCapacity_ = 0;
+  vec2 gameSize_{0.0f};
 };
 
 } // namespace ace
