@@ -609,35 +609,98 @@ void Editor::drawConsole() {
   ImGui::End();
 }
 
-// Nearest entity whose mesh bounds are hit by the ray through viewport point `uv` (0..1).
-Entity Editor::pick(vec2 uv) {
+bool Editor::raycast(vec2 uv, Entity& entity, vec3& point, vec3& normal) {
   CameraView cv = camera_.view();
   mat4 invViewProj = glm::inverse(cv.camera.projection((f32)viewportW_ / (f32)viewportH_) * glm::inverse(cv.world));
   vec2 ndc{uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f};
   vec4 nearP = invViewProj * vec4(ndc, 0.0f, 1.0f), farP = invViewProj * vec4(ndc, 1.0f, 1.0f);
   vec3 origin = vec3(nearP) / nearP.w, end = vec3(farP) / farP.w;
-  Entity best = kNoEntity;
+  entity = kNoEntity;
   f32 bestT = 2.0f; // t is in 0..1 along origin->end
+  // Tests against mesh bounds, not triangles.
+  // shortcut: exact for boxes and planes (what levels are built from); loose for
+  // spheres and imported models. Trace triangles if picking them feels sloppy.
   auto test = [&](Entity e, const mat4& world, Aabb box) {
     mat4 inv = glm::inverse(world);
     vec3 o = vec3(inv * vec4(origin, 1.0f)), d = vec3(inv * vec4(end, 1.0f)) - o;
     vec3 pad = glm::max(vec3(0.02f) - (box.max - box.min), vec3(0.0f)) * 0.5f; // give flat meshes some thickness
     f32 t0 = 0.0f, t1 = 1.0f;
+    int entryAxis = 1;
     for (int a = 0; a < 3; a++) {
       f32 lo = (box.min[a] - pad[a] - o[a]) / d[a], hi = (box.max[a] + pad[a] - o[a]) / d[a];
       if (lo > hi) std::swap(lo, hi);
-      t0 = std::max(t0, lo);
+      if (lo > t0) {
+        t0 = lo;
+        entryAxis = a;
+      }
       t1 = std::min(t1, hi);
     }
-    if (t0 <= t1 && t0 < bestT) {
-      bestT = t0;
-      best = e;
-    }
+    if (t0 > t1 || t0 >= bestT) return;
+    bestT = t0;
+    entity = e;
+    vec3 local(0.0f);
+    local[entryAxis] = d[entryAxis] > 0.0f ? -1.0f : 1.0f; // the face the ray entered through
+    normal = glm::normalize(glm::transpose(mat3(inv)) * local);
+    point = origin + (end - origin) * t0;
   };
   for (auto [e, t, m] : scene_.reg.view<Transform, MeshRenderer>().each()) test(e, t.world, assets_.mesh(m.mesh)->bounds);
   for (auto [e, t, s] : scene_.reg.view<Transform, SpriteRenderer>().each())
     test(e, t.world, Aabb{vec3(-s.size * 0.5f, 0.0f), vec3(s.size * 0.5f, 0.0f)});
-  return best;
+  return entity != kNoEntity;
+}
+
+Entity Editor::pick(vec2 uv) {
+  Entity e;
+  vec3 point, normal;
+  raycast(uv, e, point, normal);
+  return e;
+}
+
+// Centre of the block a click at `uv` would create: against the clicked face,
+// aligned to a grid whose cell is the brush size.
+bool Editor::blockPlacement(vec2 uv, vec3& center) {
+  Entity hit;
+  vec3 point, normal;
+  if (!raycast(uv, hit, point, normal)) return false;
+  vec3 size = glm::max(brushSize_, vec3(0.0625f));
+  vec3 a = glm::abs(normal);
+  int axis = a.x > a.y ? (a.x > a.z ? 0 : 2) : (a.y > a.z ? 1 : 2);
+  for (int i = 0; i < 3; i++) {
+    if (i == axis) {
+      f32 face = point[i] + (normal[i] > 0.0f ? 0.0f : -size[i]); // low side of the new block
+      center[i] = roundf(face / size[i]) * size[i] + size[i] * 0.5f;
+    } else {
+      center[i] = floorf(point[i] / size[i] + 1e-4f) * size[i] + size[i] * 0.5f;
+    }
+  }
+  return true;
+}
+
+void Editor::buildModeClick(vec2 uv, bool erase, ImVec2, ImVec2) {
+  if (erase) {
+    Entity hit;
+    vec3 point, normal;
+    // Only blocks made by this tool can be erased with it, so a stray click
+    // cannot delete the ground or hand-placed entities.
+    if (raycast(uv, hit, point, normal) && scene_.reg.get<Name>(hit).value == "Block") {
+      scene_.destroy(hit);
+      commit();
+    }
+    return;
+  }
+  vec3 center;
+  if (!blockPlacement(uv, center)) return;
+  Entity root = scene_.find("Blocks");
+  if (root == kNoEntity) root = scene_.create("Blocks");
+  Entity e = scene_.create("Block", root);
+  Transform& t = scene_.reg.get<Transform>(e);
+  t.position = center - vec3(scene_.reg.get<Transform>(root).world[3]);
+  t.scale = glm::max(brushSize_, vec3(0.0625f));
+  MeshRenderer& m = scene_.reg.emplace<MeshRenderer>(e);
+  m.texture = brushTexture_;
+  m.worldTexels = true;
+  scene_.reg.emplace<Collider>(e);
+  commit();
 }
 
 void Editor::drawToolbar() {
@@ -657,6 +720,23 @@ void Editor::drawToolbar() {
   if (ImGui::IsItemHovered()) ImGui::SetTooltip("Move step in world units (rotate snaps to 15 degrees, scale to 0.25)");
   ImGui::SameLine();
   ImGui::Checkbox("Orthographic", &camera_.orthographic);
+  ImGui::SameLine();
+  ImGui::Checkbox("Build", &buildMode_);
+  if (ImGui::IsItemHovered()) ImGui::SetTooltip("Click a surface to add a block there; Shift+click removes a block");
+  if (buildMode_) {
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(150);
+    if (ImGui::BeginCombo("##brush", brushTexture_.empty() ? "(no texture)" : brushTexture_.c_str())) {
+      if (ImGui::Selectable("(no texture)", brushTexture_.empty())) brushTexture_.clear();
+      for (const std::string& f : assetFiles_)
+        if ((endsWith(f, ".png") || endsWith(f, ".jpg")) && ImGui::Selectable(f.c_str(), f == brushTexture_)) brushTexture_ = f;
+      ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(130);
+    ImGui::DragFloat3("##brushsize", &brushSize_.x, 0.0625f, 0.0625f, 64.0f, "%.4g");
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Block size (also the placement grid)");
+  }
   ImGui::EndDisabled();
   ImGui::SameLine();
   ImGui::TextDisabled("%s | %.0f fps", rhi::backendName(app_.device->backend()), ImGui::GetIO().Framerate);
@@ -695,8 +775,31 @@ void Editor::drawViewport() {
         camera_.pitch = glm::clamp(camera_.pitch - io.MouseDelta.y * 0.3f, -89.0f, 89.0f);
       }
 
+      vec2 mouseUv((io.MousePos.x - pos.x) / size.x, (io.MousePos.y - pos.y) / size.y);
+      auto wireBox = [&](const Aabb& box, ImU32 color) {
+        CameraView cv = camera_.view();
+        mat4 viewProj = cv.camera.projection(size.x / size.y) * glm::inverse(cv.world);
+        ImVec2 corner[8];
+        for (int c = 0; c < 8; c++) {
+          vec4 clip = viewProj * vec4(c & 1 ? box.max.x : box.min.x, c & 2 ? box.max.y : box.min.y, c & 4 ? box.max.z : box.min.z, 1.0f);
+          if (clip.w <= 0.001f) return; // partly behind the camera: skip rather than draw garbage
+          corner[c] = ImVec2(pos.x + (clip.x / clip.w * 0.5f + 0.5f) * size.x, pos.y + (0.5f - clip.y / clip.w * 0.5f) * size.y);
+        }
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->PushClipRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), true);
+        for (int a = 0; a < 8; a++)
+          for (int bit = 1; bit < 8; bit <<= 1)
+            if (!(a & bit)) dl->AddLine(corner[a], corner[a | bit], color, 1.5f);
+        dl->PopClipRect();
+      };
+      if (buildMode_) {
+        vec3 center;
+        vec3 half = glm::max(brushSize_, vec3(0.0625f)) * 0.5f;
+        if (hovered && !io.KeyShift && blockPlacement(mouseUv, center)) wireBox(Aabb{center - half, center + half}, IM_COL32(255, 230, 90, 255));
+        if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) buildModeClick(mouseUv, io.KeyShift, pos, size);
+      }
       bool gizmoActive = false;
-      if (selected_ != kNoEntity) {
+      if (selected_ != kNoEntity && !buildMode_) {
         CameraView cv = camera_.view();
         mat4 view = glm::inverse(cv.world);
         mat4 proj = cv.camera.projection(size.x / size.y);
@@ -710,24 +813,7 @@ void Editor::drawViewport() {
         f32 snapValues[3] = {step, step, step};
         // Collider outline of the selection, so blocking volumes can be lined up by eye.
         Aabb box = scene_.colliderBounds(selected_);
-        if (box.min.x <= box.max.x) {
-          mat4 viewProj = proj * view;
-          ImVec2 corner[8];
-          bool visible = true;
-          for (int c = 0; c < 8; c++) {
-            vec4 clip = viewProj * vec4(c & 1 ? box.max.x : box.min.x, c & 2 ? box.max.y : box.min.y, c & 4 ? box.max.z : box.min.z, 1.0f);
-            visible &= clip.w > 0.001f;
-            corner[c] = ImVec2(pos.x + (clip.x / clip.w * 0.5f + 0.5f) * size.x, pos.y + (0.5f - clip.y / clip.w * 0.5f) * size.y);
-          }
-          if (visible) {
-            ImDrawList* dl = ImGui::GetWindowDrawList();
-            dl->PushClipRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), true);
-            for (int a = 0; a < 8; a++)
-              for (int bit = 1; bit < 8; bit <<= 1)
-                if (!(a & bit)) dl->AddLine(corner[a], corner[a | bit], IM_COL32(90, 255, 140, 220), 1.5f);
-            dl->PopClipRect();
-          }
-        }
+        if (box.min.x <= box.max.x) wireBox(box, IM_COL32(90, 255, 140, 220));
         if (ImGuizmo::Manipulate(&view[0][0], &proj[0][0], ops[gizmoOp_], gizmoOp_ == 2 ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world[0][0],
                                  nullptr, snap_ ? snapValues : nullptr)) {
           mat4 parentWorld = scene_.reg.valid(t.parent) ? scene_.reg.get<Transform>(t.parent).world : mat4(1.0f);
@@ -740,8 +826,8 @@ void Editor::drawViewport() {
         if (gizmoWasUsing_ && !gizmoActive) commit(); // one undo step per drag
         gizmoWasUsing_ = gizmoActive;
       }
-      if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !gizmoActive && !(selected_ != kNoEntity && ImGuizmo::IsOver()))
-        selected_ = pick({(io.MousePos.x - pos.x) / size.x, (io.MousePos.y - pos.y) / size.y});
+      if (!buildMode_ && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !gizmoActive && !(selected_ != kNoEntity && ImGuizmo::IsOver()))
+        selected_ = pick(mouseUv);
     }
   }
   ImGui::End();
@@ -896,6 +982,41 @@ void Editor::autotestStep() {
     case 24:
       expect(!playing_, "F5 should stop play mode");
       expect(glm::distance(positionOf("Orb"), before) < 1e-5f, "stopping should restore the scene");
+      // --- build mode: click open ground to place a block, shift-click to remove it
+      buildMode_ = true;
+      brushSize_ = vec3(1.0f);
+      before = vec3(-4.0f, 0.0f, 4.0f); // inside the cell whose centre is (-3.5, 0.5, 4.5)
+      {
+        ImVec2 p = toScreen(before + vec3(0.5f, 0.0f, 0.5f));
+        moveTo(p.x, p.y);
+      }
+      break;
+    case 25:
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+      break;
+    case 26: {
+      Entity block = scene_.find("Block");
+      expect(block != kNoEntity, "clicking the ground in build mode should create a Block");
+      if (block != kNoEntity) {
+        expect(glm::distance(vec3(scene_.reg.get<Transform>(block).world[3]), vec3(-3.5f, 0.5f, 4.5f)) < 1e-3f,
+               "the block should sit on the ground, centred in its grid cell");
+        expect(scene_.reg.all_of<Collider>(block) && scene_.reg.get<MeshRenderer>(block).worldTexels, "blocks are solid and world-mapped");
+        ImVec2 p = toScreen(vec3(-3.5f, 1.0f, 4.5f)); // top face of the new block
+        moveTo(p.x, p.y);
+      }
+      io.AddKeyEvent(ImGuiMod_Shift, true);
+      break;
+    }
+    case 27:
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+      break;
+    case 28:
+      io.AddKeyEvent(ImGuiMod_Shift, false);
+      expect(scene_.find("Block") == kNoEntity, "shift-click should remove the block");
+      expect(scene_.find("Ground") != kNoEntity, "erasing must never remove non-block entities");
+      buildMode_ = false;
       if (autotestResult_ == 0) {
         ACE_INFO("autotest passed");
         autotestResult_ = 1;

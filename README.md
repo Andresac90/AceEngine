@@ -38,6 +38,9 @@ Add `--backend vulkan` (or `metal`) to pick the GPU backend.
 | Orbit / pan / zoom | right-drag / middle-drag or Shift+right-drag / wheel |
 | Select | click in the viewport or the Hierarchy |
 | Move / rotate / scale | W / E / R, then drag the gizmo |
+| Snap the gizmo to a grid | Snap checkbox + step in the toolbar |
+| Build levels from blocks | tick **Build**, pick a texture and block size, click any surface to add a block there; Shift+click removes a block |
+| Pick a mesh / texture / script | the arrow button beside the field, or drag from Assets |
 | Focus selection | F |
 | Create entities | Entity menu; right-click a node for Add Child |
 | Re-parent | drag a node onto another (or onto empty space) |

@@ -60,7 +60,8 @@ looking at screenshots produced with `--screenshot`:
 - Editor interactions, by `tools/autotest.sh` on Metal and Vulkan (it injects
   real mouse/keyboard input): orbit, wheel zoom, viewport click-select, gizmo
   X-axis drag, one undo step per drag, undo/redo, duplicate, delete, save to
-  disk, play/stop restoring the scene.
+  disk, play/stop restoring the scene, Build mode place and Shift-erase.
+  When you add an editor feature, add steps to `Editor::autotestStep`.
 - Raster sun shadows, direct sampling of emissive triangles in the path tracer,
   a hand-made glTF model (`assets/pine.gltf`), and the pixel-art feature set
   (world-space texel mapping, texel-space lighting, dithering, palette, billboard
@@ -285,7 +286,8 @@ otherwise; ask the owner before installing anything.
    extending it. Also: audio (SDL3 audio streams or miniaudio),
    skeletal animation from glTF, Lua hot reload on file change, more `ace.*`
    API (input axes, gamepad, raycasts, scene loading).
-8. **Editor power features**: multi-select, copy/paste, prefabs, snapping,
+8. **Editor power features** (done: gizmo snapping, asset pickers, collider
+   outline, Build mode for placing grid blocks). Next: multi-select, copy/paste, prefabs,
    camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), an Export
    menu that runs the export scripts, crisp fonts on HiDPI displays, a
    game-resolution preview, asset thumbnails.

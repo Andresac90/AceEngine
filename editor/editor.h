@@ -61,6 +61,10 @@ private:
   void setPlaying(bool playing);
   Entity createEntity(const char* name, const char* mesh);
   Entity pick(vec2 uv);
+  // Ray through viewport point `uv` (0..1): nearest entity, world hit point and surface normal.
+  bool raycast(vec2 uv, Entity& entity, vec3& point, vec3& normal);
+  void buildModeClick(vec2 uv, bool erase, ImVec2 viewPos, ImVec2 viewSize);
+  bool blockPlacement(vec2 uv, vec3& center); // where a click would put a block
   void refreshAssets();
 
   App& app_;
@@ -76,7 +80,11 @@ private:
   EditorCamera camera_;
   int gizmoOp_ = 0; // 0 move, 1 rotate, 2 scale
   bool snap_ = true;      // gizmo snapping: move by snapMove_, rotate by 15 degrees, scale by 0.25
-  f32 snapMove_ = 0.25f;  // world units; 0.25 = 4 texels at 16 texels per unit
+  f32 snapMove_ = 0.25f;
+  // Build mode: click a surface to add a textured, solid block on the grid.
+  bool buildMode_ = false;
+  std::string brushTexture_;
+  vec3 brushSize_{1.0f};  // world units; 0.25 = 4 texels at 16 texels per unit
   bool gizmoWasUsing_ = false;
   bool playing_ = false;
   bool dirty_ = false;
