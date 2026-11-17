@@ -1,6 +1,8 @@
 #include "render/path_tracer.h"
 #include <algorithm>
+#include <SDL3/SDL.h>
 #include <glm/gtx/component_wise.hpp>
+#include <map>
 
 namespace ace {
 
@@ -11,6 +13,7 @@ struct TraceData {
   mat4 invViewProj, view;
   vec4 lightDir, lightColor, skyTop, skyBottom, params, lightInfo;
 };
+constexpr u32 kAtlasSize = 1024;
 constexpr u32 kMovingHistoryFrames = 6;
 constexpr u32 kMaxAccumulatedFrames = 512; // RGBA16F stops gaining precision beyond this
 
@@ -27,6 +30,7 @@ PathTracer::PathTracer(Renderer& renderer) : r_(renderer) {
   l.bindings[1] = BindingType::StorageBuffer;
   l.bindings[2] = BindingType::StorageBuffer;
   l.bindings[3] = BindingType::StorageBuffer;
+  l.bindings[4] = BindingType::Texture;
   layout_ = dev.createBindGroupLayout(l);
   PipelineDesc p;
   p.name = "pathtrace";
@@ -37,6 +41,7 @@ PathTracer::PathTracer(Renderer& renderer) : r_(renderer) {
   p.colorCount = 2;
   p.blend[0] = BlendMode::Alpha; // running average across frames
   p.cull = CullMode::None;
+  atlas_ = dev.createTexture({kAtlasSize, kAtlasSize, Format::RGBA8_SRGB, TextureUsage_Sampled, "path tracer atlas"});
   pipeline_ = dev.createPipeline(p);
   ACE_ASSERT(pipeline_, "failed to create path tracing pipeline");
 }
@@ -89,18 +94,43 @@ void PathTracer::buildBvh(std::vector<Triangle>& tris, std::vector<Node>& nodes)
   }
 }
 
-void PathTracer::rebuild(Scene& scene, Assets& assets) {
+void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight) {
+  // Pack every texture in use into the atlas, left to right in rows ("shelves").
+  // shortcut: fixed 1024x1024 atlas, rebuilt with the BVH; textures that do not
+  // fit are drawn untextured (with a warning). Grow or page it when that happens.
+  std::vector<u8> atlasPixels((size_t)kAtlasSize * kAtlasSize * 4, 255);
+  std::map<const Texture*, vec4> rects;
+  u32 penX = 0, penY = 0, shelf = 0;
+  auto place = [&](const Texture* tex) -> vec4 {
+    if (tex->width <= 1 && tex->height <= 1) return vec4(0.0f); // plain white: no texture
+    auto it = rects.find(tex);
+    if (it != rects.end()) return it->second;
+    if (penX + tex->width > kAtlasSize) {
+      penX = 0;
+      penY += shelf;
+      shelf = 0;
+    }
+    if (tex->width > kAtlasSize || penY + tex->height > kAtlasSize) {
+      ACE_WARN("path tracer: texture atlas is full; a %ux%u texture is drawn untextured", tex->width, tex->height);
+      return rects[tex] = vec4(0.0f);
+    }
+    for (u32 y = 0; y < tex->height; y++)
+      memcpy(&atlasPixels[((size_t)(penY + y) * kAtlasSize + penX) * 4], &tex->pixels[(size_t)y * tex->width * 4], (size_t)tex->width * 4);
+    vec4 rect((f32)penX, (f32)penY, (f32)tex->width, (f32)tex->height);
+    penX += tex->width;
+    shelf = std::max(shelf, tex->height);
+    return rects[tex] = rect;
+  };
+
   std::vector<Triangle> tris;
-  for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
-    const Mesh* mesh = assets.mesh(m.mesh);
-    mat3 nm = glm::transpose(glm::inverse(mat3(t.world)));
-    // shortcut: textures are not sampled by the path tracer yet; each triangle
-    // carries one flat color (material color x first vertex color).
+  auto addMesh = [&](const Mesh* mesh, const mat4& world, vec4 color, vec3 emissive, vec4 atlasRect, int flags, vec4 uvRect) {
+    mat3 nm = glm::transpose(glm::inverse(mat3(world)));
+    if (atlasRect.z > 0.0f) flags |= 4;
     for (size_t i = 0; i + 2 < mesh->indices.size(); i += 3) {
       const Vertex& a = mesh->vertices[mesh->indices[i]];
       const Vertex& b = mesh->vertices[mesh->indices[i + 1]];
       const Vertex& c = mesh->vertices[mesh->indices[i + 2]];
-      vec3 p0 = vec3(t.world * vec4(a.position, 1)), p1 = vec3(t.world * vec4(b.position, 1)), p2 = vec3(t.world * vec4(c.position, 1));
+      vec3 p0 = vec3(world * vec4(a.position, 1)), p1 = vec3(world * vec4(b.position, 1)), p2 = vec3(world * vec4(c.position, 1));
       Triangle tri;
       tri.v0 = vec4(p0, 0);
       tri.e1 = vec4(p1 - p0, 0);
@@ -108,11 +138,26 @@ void PathTracer::rebuild(Scene& scene, Assets& assets) {
       tri.n0 = vec4(glm::normalize(nm * a.normal), 0);
       tri.n1 = vec4(glm::normalize(nm * b.normal), 0);
       tri.n2 = vec4(glm::normalize(nm * c.normal), 0);
-      tri.color = toLinear(m.color * vec4(a.color[0], a.color[1], a.color[2], a.color[3]) / 255.0f);
-      tri.emissive = vec4(toLinear(m.emissive), 0);
+      // shortcut: one vertex color per triangle (the first vertex's).
+      tri.color = toLinear(color * vec4(a.color[0], a.color[1], a.color[2], a.color[3]) / 255.0f);
+      tri.emissive = vec4(toLinear(emissive), 0);
+      auto uv = [&](const Vertex& v) { return v.uv * vec2(uvRect.z, uvRect.w) + vec2(uvRect.x, uvRect.y); };
+      tri.uv01 = vec4(uv(a), uv(b));
+      tri.uv2Flags = vec4(uv(c), (f32)flags, 0);
+      tri.atlas = atlasRect;
       tris.push_back(tri);
     }
+  };
+  for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each())
+    addMesh(assets.mesh(m.mesh), t.world, m.color, m.emissive, place(assets.texture(m.texture)), m.worldTexels ? 1 : 0, vec4(0, 0, 1, 1));
+  const Mesh* quad = assets.mesh("builtin:quad");
+  f64 seconds = (f64)SDL_GetTicks() / 1000.0;
+  for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
+    mat4 model = (s.billboard ? uprightCard(t.world, cameraRight) : t.world) * glm::scale(mat4(1.0f), vec3(s.size, 1.0f));
+    addMesh(quad, model, s.color, vec3(0.0f), place(assets.texture(s.texture)), 2, spriteUvRect(s, seconds));
   }
+  r_.device().writeTexture(atlas_, atlasPixels.data());
+
   std::vector<Node> nodes;
   buildBvh(tris, nodes);
   if (tris.empty()) tris.push_back(Triangle{});
@@ -154,6 +199,7 @@ void PathTracer::rebuild(Scene& scene, Assets& assets) {
     d.entries[1].buffer = nodeBuffer_;
     d.entries[2].buffer = triBuffer_;
     d.entries[3].buffer = lightBuffer_;
+    d.entries[4].texture = atlas_;
     group_ = dev.createBindGroup(d);
   }
 }
@@ -161,17 +207,30 @@ void PathTracer::rebuild(Scene& scene, Assets& assets) {
 void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj, const Camera&,
                         TextureHandle color, TextureHandle normalDepth, u32 width, u32 height) {
   // Anything that changes the geometry or its materials forces a BVH rebuild.
+  vec3 cameraRight = vec3(glm::inverse(view)[0]);
   u64 sh = 14695981039346656037ull;
   for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
     sh = hashBytes(sh, &t.world, sizeof(mat4));
     sh = hashBytes(sh, m.mesh.data(), m.mesh.size());
+    sh = hashBytes(sh, m.texture.data(), m.texture.size());
     sh = hashBytes(sh, &m.color, sizeof(vec4));
     sh = hashBytes(sh, &m.emissive, sizeof(vec3));
+    sh = hashBytes(sh, &m.worldTexels, sizeof(bool));
+  }
+  f64 seconds = (f64)SDL_GetTicks() / 1000.0;
+  for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
+    vec4 uvRect = spriteUvRect(s, seconds); // changes as the animation advances
+    sh = hashBytes(sh, &t.world, sizeof(mat4));
+    sh = hashBytes(sh, s.texture.data(), s.texture.size());
+    sh = hashBytes(sh, &s.color, sizeof(vec4));
+    sh = hashBytes(sh, &s.size, sizeof(vec2));
+    sh = hashBytes(sh, &uvRect, sizeof(vec4));
+    if (s.billboard) sh = hashBytes(sh, &cameraRight, sizeof(vec3)); // billboards turn with the camera
   }
   bool reset = false;
   if (sh != sceneHash_ || !group_) {
     sceneHash_ = sh;
-    rebuild(scene, assets);
+    rebuild(scene, assets, cameraRight);
     // Moving objects: keep a short history instead of restarting, trading a
     // little ghosting for far less noise.
     // shortcut: replace with motion-vector reprojection + a spatial denoiser.
@@ -192,7 +251,7 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   d.skyBottom = vec4(toLinear(scene.settings.skyBottom), 0);
   d.params = vec4(0, (f32)scene.settings.ptSamples, (f32)scene.settings.ptBounces, (f32)scene.settings.toonBands);
 
-  d.lightInfo = vec4((f32)lightCount_, 0, 0, 0);
+  d.lightInfo = vec4((f32)lightCount_, (f32)std::max(scene.settings.texelsPerUnit, 1), scene.settings.texelLighting ? 1.0f : 0.0f, 0);
 
   // Anything else that changes the image restarts the running average.
   u64 vh = hashBytes(14695981039346656037ull, &d, sizeof(d));

@@ -18,6 +18,11 @@ struct CameraView {
   Camera camera;
 };
 
+// Sheet frame shown at `seconds`, as (offset.xy, scale.zw) applied to the quad's UVs.
+vec4 spriteUvRect(const SpriteRenderer& sprite, f64 seconds);
+// Upright card facing horizontally along `right`, at the entity's position and scale.
+mat4 uprightCard(const mat4& world, vec3 right);
+
 class PathTracer;
 
 class Renderer {

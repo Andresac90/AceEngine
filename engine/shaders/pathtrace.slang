@@ -2,6 +2,11 @@
 // every backend and device without ray-tracing hardware; pixel-art resolutions
 // keep the ray count tiny. Output matches the raster pass: linear HDR color in
 // target 0 (alpha = accumulation blend weight) and normal/depth in target 1.
+//
+// It follows the same pixel-art rules as mesh.slang: unfiltered textures (from
+// one atlas), optional world-space texel mapping, cutout sprites, and lighting
+// gathered at the texel centre with a per-texel random seed, so soft shadows
+// and bounce light land on the texture's pixel grid instead of the screen's.
 #include "common.slangh"
 
 struct TraceData {
@@ -11,8 +16,8 @@ struct TraceData {
   float4 lightColor;
   float4 skyTop;
   float4 skyBottom;
-  float4 params; // x: accumulated frames, y: samples per pixel, z: bounces, w: toon bands
-  float4 lightInfo; // x: number of emissive triangles
+  float4 params;    // x: accumulated frames, y: samples per pixel, z: bounces, w: toon bands
+  float4 lightInfo; // x: number of emissive triangles, y: texels per world unit, z: texel-space lighting on
 };
 struct BvhNode {
   float4 minLeft;  // xyz: box min, w (bits): left child, or first triangle for leaves
@@ -23,12 +28,16 @@ struct Triangle {
   float4 n0, n1, n2;
   float4 color;
   float4 emissive;
+  float4 uv01;     // uv of vertex 0 (xy) and vertex 1 (zw)
+  float4 uv2Flags; // xy: uv of vertex 2, z: flags (1 world texel mapping, 2 sprite/cutout, 4 textured)
+  float4 atlas;    // xy: first texel of this texture in the atlas, zw: its size in texels
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<TraceData> data;
 [[vk::binding(1, 0)]] StructuredBuffer<BvhNode> nodes;
 [[vk::binding(2, 0)]] StructuredBuffer<Triangle> triangles;
 [[vk::binding(3, 0)]] StructuredBuffer<float4> lights; // per emissive triangle: x (bits) = triangle index, y = area
+[[vk::binding(4, 0)]] Texture2D atlasTexture;
 
 struct VsOut {
   float4 position : SV_Position;
@@ -52,6 +61,27 @@ uint pcg(inout uint state) {
   return (word >> 22u) ^ word;
 }
 float rand(inout uint state) { return float(pcg(state) >> 8) * (1.0 / 16777216.0); }
+
+int flagsOf(Triangle t) { return int(t.uv2Flags.z); }
+float3 faceNormal(Triangle t) { return normalize(cross(t.e1.xyz, t.e2.xyz)); }
+
+// Integer texel coordinate of a point on the triangle (same mapping as mesh.slang).
+float2 texelAt(Triangle t, float3 pos, float u, float v) {
+  if ((flagsOf(t) & 1) != 0) {
+    float3 a = abs(faceNormal(t));
+    float2 plane = a.y >= a.x && a.y >= a.z ? pos.xz : (a.x >= a.z ? float2(-pos.z, -pos.y) : float2(pos.x, -pos.y));
+    return floor(plane * data.lightInfo.y);
+  }
+  float2 uv = t.uv01.xy * (1.0 - u - v) + t.uv01.zw * u + t.uv2Flags.xy * v;
+  return floor(uv * t.atlas.zw);
+}
+
+// Unfiltered, repeating lookup of the triangle's texture inside the atlas.
+float4 texelColor(Triangle t, float2 texel) {
+  if ((flagsOf(t) & 4) == 0) return float4(1, 1, 1, 1);
+  float2 wrapped = texel - floor(texel / t.atlas.zw) * t.atlas.zw;
+  return atlasTexture.Load(int3(int2(t.atlas.xy + wrapped), 0));
+}
 
 struct Hit {
   float t;
@@ -105,14 +135,15 @@ bool trace(float3 origin, float3 dir, float tMax, bool anyHit, out Hit hit) {
       float v = dot(dir, q) * inv;
       if (v < 0.0 || u + v > 1.0) continue;
       float t = dot(tri.e2.xyz, q) * inv;
-      if (t > 1e-4 && t < hit.t) {
-        hit.t = t;
-        hit.tri = i;
-        hit.u = u;
-        hit.v = v;
-        found = true;
-        if (anyHit) return true;
-      }
+      if (t <= 1e-4 || t >= hit.t) continue;
+      // Sprites: transparent texels let the ray through.
+      if ((flagsOf(tri) & 2) != 0 && texelColor(tri, texelAt(tri, origin + dir * t, u, v)).a < 0.5) continue;
+      hit.t = t;
+      hit.tri = i;
+      hit.u = u;
+      hit.v = v;
+      found = true;
+      if (anyHit) return true;
     }
   }
   return found;
@@ -130,6 +161,38 @@ float3 cosineSample(float3 n, inout uint rng) {
   float z = rand(rng) * 2.0 - 1.0;
   float r = sqrt(max(0.0, 1.0 - z * z));
   return normalize(n + float3(r * cos(a), r * sin(a), z) * 0.999);
+}
+
+// Moves a point on the triangle to the centre of the texture texel it lies in.
+float3 snapToTexel(Triangle t, float3 pos, float2 texel) {
+  if ((flagsOf(t) & 1) != 0) {
+    float3 n = faceNormal(t);
+    float3 a = abs(n);
+    float2 c = (texel + 0.5) / data.lightInfo.y;
+    float3 v0 = t.v0.xyz;
+    if (a.y >= a.x && a.y >= a.z) {
+      pos.x = c.x;
+      pos.z = c.y;
+      pos.y = v0.y - (n.x * (pos.x - v0.x) + n.z * (pos.z - v0.z)) / n.y;
+    } else if (a.x >= a.z) {
+      pos.z = -c.x;
+      pos.y = -c.y;
+      pos.x = v0.x - (n.y * (pos.y - v0.y) + n.z * (pos.z - v0.z)) / n.x;
+    } else {
+      pos.x = c.x;
+      pos.y = -c.y;
+      pos.z = v0.z - (n.x * (pos.x - v0.x) + n.y * (pos.y - v0.y)) / n.z;
+    }
+    return pos;
+  }
+  // UV-mapped: find the barycentric coordinates of the texel centre.
+  float2 target = (texel + 0.5) / t.atlas.zw - t.uv01.xy;
+  float2 d1 = t.uv01.zw - t.uv01.xy, d2 = t.uv2Flags.xy - t.uv01.xy;
+  float det = d1.x * d2.y - d1.y * d2.x;
+  if (abs(det) < 1e-12) return pos;
+  float u = (target.x * d2.y - target.y * d2.x) / det;
+  float v = (d1.x * target.y - d1.y * target.x) / det;
+  return t.v0.xyz + t.e1.xyz * u + t.e2.xyz * v;
 }
 
 FsOut fsMain(VsOut i) {
@@ -151,7 +214,16 @@ FsOut fsMain(VsOut i) {
   float3 ppos = origin + dir * primary.t;
   o.normalDepth = float4(pn, -mul(data.view, float4(ppos, 1.0)).z);
 
+  float2 ptexel = texelAt(ptri, ppos, primary.u, primary.v);
+  float3 palbedo = ptri.color.rgb * texelColor(ptri, ptexel).rgb;
   uint rng = uint(i.position.x) * 1973u + uint(i.position.y) * 9277u + frame * 26699u + 1u;
+  if ((flagsOf(ptri) & 4) != 0 && data.lightInfo.z > 0.5) {
+    // Texel-space lighting: every screen pixel showing this texel gathers light
+    // from the same point with the same random numbers, so they agree exactly.
+    ppos = snapToTexel(ptri, ppos, ptexel);
+    rng = (asuint(ppos.x) * 73856093u) ^ (asuint(ppos.y) * 19349663u) ^ (asuint(ppos.z) * 83492791u) + frame * 26699u + 1u;
+  }
+
   int spp = max(1, int(data.params.y));
   int bounces = max(1, int(data.params.z));
   float bands = data.params.w;
@@ -162,20 +234,24 @@ FsOut fsMain(VsOut i) {
     // pixel grid must stay hard.
     float3 pos = ppos, n = pn;
     Triangle tri = ptri;
+    float3 albedo = palbedo;
     float3 throughput = 1, radiance = 0;
     for (int b = 0; b < bounces; b++) {
       // Emission is added only when seen directly; light reaching other surfaces
       // comes from sampling the emissive triangles below. Counting it on bounce
       // hits as well would double it (and brings back single-pixel sparkles).
       if (b == 0) radiance += throughput * tri.emissive.rgb;
-      throughput *= tri.color.rgb;
+      throughput *= albedo;
+      // A sprite is a flat drawing, not a surface: it takes light as if facing it.
+      bool sprite = (flagsOf(tri) & 2) != 0;
+      float3 offset = (sprite ? data.lightDir.xyz * 0.75 : n * 1e-3);
       // Direct sun light (next-event estimation).
-      float ndl = dot(n, data.lightDir.xyz);
+      float ndl = sprite ? 0.8 : dot(n, data.lightDir.xyz);
       if (ndl > 0.0) {
         Hit sh;
-        if (!trace(pos + n * 1e-3, data.lightDir.xyz, 1e30, true, sh)) {
+        if (!trace(pos + offset, data.lightDir.xyz, 1e30, true, sh)) {
           float direct = ndl;
-          if (b == 0 && bands > 0.5) direct = ceil(ndl * bands - 0.001) / bands; // toon bands on first hit
+          if (b == 0 && bands > 0.5 && !sprite) direct = ceil(ndl * bands - 0.001) / bands; // toon bands on first hit
           radiance += throughput * data.lightColor.rgb * direct * 0.318;
         }
       }
@@ -189,23 +265,24 @@ FsOut fsMain(VsOut i) {
         float dist2 = max(dot(toLight, toLight), 1e-4);
         float dist = sqrt(dist2);
         toLight /= dist;
-        float cosSurface = dot(n, toLight);
-        float cosLight = abs(dot(normalize(cross(lt.e1.xyz, lt.e2.xyz)), toLight));
+        float cosSurface = sprite ? 0.8 : dot(n, toLight);
+        float cosLight = abs(dot(faceNormal(lt), toLight));
         if (cosSurface > 0.0 && cosLight > 0.0) {
           Hit lh;
-          if (!trace(pos + n * 1e-3, toLight, dist - 2e-3, true, lh))
+          if (!trace(pos + (sprite ? toLight * 0.75 : n * 1e-3), toLight, dist - (sprite ? 0.76 : 2e-3), true, lh))
             radiance += throughput * lt.emissive.rgb * (cosSurface * cosLight / dist2 * light.y * float(lightCount) * 0.318);
         }
       }
-      float3 next = cosineSample(n, rng);
+      float3 next = cosineSample(sprite ? data.lightDir.xyz : n, rng);
       Hit h;
-      if (!trace(pos + n * 1e-3, next, 1e30, false, h)) {
+      if (!trace(pos + offset, next, 1e30, false, h)) {
         radiance += throughput * skyColor(next);
         break;
       }
       tri = triangles[h.tri];
-      pos = pos + n * 1e-3 + next * h.t;
+      pos = pos + offset + next * h.t;
       n = shadingNormal(tri, h, next);
+      albedo = tri.color.rgb * texelColor(tri, texelAt(tri, pos, h.u, h.v)).rgb;
     }
     total += min(radiance, 16.0); // firefly clamp: slightly biased, removes single-pixel sparkles
   }

@@ -73,20 +73,23 @@ looking at screenshots produced with `--screenshot`:
 - Sprite sheets/animation, sprite shadows, `Collider` + `Scene::moveAndSlide`
   (unit-tested).
 
+- **iOS simulator**: `tools/export_ios.sh projects/pixel_demo simulator`, then
+  `xcrun simctl boot <device>; simctl install <device> <app>; simctl launch
+  <device> com.aceengine.pixeldemo`. The village scene renders full screen on
+  an iPhone 17 Pro simulator (Metal). If the screen is black, shut the
+  simulator down and use a fresh device; the first attempt hit stale state.
+- The path tracer with textures, world texel mapping, cutout sprites, palette
+  and per-texel light gathering: `village` with `pathTraced` on, both backends.
+
 **Not verified — treat as unknown until someone tries it:**
 
 - Editor interactions the autotest does not cover: pan, drag-and-drop
   re-parenting and asset assignment, Save As, New Scene, the menus, text fields.
   Nobody has used the editor by hand yet.
-- **iOS.** `tools/export_ios.sh projects/pixel_demo simulator` builds and the
-  app installs and starts in the simulator (Metal device and pipelines are
-  created; one crash was fixed: SPIRV-Cross needs
-  `ios_support_base_vertex_instance`). After that the screen stayed black and
-  `simctl terminate`/`screenshot` hung, so the app is probably stuck in its
-  frame loop. Suspects: `waitIdle()`/`nextDrawable` in `MetalDevice::beginFrame`
-  on the simulator, or SDL's iOS main-loop expectations (SDL recommends
-  `SDL_MAIN_USE_CALLBACKS` on iOS). No frame has been seen on iOS.
-- Window resize and minimise paths in both backends.
+- **iOS on a real device.** The simulator works (see above); a device build
+  (`tools/export_ios.sh <project> device`) is produced unsigned and has never
+  been installed. The demo has no touch controls yet (the hero script reads
+  keys), so on a phone the scene renders but cannot be played.
 - Vulkan on a real Vulkan driver (Android, Windows, Linux). Only MoltenVK ran.
 - glTF loading: `loadGltf` has never been given a real file.
 - Path tracing with a perspective camera.
@@ -249,12 +252,11 @@ otherwise; ask the owner before installing anything.
    8-way directional character sprites (sheets, animation and sprite shadows
    are done); per-material color ramps (shade by picking
    the next ramp color instead of multiplying, the way ink-studio does); a
-   palette editor panel; water and foliage; make the path tracer honor
-   textures, palette and texel lighting so both modes share one look. Compare
-   against the owner's references each time.
+   palette editor panel; water and foliage. (The path tracer already honors
+   textures, sprites, palette and texel lighting.) Compare against the owner's
+   references each time.
 3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;
-   sample albedo textures (pack them into one atlas, add UVs to
-   `PathTracer::Triangle`); include sprites; then a two-level BVH (per-mesh
+   ~~textures (one 1024 atlas) and sprites~~ done; then a two-level BVH (per-mesh
    BLAS built once + TLAS rebuilt per frame) so moving objects are cheap; then
    a denoiser. Hardware ray tracing (Metal/Vulkan/DXR ray queries) is a later
    optimization behind the same interface, not a prerequisite.
@@ -267,7 +269,8 @@ otherwise; ask the owner before installing anything.
    `core/base.h`. Needs a Windows machine; nothing here can compile it. Done:
    the four verify commands produce the same images with `--backend d3d12`.
 5. **Windows export** (zip of `ace_player.exe`, `ace_data`, `project/`), then
-   **Android** (Gradle project using SDL3's `android-project` template;
+   **iOS** (simulator export works; remaining: signing for devices, touch
+   input in the demo, an app icon and launch screen), **Android** (Gradle project using SDL3's `android-project` template;
    assets inside the APK are already readable because all file reads go through
    `SDL_LoadFile`; honor `currentTransform`, see the shortcut in
    `createSwapchain`), then **iOS** (Xcode generator, Metal only, bundle

@@ -143,6 +143,20 @@ bool Renderer::findCamera(Scene& scene, CameraView& out) {
   return false;
 }
 
+vec4 spriteUvRect(const SpriteRenderer& s, f64 seconds) {
+  int columns = std::max(s.columns, 1), rows = std::max(s.rows, 1), count = columns * rows;
+  int index = (s.frame + (s.fps > 0.0f ? (int)(seconds * s.fps) : 0)) % count;
+  if (index < 0) index += count;
+  vec2 cell(1.0f / columns, 1.0f / rows), corner((f32)(index % columns) * cell.x, (f32)(index / columns) * cell.y);
+  return s.flipX ? vec4(corner.x + cell.x, corner.y, -cell.x, cell.y) : vec4(corner, cell);
+}
+
+mat4 uprightCard(const mat4& world, vec3 right) {
+  right = glm::normalize(vec3(right.x, 0.0f, right.z));
+  vec3 scale(glm::length(vec3(world[0])), glm::length(vec3(world[1])), 1.0f);
+  return mat4(vec4(right * scale.x, 0), vec4(0, scale.y, 0, 0), vec4(glm::cross(right, vec3(0, 1, 0)), 0), world[3]);
+}
+
 BindGroupHandle Renderer::materialGroup(const Texture* texture) {
   auto it = materialGroups_.find(texture->handle.id);
   if (it != materialGroups_.end()) return it->second;
@@ -233,12 +247,7 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   mat4 camWorld = glm::inverse(view);
   f64 seconds = (f64)SDL_GetTicks() / 1000.0;
   for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
-    // Upright card facing a horizontal direction, keeping the entity's scale.
-    auto upright = [&](vec3 right) {
-      right = glm::normalize(vec3(right.x, 0.0f, right.z));
-      vec3 scale(glm::length(vec3(t.world[0])), glm::length(vec3(t.world[1])), 1.0f);
-      return mat4(vec4(right * scale.x, 0), vec4(0, scale.y, 0, 0), vec4(glm::cross(right, vec3(0, 1, 0)), 0), t.world[3]);
-    };
+    auto upright = [&](vec3 right) { return uprightCard(t.world, right); };
     mat4 size = glm::scale(mat4(1.0f), vec3(s.size, 1.0f));
     vec3 sun = vec3(frame.lightDir);
     Item it{quad, assets.texture(s.texture), {}, t.world * size, true};
@@ -248,11 +257,7 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
     it.data.flags = vec4(1, 0, 0, 0);
     // Lit from where it stands: the bottom edge of the card.
     it.data.origin = vec4(vec3(t.world[3]) - vec3(0.0f, 0.5f * s.size.y * glm::length(vec3(t.world[1])), 0.0f), 0.0f);
-    int columns = std::max(s.columns, 1), rows = std::max(s.rows, 1), count = columns * rows;
-    int index = (s.frame + (s.fps > 0.0f ? (int)(seconds * s.fps) : 0)) % count;
-    if (index < 0) index += count;
-    vec2 cell(1.0f / columns, 1.0f / rows), corner((f32)(index % columns) * cell.x, (f32)(index / columns) * cell.y);
-    it.data.uvRect = s.flipX ? vec4(corner.x + cell.x, corner.y, -cell.x, cell.y) : vec4(corner, cell);
+    it.data.uvRect = spriteUvRect(s, seconds);
     items.push_back(it);
   }
 
