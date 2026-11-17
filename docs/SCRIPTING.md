@@ -23,6 +23,19 @@ Scripts reload automatically when you save the file while the game is running
 
 `self.entity` is this entity's id.
 
+### Keeping state between scenes
+
+All scripts share one Lua state that lives for the whole game, so a global
+table survives `ace.load_scene`:
+
+```lua
+Game = Game or { coins = 0 }   -- created once, kept across scene changes
+```
+
+For progress that must survive quitting, use `ace.save_data` / `ace.load_data`.
+The file lives in the player's per-user app data folder
+(`~/Library/Application Support/AceEngine/<project>/save.json` on macOS).
+
 ### Per-entity parameters
 
 The Script component's `params` field sets fields on the instance before
@@ -53,6 +66,8 @@ Numbers become numbers, `true`/`false` become booleans, anything else is text. A
 | `ace.raycast(ox, oy, oz, dx, dy, dz [, max [, ignore]])` | first solid Collider along the ray: returns `entity, distance, x, y, z`, or `nil` |
 | `ace.gamepad_axis(name)` | `"leftx"`, `"lefty"`, `"rightx"`, `"righty"` (-1..1, dead zone applied), `"left_trigger"`, `"right_trigger"` (0..1) |
 | `ace.gamepad_button(name)` / `ace.gamepad_pressed(name)` | held / went down this frame: `"south"` (A / cross), `"east"`, `"west"`, `"north"`, `"start"`, `"back"`, `"dpup"`, `"dpdown"`, `"dpleft"`, `"dpright"`, `"leftshoulder"`, `"rightshoulder"` |
+| `ace.save_data(table)` | writes the table (numbers, strings, booleans, nested tables) as the game's save file; returns `true` on success |
+| `ace.load_data()` | the saved table, or `nil` if there is no save yet |
 | `ace.find(name)` | entity id or `nil` |
 | `ace.spawn(name)` | new empty entity |
 | `ace.destroy(e)` | destroys the entity and its children |

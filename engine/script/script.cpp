@@ -132,6 +132,112 @@ int l_text_width(lua_State* L) {
   return 1;
 }
 
+// --- save data: Lua tables <-> JSON in the per-user preferences folder ---
+
+constexpr int kMaxSaveDepth = 16;
+
+nlohmann::json luaToJson(lua_State* L, int index, int depth) {
+  index = lua_absindex(L, index);
+  switch (lua_type(L, index)) {
+    case LUA_TBOOLEAN: return (bool)lua_toboolean(L, index);
+    case LUA_TNUMBER: return lua_isinteger(L, index) ? nlohmann::json(lua_tointeger(L, index)) : nlohmann::json(lua_tonumber(L, index));
+    case LUA_TSTRING: return std::string(lua_tostring(L, index));
+    case LUA_TTABLE: {
+      if (depth >= kMaxSaveDepth) luaL_error(L, "save data nested too deeply (or contains a cycle)");
+      // A table with keys 1..n is an array; anything else becomes an object with string keys.
+      lua_Integer n = (lua_Integer)lua_rawlen(L, index);
+      nlohmann::json out = n > 0 ? nlohmann::json::array() : nlohmann::json::object();
+      if (n > 0) {
+        for (lua_Integer i = 1; i <= n; i++) {
+          lua_rawgeti(L, index, i);
+          out.push_back(luaToJson(L, -1, depth + 1));
+          lua_pop(L, 1);
+        }
+        return out;
+      }
+      lua_pushnil(L);
+      while (lua_next(L, index)) {
+        if (lua_type(L, -2) == LUA_TSTRING) out[lua_tostring(L, -2)] = luaToJson(L, -1, depth + 1);
+        else if (lua_type(L, -2) == LUA_TNUMBER) out[std::to_string((long long)lua_tointeger(L, -2))] = luaToJson(L, -1, depth + 1);
+        lua_pop(L, 1);
+      }
+      return out;
+    }
+    default: return nullptr; // functions, userdata: not saved
+  }
+}
+
+void pushJson(lua_State* L, const nlohmann::json& j, int depth) {
+  luaL_checkstack(L, 4, "save data");
+  if (depth > kMaxSaveDepth) {
+    lua_pushnil(L);
+  } else if (j.is_boolean()) {
+    lua_pushboolean(L, j.get<bool>());
+  } else if (j.is_number_integer()) {
+    lua_pushinteger(L, j.get<lua_Integer>());
+  } else if (j.is_number()) {
+    lua_pushnumber(L, j.get<double>());
+  } else if (j.is_string()) {
+    lua_pushstring(L, j.get<std::string>().c_str());
+  } else if (j.is_array()) {
+    lua_createtable(L, (int)j.size(), 0);
+    for (size_t i = 0; i < j.size(); i++) {
+      pushJson(L, j[i], depth + 1);
+      lua_rawseti(L, -2, (lua_Integer)i + 1);
+    }
+  } else if (j.is_object()) {
+    lua_createtable(L, 0, (int)j.size());
+    for (auto it = j.begin(); it != j.end(); ++it) {
+      pushJson(L, it.value(), depth + 1);
+      lua_setfield(L, -2, it.key().c_str());
+    }
+  } else {
+    lua_pushnil(L);
+  }
+}
+
+std::string saveFilePath(ScriptSystem& s) {
+  std::string project = std::filesystem::path(s.assets.projectDir()).parent_path().filename().string();
+  if (project.empty()) project = "game";
+  char* dir = SDL_GetPrefPath("AceEngine", project.c_str()); // per user, per game; created if missing
+  if (!dir) return "";
+  std::string path = std::string(dir) + "save.json";
+  SDL_free(dir);
+  return path;
+}
+
+// ace.save_data(table) -> true on success. Numbers, strings, booleans and nested tables.
+int l_save_data(lua_State* L) {
+  luaL_checktype(L, 1, LUA_TTABLE);
+  std::string path = saveFilePath(self(L));
+  nlohmann::json j = luaToJson(L, 1, 0);
+  // Write to a temporary file first so a crash mid-write cannot destroy the old save.
+  bool ok = !path.empty() && writeTextFile(path + ".tmp", j.dump(2));
+  std::error_code ec;
+  if (ok) std::filesystem::rename(path + ".tmp", path, ec);
+  ok = ok && !ec;
+  if (!ok) ACE_ERROR("could not write save data to %s", path.c_str());
+  lua_pushboolean(L, ok);
+  return 1;
+}
+
+// ace.load_data() -> table, or nil when there is no save yet (or it is unreadable)
+int l_load_data(lua_State* L) {
+  std::string text;
+  if (!readTextFile(saveFilePath(self(L)), text)) {
+    lua_pushnil(L);
+    return 1;
+  }
+  nlohmann::json j = nlohmann::json::parse(text, nullptr, false);
+  if (j.is_discarded()) {
+    ACE_WARN("save data is corrupt; ignoring it");
+    lua_pushnil(L);
+    return 1;
+  }
+  pushJson(L, j, 0);
+  return 1;
+}
+
 // ace.load_scene(path): switch level after this frame's scripts have run.
 int l_load_scene(lua_State* L) {
   self(L).pendingScene = luaL_checkstring(L, 1);
@@ -236,6 +342,7 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
       {"set_position", l_set_position}, {"rotation", l_rotation}, {"set_rotation", l_set_rotation}, {"scale", l_scale},
       {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},               {"pointer", l_pointer},
       {"play_sound", l_play_sound}, {"stop_sound", l_stop_sound},
+      {"save_data", l_save_data},  {"load_data", l_load_data},
       {"load_scene", l_load_scene},  {"overlaps", l_overlaps},   {"raycast", l_raycast},
       {"gamepad_axis", l_gamepad_axis}, {"gamepad_button", l_gamepad_button}, {"gamepad_pressed", l_gamepad_pressed},
       {"text", l_text},             {"screen", l_screen},       {"text_width", l_text_width},

@@ -299,9 +299,9 @@ otherwise; ask the owner before installing anything.
    triggers, raycasts or dynamics. Evaluate Jolt (3D) and Box2D (2D) before
    extending it. Done: sound (WAV), Lua hot reload, scene loading, trigger
    overlaps, raycasts, gamepad, per-entity script params. Still to do:
-   skeletal animation from glTF, compressed audio (OGG; stb_vorbis), save
-   games (persisting data between sessions), passing state between scenes
-   (`ace.load_scene` currently starts the new scene fresh).
+   skeletal animation from glTF, compressed audio (OGG; stb_vorbis). (Save
+   files `ace.save_data`/`ace.load_data` and Lua globals surviving scene
+   changes are done and were tested with a throwaway project.)
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
    outline, Build mode for placing grid blocks). Next: multi-select, copy/paste, prefabs,
    camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), an Export
