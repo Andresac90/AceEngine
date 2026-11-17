@@ -88,6 +88,8 @@ struct RenderSettings {
   bool texelLighting = true; // evaluate light/shadow per texture texel, not per screen pixel
   int texelsPerUnit = 16;   // texture pixels per world unit for worldTexels meshes
   std::string palette;      // optional image; every on-screen color snaps to one of its (max 64) colors
+  bool rampShading = false; // shade by stepping along the palette's rows (dark -> light ramps) instead of darkening
+  int rampShadowSteps = 2;  // how many ramp colors darker a fully shadowed surface gets
   bool shadows = true;      // sun shadows in raster mode (the path tracer always has them)
   bool outlines = true;
   f32 outlineStrength = 0.6f;

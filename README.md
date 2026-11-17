@@ -62,9 +62,11 @@ five things working together, all controlled per scene or per entity:
 | Light and shadow that follow the texture's pixel grid | Render Settings `texelLighting`, `toonBands`, `shadows` |
 | Dithering between light bands and palette colors | Render Settings `dither` |
 | Every on-screen color taken from one palette | Render Settings `palette` (an image; up to 64 distinct colors) |
+| Shading by hand-picked color ramps instead of darkening | Render Settings `rampShading`, `rampShadowSteps`: each palette **row** is a ramp, darkest on the left; lit surfaces step one color right, shadowed ones step left |
 | Characters and props as sprites in the 3D world | SpriteRenderer with `billboard` |
 
-Draw textures and sprites from the same palette image. Size sprites so one
+Draw textures and sprites from the same palette image, using each ramp's
+middle colors (ramp shading needs room to step both ways). Size sprites so one
 texel matches the world: a 16x22 sprite at 16 texels per unit is 1.0 x 1.375.
 `python3 tools/make_demo_art.py` regenerates the demo's art and shows the idea.
 

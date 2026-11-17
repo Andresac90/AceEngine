@@ -38,6 +38,7 @@ Renderer::Renderer(Device& device) : device_(device) {
   drawLayout_ = device_.createBindGroupLayout(ubo);
   BindGroupLayoutDesc frameDesc = ubo;
   frameDesc.bindings[1] = BindingType::Texture; // shadow map
+  frameDesc.bindings[2] = BindingType::Texture; // palette (ramp shading)
   frameLayout_ = device_.createBindGroupLayout(frameDesc);
   u32 target = TextureUsage_RenderTarget | TextureUsage_Sampled;
   shadowMap_ = device_.createTexture({kShadowMapSize, kShadowMapSize, Format::R32F, target, "shadow map"});
@@ -59,14 +60,6 @@ Renderer::Renderer(Device& device) : device_(device) {
     d.entries[0].size = size;
     return device_.createBindGroup(d);
   };
-  {
-    BindGroupDesc d;
-    d.layout = frameLayout_;
-    d.entries[0].buffer = uniforms_;
-    d.entries[0].size = sizeof(FrameData);
-    d.entries[1].texture = shadowMap_;
-    frameGroup_ = device_.createBindGroup(d);
-  }
   drawGroup_ = uboGroup(drawLayout_, sizeof(DrawData));
   shadowFrameGroup_ = uboGroup(drawLayout_, sizeof(FrameData)); // the shadow pass cannot bind the map it renders to
 
@@ -157,6 +150,20 @@ mat4 uprightCard(const mat4& world, vec3 right) {
   return mat4(vec4(right * scale.x, 0), vec4(0, scale.y, 0, 0), vec4(glm::cross(right, vec3(0, 1, 0)), 0), world[3]);
 }
 
+BindGroupHandle Renderer::frameGroup(const Texture* palette) {
+  BindGroupHandle& group = frameGroups_[palette->handle.id];
+  if (!group) {
+    BindGroupDesc d;
+    d.layout = frameLayout_;
+    d.entries[0].buffer = uniforms_;
+    d.entries[0].size = sizeof(FrameData);
+    d.entries[1].texture = shadowMap_;
+    d.entries[2].texture = palette->handle;
+    group = device_.createBindGroup(d);
+  }
+  return group;
+}
+
 BindGroupHandle Renderer::materialGroup(const Texture* texture) {
   auto it = materialGroups_.find(texture->handle.id);
   if (it != materialGroups_.end()) return it->second;
@@ -222,7 +229,11 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   frame.ambient = vec4(toLinear(scene.settings.ambient), 0.0f);
   f32 shadowTexel = fitShadowFrustum(scene, assets, vec3(frame.lightDir), frame.lightViewProj);
   frame.params = vec4((f32)scene.settings.toonBands, scene.settings.shadows ? 1.0f : 0.0f, shadowTexel, scene.settings.dither);
-  frame.params2 = vec4(scene.settings.texelLighting ? 1.0f : 0.0f, (f32)std::max(scene.settings.texelsPerUnit, 1), 0, 0);
+  const Texture* palette = assets.texture(scene.settings.palette); // white 1x1 when unset
+  bool ramps = scene.settings.rampShading && !scene.settings.palette.empty();
+  frame.params2 = vec4(scene.settings.texelLighting ? 1.0f : 0.0f, (f32)std::max(scene.settings.texelsPerUnit, 1), ramps ? 1.0f : 0.0f,
+                       (f32)glm::clamp(scene.settings.rampShadowSteps, 0, 15));
+  BindGroupHandle frameGroupHandle = frameGroup(palette);
   u32 frameOffset = pushUniform(&frame, sizeof(frame));
 
   // Gather everything once; the shadow pass and the scene pass draw the same list.
@@ -266,7 +277,7 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
     for (const Item& it : items) {
       if (!shadowPass && it.sprite && !spritePipeline) { // sprites are last in the list
         cmd.setPipeline(spritePipeline_);
-        cmd.setBindGroup(0, frameGroup_, {&frameOffset, 1});
+        cmd.setBindGroup(0, frameGroupHandle, {&frameOffset, 1});
         spritePipeline = true;
       }
       DrawData d = it.data;
@@ -305,7 +316,7 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   cmd.setViewport(0, 0, (f32)lowWidth_, (f32)lowHeight_);
   cmd.setScissor(0, 0, lowWidth_, lowHeight_);
   cmd.setPipeline(meshPipeline_);
-  cmd.setBindGroup(0, frameGroup_, {&frameOffset, 1});
+  cmd.setBindGroup(0, frameGroupHandle, {&frameOffset, 1});
   drawItems(false);
   cmd.endRenderPass();
 }

@@ -49,19 +49,21 @@ private:
   // Fits the sun's orthographic frustum around every mesh; returns the shadow texel size in world units.
   f32 fitShadowFrustum(Scene& scene, Assets& assets, vec3 lightDir, mat4& lightViewProj);
   rhi::BindGroupHandle materialGroup(const Texture* texture);
+  rhi::BindGroupHandle frameGroup(const Texture* palette); // frame constants + shadow map + palette
 
   rhi::Device& device_;
   rhi::BufferHandle uniforms_;
   u32 uniformOffset_ = 0;
 
   rhi::BindGroupLayoutHandle frameLayout_, drawLayout_, materialLayout_, presentLayout_;
-  rhi::BindGroupHandle frameGroup_, drawGroup_, presentGroup_;
+  rhi::BindGroupHandle drawGroup_, presentGroup_;
   rhi::PipelineHandle meshPipeline_, spritePipeline_, shadowPipeline_;
   rhi::BindGroupHandle shadowFrameGroup_;
   rhi::TextureHandle shadowMap_, shadowDepth_;
   rhi::ShaderHandle presentVs_, presentFs_;
   std::map<rhi::Format, rhi::PipelineHandle> presentPipelines_;
   std::map<u32, rhi::BindGroupHandle> materialGroups_;
+  std::map<u32, rhi::BindGroupHandle> frameGroups_; // by palette texture
   rhi::SamplerHandle nearestSampler_;
 
   rhi::TextureHandle color_, normalDepth_, depth_;

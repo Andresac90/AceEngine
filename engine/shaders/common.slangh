@@ -6,7 +6,7 @@ struct FrameData {
   float4 lightColor; // rgb * intensity
   float4 ambient;
   float4 params;     // x: toon bands (0 = smooth), y: shadows on, z: shadow-map texel size in world units, w: dither amount
-  float4 params2;    // x: texel-space lighting on, y: texels per world unit
+  float4 params2;    // x: texel-space lighting on, y: texels per world unit, z: ramp shading on, w: ramp shadow steps
   float4x4 lightViewProj; // world -> shadow map clip space
 };
 

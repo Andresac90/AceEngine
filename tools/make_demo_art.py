@@ -28,9 +28,10 @@ R = {k: [rgb(c) for c in v] for k, v in RAMPS.items()}
 def save(img, name): img.save(os.path.join(ART, name))
 
 def palette():
-    colors = [c for ramp in R.values() for c in ramp]
-    img = Image.new("RGBA", (8, 5))
-    for i, c in enumerate(colors): img.putpixel((i % 8, i // 8), c + (255,))
+    """One ramp per row, darkest on the left: the engine's ramp shading walks along rows."""
+    img = Image.new("RGBA", (max(len(r) for r in R.values()), len(R)), (0, 0, 0, 0))
+    for y, ramp in enumerate(R.values()):
+        for x, c in enumerate(ramp): img.putpixel((x, y), c + (255,))
     save(img, "palette.png")
 
 def noise_tile(name, ramp, size, weights, seed, clumps=0):
@@ -181,7 +182,7 @@ def scene():
     for i, (x, z) in enumerate([(-0.5, 5.2), (3.4, 4.0), (-2.2, 1.6), (5.8, 1.8), (0.2, -2.5)]):
         ent("Flower %d" % (i + 1), (x, 0.25, z), SpriteRenderer={"texture": "assets/flower.png", "color": [1, 1, 1, 1], "size": [0.5, 0.5], "billboard": True})
     settings = {"pixelArt": True, "pixelHeight": 216, "toonBands": 3, "dither": 0.6, "texelLighting": True, "texelsPerUnit": 16,
-                "palette": "assets/palette.png", "outlines": True, "outlineStrength": 0.45, "highlightStrength": 0.0,
+                "palette": "assets/palette.png", "rampShading": True, "rampShadowSteps": 2, "outlines": True, "outlineStrength": 0.45, "highlightStrength": 0.0,
                 "ambient": [0.36, 0.38, 0.55], "skyTop": [0.36, 0.52, 0.77], "skyBottom": [0.90, 0.95, 0.97]}
     json.dump({"version": 1, "settings": settings, "entities": E}, open(os.path.join(ROOT, "scenes", "village.scene.json"), "w"), indent=2)
 

@@ -12,6 +12,7 @@
 
 [[vk::binding(0, 0)]] ConstantBuffer<FrameData> frame;
 [[vk::binding(1, 0)]] Texture2D shadowMap; // r: light-space depth of the nearest occluder
+[[vk::binding(2, 0)]] Texture2D paletteTexture; // rows are color ramps, darkest on the left; transparent = unused
 [[vk::binding(0, 1)]] ConstantBuffer<DrawData> draw;
 [[vk::binding(0, 2)]] Texture2D albedoTexture;
 [[vk::binding(1, 2)]] SamplerState albedoSampler;
@@ -59,6 +60,45 @@ float sunVisibility(float3 worldPos, float3 n) {
   shadowMap.GetDimensions(w, h);
   float occluder = shadowMap.Load(int3(int2(uv * float2(w, h)), 0)).r;
   return lp.z - 0.0015 > occluder ? 0.0 : 1.0;
+}
+
+// Exact sRGB transfer functions: the palette lookup needs exact round trips, or
+// close colors (light stone vs pale sky) get confused.
+float3 linearToSrgb(float3 c) {
+  c = saturate(c);
+  return select(c <= 0.0031308, c * 12.92, 1.055 * pow(c, 1.0 / 2.4) - 0.055);
+}
+
+// Ramp shading: find the palette entry nearest to the surface color, then move
+// along its row: towards the darker (usually cooler) end as light falls off,
+// one step brighter in full light. Textures are drawn in the ramp's mid-tones.
+// Returns linear color.
+float3 rampShade(float3 albedoLinear, float light) {
+  uint w, h;
+  paletteTexture.GetDimensions(w, h);
+  float3 c = linearToSrgb(albedoLinear);
+  float best = 1e9;
+  int2 at = int2(0, 0);
+  for (int y = 0; y < int(h) && y < 16; y++) {
+    for (int x = 0; x < int(w) && x < 16; x++) {
+      float4 p = paletteTexture.Load(int3(x, y, 0));
+      if (p.a < 0.5) continue;
+      float3 d = linearToSrgb(p.rgb) - c; // texture is sRGB-typed: Load returns linear
+      float dist = dot(d * d, float3(0.30, 0.59, 0.11));
+      if (dist < best) {
+        best = dist;
+        at = int2(x, y);
+      }
+    }
+  }
+  int steps = int(frame.params2.w);
+  int shift = int(round(saturate(light) * float(steps + 1))) - steps; // -steps (shadow) .. +1 (full light)
+  // Walk the row, stopping at either end of the ramp or at a transparent gap.
+  int x = at.x;
+  for (int k = 0; k < 16 && shift < 0 && x > 0 && paletteTexture.Load(int3(x - 1, at.y, 0)).a >= 0.5; k++, shift++) x--;
+  for (int k = 0; k < 16 && shift > 0 && x + 1 < int(w) && paletteTexture.Load(int3(x + 1, at.y, 0)).a >= 0.5; k++, shift--) x++;
+  // The texture is sampled as sRGB, so palette.rgb here is already linear.
+  return paletteTexture.Load(int3(x, at.y, 0)).rgb;
 }
 
 FsOut fsMain(VsOut i) {
@@ -110,6 +150,7 @@ FsOut fsMain(VsOut i) {
     light = clamp(ceil(light * bands - 0.001 + jitter), 0.0, bands) / bands;
   }
   float3 lit = albedo.rgb * (frame.ambient.rgb + frame.lightColor.rgb * light * (sprite ? 0.25 : 0.318));
+  if (frame.params2.z > 0.5 && !sprite) lit = rampShade(albedo.rgb, light); // sprites keep their drawn colors
   FsOut o;
   o.color = float4(lit + draw.emissive.rgb, 1.0);
   o.normalDepth = float4(n, i.viewDepth);

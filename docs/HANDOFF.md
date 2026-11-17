@@ -253,10 +253,9 @@ otherwise; ask the owner before installing anything.
    `shortcut:` in `Renderer::fitShadowFrustum`). Still open: sprites do not
    cast shadows.
 2b. **Pixel-art look, next steps** (the owner's main interest): sprites casting
-   8-way directional character sprites (sheets, animation and sprite shadows
-   are done); per-material color ramps (shade by picking
-   the next ramp color instead of multiplying, the way ink-studio does); a
-   palette editor panel; water and foliage. (The path tracer already honors
+   8-way directional character sprites (sheets, animation, sprite shadows and
+   palette-ramp shading are done; ramp shading is raster-only so far — the
+   path tracer still multiplies); a palette editor panel; water and foliage. (The path tracer already honors
    textures, sprites, palette and texel lighting.) Compare against the owner's
    references each time.
 3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;

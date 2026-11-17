@@ -8,6 +8,8 @@
     "texelLighting": true,
     "texelsPerUnit": 16,
     "palette": "assets/palette.png",
+    "rampShading": true,
+    "rampShadowSteps": 2,
     "outlines": true,
     "outlineStrength": 0.45,
     "highlightStrength": 0.0,
