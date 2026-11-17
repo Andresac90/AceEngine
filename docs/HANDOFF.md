@@ -1,7 +1,7 @@
 # AceEngine handoff manual
 
 For the next engineer (human or model) continuing this work. Read this whole
-file before changing anything. Last updated 2026-11-16, branch `engine-v2`.
+file before changing anything. Last updated 2026-11-17, branch `engine-v2`.
 
 ## 1. What the owner asked for
 
@@ -51,7 +51,8 @@ looking at screenshots produced with `--screenshot`:
 - `tools/export_macos.sh`: produces a self-contained `.app` (system libraries
   only) that runs from another working directory.
 - Unit tests (`build/bin/ace_tests`): scene round trip, tolerant loading,
-  hierarchy operations, BVH build.
+  hierarchy, BVH build, move-and-slide, raycasts/overlaps, script params,
+  prefabs (including a damaged file with a parent cycle), sprite directions.
 - `ace_editor --new <dir>`, then in that project on both backends: a textured
   cube, a `SpriteRenderer`, a perspective camera, the missing-mesh fallback
   (warns, draws a cube) and `pixelArt = false`. Images matched across backends.
@@ -113,19 +114,23 @@ looking at screenshots produced with `--screenshot`:
   been installed. Touch control (`ace.pointer`, hold to walk) is written but
   has only been exercised with scripted keys, never with a finger or mouse.
 - Vulkan on a real Vulkan driver (Android, Windows, Linux). Only MoltenVK ran.
-- glTF loading: `loadGltf` has never been given a real file.
-- Path tracing with a perspective camera.
+- glTF from real tools. `assets/pine.gltf` (hand-written, embedded buffer,
+  two materials) loads and renders, but no Blender/Blockbench export with
+  textures, multiple nodes or skinning has been tried.
+- Audio through real speakers (see the Sound item above).
+- Gamepad input (no controller was connected).
 
 **Not written at all:**
 
 - **D3D12 backend.** `engine/CMakeLists.txt` references
   `rhi/d3d12/d3d12_device.cpp`, which does not exist, so a Windows configure
   fails today. `cmake/Shaders.cmake` has an untested DXIL rule.
-- Windows and Linux builds have never been attempted. Known blocker:
-  `core/base.h` uses `__attribute__((format...))`, which MSVC rejects.
-- Android and iOS builds and packaging.
-- Audio, physics/collision, animation, text and in-game UI, tilemaps, sprite
-  sheets, particles, prefabs, raster shadows, point/spot lights.
+- Windows and Linux builds have never been attempted (the GCC-only
+  `format` attribute in `core/base.h` is already guarded for MSVC; expect other
+  MSVC errors). The editor's Export menu uses `popen` and is disabled on Windows.
+- Android build and packaging (the NDK and a JDK are not installed here).
+- Rigid-body physics, skeletal animation, tilemaps, particles, point/spot
+  lights in the raster renderer, OGG/MP3 audio, UI images/panels.
 
 ## 3. Architecture
 
@@ -175,11 +180,20 @@ layout rules cannot differ; keep it that way.
 
 ```
 scene pass   -> color RGBA16F (linear HDR) + normalDepth RGBA16F (world normal, view depth)
-                raster:      mesh.slang       (toon bands, sprites as cutout quads)
-                path traced: pathtrace.slang  (software BVH in the fragment shader)
+                raster:      shadow.slang + mesh.slang (sun shadow map, texel-space
+                             lighting, toon bands or palette-ramp shading, dithering,
+                             world-space texel mapping, cutout sprites)
+                path traced: pathtrace.slang  (software BVH in the fragment shader;
+                             textures from a 1024 atlas, same texel/ramp rules)
 present pass -> present.slang: sky, outlines (depth) + convex-edge highlights
-                (normals), tone map, hard-pixel upscale to any target
+                (normals), tone map, palette snap, hard-pixel upscale; then
+                screen text (pixel font, imgui.slang) in the same pass
 ```
+
+- Shared shader code (frame/draw constants, `bayer4`, `linearToSrgb`,
+  `rampShade`) lives in `common.slangh`; C++ mirrors are in `renderer.cpp`.
+- `integerScale` (default on) picks a whole-number screen-pixels-per-game-pixel
+  factor and widens the camera slightly instead of stretching.
 
 - Depth > 9000 in `normalDepth.w` means sky.
 - Pixel-art mode renders at `pixelHeight` rows. With an orthographic camera
@@ -216,13 +230,17 @@ build/bin/ace_tests
 build/bin/ace_player projects/pixel_demo --screenshot /tmp/a.png --frames 5
 build/bin/ace_player projects/pixel_demo --scene scenes/pathtraced.scene.json --screenshot /tmp/b.png --frames 60
 build/bin/ace_editor projects/pixel_demo --select Tower --screenshot /tmp/c.png   # add --play to capture play mode
+build/bin/ace_player projects/pixel_demo --hold W --frames 420 --screenshot /tmp/e.png   # scripted gameplay
+tools/autotest.sh                     # editor interaction test, Metal then Vulkan
 # Vulkan with validation (must print nothing containing "VUID"):
 VK_LAYER_PATH=/opt/homebrew/opt/vulkan-validationlayers/share/vulkan/explicit_layer.d \
   build/bin/ace_player projects/pixel_demo --backend vulkan --validation --screenshot /tmp/d.png
 ```
 
-**Always look at the screenshot.** Both backends must produce the same image.
-Run every renderer or RHI change on both backends before committing.
+**Always look at the screenshot.** Both backends must produce the same image
+(compare them pixel by pixel; they have matched exactly so far). Run every
+renderer or RHI change on both backends before committing. Screenshot,
+autotest and export runs use a hidden window and offscreen frames.
 
 ## 5. Working rules
 
@@ -240,8 +258,8 @@ The owner asked that code follow https://github.com/DietrichGebert/ponytail :
 
 Also: comments explain *why*; public headers start with a comment a newcomer
 can read; no new dependency without a line in `cmake/Deps.cmake` pinned to a
-tag. (`stb` and `ImGuizmo` currently track `master` — pin them to commits;
-ImGuizmo was `105e4fde` when this was written.)
+tag (or a full commit hash for projects without release tags, as `stb` and
+`ImGuizmo` are).
 
 Pitfalls already hit:
 
@@ -256,6 +274,19 @@ Pitfalls already hit:
 - ImGui colors are sRGB; `imgui.slang` linearizes them because targets are sRGB.
 - EnTT is pinned to 3.13.2 and ImGui to `v1.91.9b-docking`; newer majors
   change APIs used here (ImGui 1.92 changed the texture backend contract).
+- Textures are sRGB-typed, so shader `Load`s return *linear* values. Compare
+  palette colors after `linearToSrgb` (exactly, not `pow(1/2.2)`), or close
+  colors swap ramps.
+- macOS stops giving drawables to a window that cannot be seen (display asleep,
+  hidden, other Space): `nextDrawable` waits a second and returns nil. Anything
+  automated must use `beginFrame(false)` with a hidden window.
+- SDL turns SIGTERM into a quit event, so `timeout`/`kill` only stops the engine
+  if its main loop is still running.
+- Each iOS executable gets wrapped in a bare `.app` by CMake; the export script
+  copies the binary out of it. iOS needs SPIRV-Cross's
+  `ios_support_base_vertex_instance`.
+- The editor captures keys through ImGui, which maps Cmd to "Ctrl" on macOS;
+  injected test input must send `ImGuiMod_Super` there.
 
 ## 6. Roadmap, in order
 
@@ -267,17 +298,16 @@ otherwise; ask the owner before installing anything.
    entity is selected, and deleting a parent. Load a real glTF model on both
    backends. Done: all of section 2's "not verified" macOS items are
    confirmed or fixed.
-2. ~~Raster shadows~~ done (one 2048 map over the whole scene; see the
-   `shortcut:` in `Renderer::fitShadowFrustum`). Still open: sprites do not
-   cast shadows.
-2b. **Pixel-art look, next steps** (the owner's main interest): sprites casting
-   Done: sheets, animation, sprite shadows, 4/8-direction sprites, and
-   palette-ramp shading in both render modes; in path-traced mode
-   ramp shading uses the amount of light, not its color, so colored light such
-   as the lantern's warm glow is lost — tint the ramp choice by light hue if the
-   owner wants it back); a palette editor panel; water and foliage. (The path tracer already honors
-   textures, sprites, palette and texel lighting.) Compare against the owner's
-   references each time.
+2. ~~Raster shadows~~ done (one 2048 map over the whole scene, sprites cast
+   theirs; see the `shortcut:` in `Renderer::fitShadowFrustum` for big levels).
+2b. **Pixel-art look** (the owner's main interest). Done: texel-space lighting,
+   world-space texel density, palette snap + dithering, palette-ramp shading
+   in both render modes, integer scaling, sprite sheets/animation, sprite
+   shadows, 4/8-direction sprites. Next: get the owner's verdict on
+   `village.scene.json` against their references; a palette editor panel;
+   water and foliage (wind-swayed sprite cards); colored light in ramp mode
+   (path-traced ramp shading uses light *amount*, so the lantern's warm tint
+   is lost); point/spot lights in the raster path.
 3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;
    ~~textures (one 1024 atlas) and sprites~~ done; then a two-level BVH (per-mesh
    BLAS built once + TLAS rebuilt per frame) so moving objects are cheap; then
@@ -292,8 +322,8 @@ otherwise; ask the owner before installing anything.
    `core/base.h`. Needs a Windows machine; nothing here can compile it. Done:
    the four verify commands produce the same images with `--backend d3d12`.
 5. **Windows export** (zip of `ace_player.exe`, `ace_data`, `project/`), then
-   **iOS** (simulator export works; remaining: signing for devices, touch
-   input in the demo, an app icon and launch screen), **Android** (Gradle project using SDL3's `android-project` template;
+   **iOS** (simulator export works; remaining: device signing, testing touch
+   with a finger, an app icon and launch screen), **Android** (Gradle project using SDL3's `android-project` template;
    assets inside the APK are already readable because all file reads go through
    `SDL_LoadFile`; honor `currentTransform`, see the shortcut in
    `createSwapchain`).
@@ -304,10 +334,10 @@ otherwise; ask the owner before installing anything.
    sprites, images/panels for UI (`ace.image`), lowercase glyphs. The old
    anti-aliased `assets/fonts/font_atlas.png` is unused (it clashes with
    pixel art); delete it once the owner agrees.
-7. **Gameplay basics**: physics. A minimal kinematic layer exists (`Collider`
-   boxes + `Scene::moveAndSlide`, exposed as `ace.move`); it has no rotation,
-   triggers, raycasts or dynamics. Evaluate Jolt (3D) and Box2D (2D) before
-   extending it. Done: sound (WAV), Lua hot reload, scene loading, trigger
+7. **Gameplay basics**: physics. A kinematic layer exists (`Collider` boxes,
+   `Scene::moveAndSlide`, triggers via `overlapping`, `raycast`); boxes are
+   axis-aligned and there are no dynamics. Evaluate Jolt (3D) and Box2D (2D)
+   before writing rigid bodies. Done: sound (WAV), Lua hot reload, scene loading, trigger
    overlaps, raycasts, gamepad, per-entity script params. Still to do:
    skeletal animation from glTF, compressed audio (OGG; stb_vorbis). (Save
    files `ace.save_data`/`ace.load_data` and Lua globals surviving scene
