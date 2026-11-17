@@ -56,6 +56,9 @@
           "orthoSize": 5,
           "nearPlane": 0.1,
           "farPlane": 120
+        },
+        "Script": {
+          "path": "scripts/camera_follow.lua"
         }
       }
     },
@@ -989,10 +992,15 @@
             1.0,
             1.375
           ],
-          "billboard": true
+          "billboard": true,
+          "columns": 4,
+          "rows": 1,
+          "frame": 0,
+          "fps": 0,
+          "flipX": false
         },
         "Script": {
-          "path": "scripts/player.lua"
+          "path": "scripts/hero.lua"
         }
       }
     },

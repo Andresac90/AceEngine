@@ -1,5 +1,6 @@
 #include "render/renderer.h"
 #include "render/path_tracer.h"
+#include <SDL3/SDL.h>
 
 namespace ace {
 
@@ -18,7 +19,7 @@ struct FrameData {
 };
 struct DrawData {
   mat4 model, normalMatrix;
-  vec4 color, emissive, flags;
+  vec4 color, emissive, flags, origin, uvRect;
 };
 struct PresentData {
   vec4 rect, outline, skyTop, skyBottom;
@@ -95,10 +96,12 @@ Renderer::Renderer(Device& device) : device_(device) {
   sp.vertexShader = loadShader("shadow", ShaderStage::Vertex);
   sp.fragmentShader = loadShader("shadow", ShaderStage::Fragment);
   sp.attributes[0] = {0, VertexFormat::Float3, offsetof(Vertex, position)};
-  sp.attributeCount = 1;
+  sp.attributes[1] = {2, VertexFormat::Float2, offsetof(Vertex, uv)};
+  sp.attributeCount = 2;
   sp.vertexStride = sizeof(Vertex);
   sp.bindGroupLayouts[0] = drawLayout_;
   sp.bindGroupLayouts[1] = drawLayout_;
+  sp.bindGroupLayouts[2] = materialLayout_;
   sp.colorFormats[0] = Format::R32F;
   sp.depthFormat = Format::D32F;
   sp.cull = CullMode::None; // single-sided planes must cast shadows too
@@ -208,6 +211,71 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   frame.params2 = vec4(scene.settings.texelLighting ? 1.0f : 0.0f, (f32)std::max(scene.settings.texelsPerUnit, 1), 0, 0);
   u32 frameOffset = pushUniform(&frame, sizeof(frame));
 
+  // Gather everything once; the shadow pass and the scene pass draw the same list.
+  struct Item {
+    const Mesh* mesh;
+    const Texture* texture;
+    DrawData data;
+    mat4 shadowModel; // billboards turn towards the sun for their shadow
+    bool sprite;
+  };
+  std::vector<Item> items;
+  for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
+    Item it{assets.mesh(m.mesh), assets.texture(m.texture), {}, t.world, false};
+    it.data.model = t.world;
+    it.data.color = toLinear(m.color);
+    it.data.emissive = vec4(toLinear(m.emissive), 0.0f);
+    it.data.flags = vec4(0, m.worldTexels ? 1.0f : 0.0f, 0, 0);
+    it.data.uvRect = vec4(0, 0, 1, 1);
+    items.push_back(it);
+  }
+  const Mesh* quad = assets.mesh("builtin:quad");
+  mat4 camWorld = glm::inverse(view);
+  f64 seconds = (f64)SDL_GetTicks() / 1000.0;
+  for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
+    // Upright card facing a horizontal direction, keeping the entity's scale.
+    auto upright = [&](vec3 right) {
+      right = glm::normalize(vec3(right.x, 0.0f, right.z));
+      vec3 scale(glm::length(vec3(t.world[0])), glm::length(vec3(t.world[1])), 1.0f);
+      return mat4(vec4(right * scale.x, 0), vec4(0, scale.y, 0, 0), vec4(glm::cross(right, vec3(0, 1, 0)), 0), t.world[3]);
+    };
+    mat4 size = glm::scale(mat4(1.0f), vec3(s.size, 1.0f));
+    vec3 sun = vec3(frame.lightDir);
+    Item it{quad, assets.texture(s.texture), {}, t.world * size, true};
+    it.data.model = (s.billboard ? upright(vec3(camWorld[0])) : t.world) * size;
+    if (s.billboard && fabsf(sun.y) < 0.999f) it.shadowModel = upright(glm::cross(vec3(0, 1, 0), sun)) * size;
+    it.data.color = toLinear(s.color);
+    it.data.flags = vec4(1, 0, 0, 0);
+    // Lit from where it stands: the bottom edge of the card.
+    it.data.origin = vec4(vec3(t.world[3]) - vec3(0.0f, 0.5f * s.size.y * glm::length(vec3(t.world[1])), 0.0f), 0.0f);
+    int columns = std::max(s.columns, 1), rows = std::max(s.rows, 1), count = columns * rows;
+    int index = (s.frame + (s.fps > 0.0f ? (int)(seconds * s.fps) : 0)) % count;
+    if (index < 0) index += count;
+    vec2 cell(1.0f / columns, 1.0f / rows), corner((f32)(index % columns) * cell.x, (f32)(index / columns) * cell.y);
+    it.data.uvRect = s.flipX ? vec4(corner.x + cell.x, corner.y, -cell.x, cell.y) : vec4(corner, cell);
+    items.push_back(it);
+  }
+
+  auto drawItems = [&](bool shadowPass) {
+    bool spritePipeline = false;
+    for (const Item& it : items) {
+      if (!shadowPass && it.sprite && !spritePipeline) { // sprites are last in the list
+        cmd.setPipeline(spritePipeline_);
+        cmd.setBindGroup(0, frameGroup_, {&frameOffset, 1});
+        spritePipeline = true;
+      }
+      DrawData d = it.data;
+      if (shadowPass) d.model = it.sprite ? it.shadowModel : d.model;
+      d.normalMatrix = mat4(glm::transpose(glm::inverse(mat3(d.model))));
+      u32 offset = pushUniform(&d, sizeof(d));
+      cmd.setBindGroup(1, drawGroup_, {&offset, 1});
+      cmd.setBindGroup(2, materialGroup(it.texture));
+      cmd.setVertexBuffer(it.mesh->vertexBuffer);
+      cmd.setIndexBuffer(it.mesh->indexBuffer);
+      cmd.drawIndexed((u32)it.mesh->indices.size());
+    }
+  };
+
   if (scene.settings.shadows) {
     RenderPassDesc sp;
     sp.name = "shadow";
@@ -217,16 +285,7 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
     cmd.beginRenderPass(sp);
     cmd.setPipeline(shadowPipeline_);
     cmd.setBindGroup(0, shadowFrameGroup_, {&frameOffset, 1});
-    for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
-      const Mesh* mesh = assets.mesh(m.mesh);
-      DrawData d{};
-      d.model = t.world;
-      u32 offset = pushUniform(&d, sizeof(d));
-      cmd.setBindGroup(1, drawGroup_, {&offset, 1});
-      cmd.setVertexBuffer(mesh->vertexBuffer);
-      cmd.setIndexBuffer(mesh->indexBuffer);
-      cmd.drawIndexed((u32)mesh->indices.size());
-    }
+    drawItems(true);
     cmd.endRenderPass();
   }
 
@@ -240,42 +299,9 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, const 
   cmd.beginRenderPass(pass);
   cmd.setViewport(0, 0, (f32)lowWidth_, (f32)lowHeight_);
   cmd.setScissor(0, 0, lowWidth_, lowHeight_);
-
-  auto drawMesh = [&](const Mesh* mesh, const Texture* tex, const mat4& model, vec4 color, vec3 emissive, vec4 flags) {
-    DrawData d;
-    d.model = model;
-    d.normalMatrix = mat4(glm::transpose(glm::inverse(mat3(model))));
-    d.color = toLinear(color);
-    d.emissive = vec4(toLinear(emissive), 0.0f);
-    d.flags = flags;
-    u32 offset = pushUniform(&d, sizeof(d));
-    cmd.setBindGroup(1, drawGroup_, {&offset, 1});
-    cmd.setBindGroup(2, materialGroup(tex));
-    cmd.setVertexBuffer(mesh->vertexBuffer);
-    cmd.setIndexBuffer(mesh->indexBuffer);
-    cmd.drawIndexed((u32)mesh->indices.size());
-  };
-
   cmd.setPipeline(meshPipeline_);
   cmd.setBindGroup(0, frameGroup_, {&frameOffset, 1});
-  for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each())
-    drawMesh(assets.mesh(m.mesh), assets.texture(m.texture), t.world, m.color, m.emissive, vec4(0, m.worldTexels ? 1.0f : 0.0f, 0, 0));
-
-  cmd.setPipeline(spritePipeline_);
-  cmd.setBindGroup(0, frameGroup_, {&frameOffset, 1});
-  const Mesh* quad = assets.mesh("builtin:quad");
-  mat4 camWorld = glm::inverse(view);
-  for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
-    mat4 model = t.world;
-    if (s.billboard) {
-      // Face the camera but stay upright, like a character sprite in a 3D world.
-      vec3 right = glm::normalize(vec3(camWorld[0].x, 0.0f, camWorld[0].z));
-      vec3 scale(glm::length(vec3(t.world[0])), glm::length(vec3(t.world[1])), 1.0f);
-      model = mat4(vec4(right * scale.x, 0), vec4(0, scale.y, 0, 0), vec4(glm::cross(right, vec3(0, 1, 0)), 0), t.world[3]);
-    }
-    drawMesh(quad, assets.texture(s.texture), model * glm::scale(mat4(1.0f), vec3(s.size, 1.0f)), s.color, vec3(0.0f), vec4(1, 0, 0, 0));
-  }
-
+  drawItems(false);
   cmd.endRenderPass();
 }
 

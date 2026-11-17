@@ -36,6 +36,7 @@ return Mover
 | `ace.scale(e)` / `ace.set_scale(e, x, y, z)` | |
 | `ace.set_mesh(e, mesh [, r, g, b])` | adds/updates a MeshRenderer |
 | `ace.set_color(e, r, g, b)` | MeshRenderer color (sRGB 0..1) |
+| `ace.set_sprite(e, frame [, fps [, flip_x]])` | SpriteRenderer sheet frame; `fps > 0` loops the sheet; `flip_x` mirrors it |
 
 Passing a destroyed or invalid entity id raises a Lua error.
 

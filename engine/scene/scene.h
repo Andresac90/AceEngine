@@ -40,6 +40,11 @@ struct SpriteRenderer {
   vec4 color{1.0f};
   vec2 size{1.0f}; // world units
   bool billboard = false; // always face the camera, staying upright
+  // Sprite sheet: a grid of equally sized frames, read left to right, top to bottom.
+  int columns = 1, rows = 1;
+  int frame = 0;          // first (or only) frame shown
+  f32 fps = 0.0f;         // > 0 plays all frames in a loop starting at `frame`
+  bool flipX = false;
 };
 
 struct Camera {

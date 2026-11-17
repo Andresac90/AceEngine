@@ -40,7 +40,7 @@ VsOut vsMain(VsIn v) {
   float4 world = mul(draw.model, float4(v.position, 1.0));
   o.position = mul(frame.viewProj, world);
   o.normal = mul(draw.normalMatrix, float4(v.normal, 0.0)).xyz;
-  o.uv = v.uv;
+  o.uv = v.uv * draw.uvRect.zw + draw.uvRect.xy;
   o.color = float4(pow(v.color.rgb, 2.2), v.color.a) * draw.color; // vertex colors are sRGB-encoded
   o.viewDepth = -mul(frame.view, world).z;
   o.worldPos = world.xyz;
@@ -98,17 +98,18 @@ FsOut fsMain(VsOut i) {
     }
   }
 
-  float3 lit = albedo.rgb;
-  if (draw.flags.x < 0.5) {
-    float light = saturate(dot(n, frame.lightDir.xyz));
-    if (light > 0.0) light *= sunVisibility(shadePos, n);
-    float bands = frame.params.x;
-    if (bands > 0.5) {
-      float jitter = (bayer4(ditherCoord) - 0.5) * frame.params.w;
-      light = clamp(ceil(light * bands - 0.001 + jitter), 0.0, bands) / bands;
-    }
-    lit = albedo.rgb * (frame.ambient.rgb + frame.lightColor.rgb * light * 0.318);
+  // A sprite is lit as one piece: it takes the sun or the shade of the spot it
+  // stands on, like a character drawn over a painted background.
+  bool sprite = draw.flags.x > 0.5;
+  float light = sprite ? sunVisibility(draw.origin.xyz + frame.lightDir.xyz * 0.75, frame.lightDir.xyz)
+                       : saturate(dot(n, frame.lightDir.xyz));
+  if (!sprite && light > 0.0) light *= sunVisibility(shadePos, n);
+  float bands = frame.params.x;
+  if (bands > 0.5) {
+    float jitter = sprite ? 0.0 : (bayer4(ditherCoord) - 0.5) * frame.params.w;
+    light = clamp(ceil(light * bands - 0.001 + jitter), 0.0, bands) / bands;
   }
+  float3 lit = albedo.rgb * (frame.ambient.rgb + frame.lightColor.rgb * light * (sprite ? 0.25 : 0.318));
   FsOut o;
   o.color = float4(lit + draw.emissive.rgb, 1.0);
   o.normalDepth = float4(n, i.viewDepth);

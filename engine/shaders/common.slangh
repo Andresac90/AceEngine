@@ -16,7 +16,9 @@ struct DrawData {
   float4x4 normalMatrix;
   float4 color;
   float4 emissive; // rgb: emissive
-  float4 flags;    // x: unlit (sprites), y: map the texture in world space at the scene's texel density
+  float4 flags;    // x: 0 = lit surface, 1 = sprite (lit as a whole from `origin`), y: world-space texel mapping
+  float4 origin;   // xyz: sprites: the world point whose light/shadow the whole sprite takes
+  float4 uvRect;   // uv = uv * zw + xy (sprite sheet frame, horizontal flip)
 };
 
 // 4x4 ordered-dither threshold in 0..1 for an integer coordinate.

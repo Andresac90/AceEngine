@@ -110,13 +110,18 @@ def art():
     shingles("shingles.png", R["roof"])
     k = {"o": R["stone"][0], "h": R["wood"][1], "H": R["wood"][2], "s": R["skin"][2], "S": R["skin"][3], "d": R["skin"][1],
          "b": R["cloth"][1], "B": R["cloth"][2], "n": R["cloth"][0], "y": R["cloth"][3], "w": R["cloth"][4], "l": R["wood"][0]}
-    sprite("hero.png", [
+    body = [
         "....oooooo......", "...ohHHHHho.....", "..ohHHHHHHho....", "..ohHsSSsHho....", "..ohsSSSSsho....",
         "..odSoSSoSdo....", "..odSSSSSSdo....", "...odSddSdo.....", "....osSSso......", "...onBBBBno.....",
         "..onBBByBBno....", ".onBBBByBBBno...", ".osnBBByBBnso...", ".osnBBBBBBnso...", ".osonBBBBnoso...",
-        "..o.onnnno.o....", "....obBBbo......", "....obBbBo......", "....ob.obo......", "....ol.olo......",
-        "...oll.ollo.....", "...ooo.oooo.....",
-    ], k)
+        "..o.onnnno.o....",
+    ]
+    stand = ["....obBBbo", "....obBbBo", "....ob.obo", "....ol.olo", "...oll.ollo", "...ooo.oooo"]
+    step_a = ["....obBBbo", "...obBbbBo", "..obb..obo", "..oll..olo", "..ooo..ollo", ".......oooo"]
+    step_b = ["....obBBbo", "....obBbbBo", "....obo..bbo", "....olo..llo", "...ollo..ooo", "...oooo"]
+    # Walk cycle as a 4-frame sheet: stand, step, stand, other step.
+    frames = [body + [r.ljust(16, ".")[:16] for r in legs] for legs in (stand, step_a, stand, step_b)]
+    sprite("hero.png", ["".join(f[y] for f in frames) for y in range(len(frames[0]))], k)
     f = {"g": R["grass"][1], "G": R["grass"][3], "r": R["roof"][3], "R": R["roof"][4], "y": R["cloth"][3], "o": R["grass"][0]}
     sprite("flower.png", ["...rR...", "..rRyR..", "...rRr..", "....G...", ".g..G...", ".Gg.G.g.", "..GgGgG.", "...oGo.."], f)
 
@@ -143,7 +148,8 @@ def scene():
         return ent(name, pos, rot, scale, parent, MeshRenderer={"mesh": mesh, "texture": "assets/" + tex, "color": [1, 1, 1, 1],
                                                                 "emissive": [0, 0, 0], "worldTexels": True})
     eye, target = (10.5, 6.5, 12.5), (0.0, 1.0, 0.0)
-    ent("Camera", eye, look_at(eye, target), Camera={"orthographic": False, "fov": 32, "orthoSize": 5, "nearPlane": 0.1, "farPlane": 120})
+    ent("Camera", eye, look_at(eye, target), Camera={"orthographic": False, "fov": 32, "orthoSize": 5, "nearPlane": 0.1, "farPlane": 120},
+        Script={"path": "scripts/camera_follow.lua"})
     sun = (-0.45, -0.75, -0.5)
     ent("Sun", rot=look_at((0, 0, 0), sun), Light={"color": [1, 0.95, 0.82], "intensity": 3.4})
     box("Ground", "grass.png", (0, 0, 0), (30, 1, 30), mesh="builtin:plane")
@@ -166,8 +172,9 @@ def scene():
         ent("Pine %d" % (i + 1), (x, 0, z), scale=(s, s, s),
             MeshRenderer={"mesh": "assets/pine.gltf", "texture": "", "color": [1, 1, 1, 1], "emissive": [0, 0, 0], "worldTexels": False})
     # 16x22 texel sprite at 16 texels per unit, feet on the ground.
-    ent("Hero", (1.6, 0.6875, 3.2), SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True},
-        Script={"path": "scripts/player.lua"})
+    ent("Hero", (1.6, 0.6875, 3.2), SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True,
+                                                 "columns": 4, "rows": 1, "frame": 0, "fps": 0, "flipX": False},
+        Script={"path": "scripts/hero.lua"})
     for i, (x, z) in enumerate([(-0.5, 5.2), (3.4, 4.0), (-2.2, 1.6), (5.8, 1.8), (0.2, -2.5)]):
         ent("Flower %d" % (i + 1), (x, 0.25, z), SpriteRenderer={"texture": "assets/flower.png", "color": [1, 1, 1, 1], "size": [0.5, 0.5], "billboard": True})
     settings = {"pixelArt": True, "pixelHeight": 216, "toonBands": 3, "dither": 0.6, "texelLighting": True, "texelsPerUnit": 16,
