@@ -7,6 +7,7 @@ set(ACE_SOURCES
   render/renderer.cpp
   render/path_tracer.cpp
   script/script.cpp
+  audio/audio.cpp
   runtime/project.cpp)
 
 if(ACE_RHI_METAL)

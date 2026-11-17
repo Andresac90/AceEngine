@@ -97,6 +97,18 @@ int l_pointer(lua_State* L) {
   return 3;
 }
 
+// ace.play_sound(path [, volume [, loop]]) -> id (0 if it could not play)
+int l_play_sound(lua_State* L) {
+  f32 volume = (f32)luaL_optnumber(L, 2, 1.0);
+  bool loop = lua_toboolean(L, 3);
+  lua_pushinteger(L, self(L).audio.play(luaL_checkstring(L, 1), volume, loop));
+  return 1;
+}
+int l_stop_sound(lua_State* L) {
+  self(L).audio.stop((u32)luaL_checkinteger(L, 1));
+  return 0;
+}
+
 // ace.move(e, dx, dy, dz) -> moved x, y, z. Slides along solid colliders.
 int l_move(lua_State* L) { return pushVec3(L, self(L).scene.moveAndSlide(checkEntity(L, 1), checkVec3(L, 2))); }
 
@@ -137,7 +149,7 @@ bool callMethod(lua_State* L, int ref, const char* method, int nargs, f32 arg) {
 
 } // namespace
 
-ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), assets(a), input(i) {
+ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), assets(a), input(i), audio(a.projectDir()) {
   L_ = luaL_newstate();
   // Scripts get the safe standard libraries only: no io/os/package, so a game
   // script cannot read or write arbitrary files on the player's machine.
@@ -156,6 +168,7 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
       {"find", l_find},         {"spawn", l_spawn},       {"destroy", l_destroy},         {"position", l_position},
       {"set_position", l_set_position}, {"rotation", l_rotation}, {"set_rotation", l_set_rotation}, {"scale", l_scale},
       {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},               {"pointer", l_pointer},
+      {"play_sound", l_play_sound}, {"stop_sound", l_stop_sound},
       {nullptr, nullptr}};
   lua_newtable(L_);
   lua_pushlightuserdata(L_, this);
@@ -206,6 +219,7 @@ static i64 fileTime(const std::string& path) {
 
 void ScriptSystem::update(f32 dt) {
   time += dt;
+  audio.update();
   // Hot reload: twice a second, restart any script whose file changed on disk.
   // The instance starts fresh (its `start` runs again); entity state is kept.
   if (time - lastReloadCheck_ > 0.5) {

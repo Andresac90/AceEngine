@@ -3,6 +3,7 @@
 // `self.entity` is the entity id to pass to the `ace.*` functions (docs/SCRIPTING.md).
 #pragma once
 #include "assets/assets.h"
+#include "audio/audio.h"
 #include "platform/app.h"
 #include "scene/scene.h"
 #include <unordered_map>
@@ -21,6 +22,7 @@ public:
   Assets& assets;
   const Input& input;
   f64 time = 0.0;
+  Audio audio; // sounds started by scripts; they stop when this system is destroyed
 
 private:
   bool instantiate(Entity e, const std::string& path);

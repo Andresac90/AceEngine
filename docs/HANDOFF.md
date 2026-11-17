@@ -81,6 +81,11 @@ looking at screenshots produced with `--screenshot`:
   simulator down and use a fresh device; the first attempt hit stale state.
 - The path tracer with textures, world texel mapping, cutout sprites, palette
   and per-texel light gathering: `village` with `pathTraced` on, both backends.
+- Sound (`engine/audio`, `ace.play_sound`): with `SDL_AUDIO_DRIVER=disk
+  SDL_AUDIO_DISK_OUTPUT_FILE=out.raw`, a walk produced one footstep burst per
+  step at the requested volume. This session had no usable speaker
+  (CoreAudio refused to start), so nobody has *heard* it; the engine logs one
+  warning and stays silent when there is no device.
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
@@ -286,8 +291,8 @@ otherwise; ask the owner before installing anything.
    boxes + `Scene::moveAndSlide`, exposed as `ace.move`); it has no rotation,
    triggers, raycasts or dynamics. Evaluate Jolt (3D) and Box2D (2D) before
    extending it. Also: audio (SDL3 audio streams or miniaudio),
-   skeletal animation from glTF, Lua hot reload on file change, more `ace.*`
-   API (input axes, gamepad, raycasts, scene loading).
+   skeletal animation from glTF, more `ace.*`
+   API (sound and Lua hot reload are done) (input axes, gamepad, raycasts, scene loading).
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
    outline, Build mode for placing grid blocks). Next: multi-select, copy/paste, prefabs,
    camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), an Export

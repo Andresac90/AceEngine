@@ -1,6 +1,6 @@
 -- Walks the hero with WASD / arrow keys, relative to the camera, and plays the
 -- walk cycle from its sprite sheet while moving.
-local Hero = { speed = 3.5, facing_left = false }
+local Hero = { speed = 3.5, facing_left = false, step_timer = 0 }
 
 function Hero:update(dt)
   local right, up = 0, 0
@@ -34,6 +34,13 @@ function Hero:update(dt)
 
   if math.abs(right) > 0.2 then self.facing_left = right < 0 end
   ace.set_sprite(self.entity, 0, 8, self.facing_left)
+
+  -- A footstep on every other frame of the 8 fps walk cycle.
+  self.step_timer = self.step_timer - dt
+  if self.step_timer <= 0 then
+    ace.play_sound("assets/step.wav", 0.5)
+    self.step_timer = 0.25
+  end
 end
 
 return Hero

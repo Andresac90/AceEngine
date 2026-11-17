@@ -32,6 +32,8 @@ Scripts reload automatically when you save the file while the game is running
 | `ace.time()` | seconds since play started |
 | `ace.key(name)` / `ace.key_pressed(name)` | held / went down this frame. Names are SDL key names: `"A"`, `"Space"`, `"Left"`, `"Return"`, `"Left Shift"` |
 | `ace.pointer()` | returns `down, x, y`: left mouse button or a finger on a touch screen; `x`, `y` run 0..1 across the window |
+| `ace.play_sound(path [, volume [, loop]])` | plays a project `.wav`; returns an id (0 if it could not play). Sounds stop when play mode stops |
+| `ace.stop_sound(id)` | |
 | `ace.find(name)` | entity id or `nil` |
 | `ace.spawn(name)` | new empty entity |
 | `ace.destroy(e)` | destroys the entity and its children |
