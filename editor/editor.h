@@ -45,6 +45,8 @@ public:
   // Before quitting or switching projects: offers to save unsaved changes.
   // Returns false if the user chose Cancel.
   bool confirmLeave();
+  // Opens a file in a code editor (VS Code if installed, else the system default).
+  void openInCodeEditor(const std::string& file);
   std::string focusWindow; // panel brought to the front on startup (--focus), e.g. for screenshots
   // Same as the File > Export menu ("macos", "ios-simulator", "ios-device"); for scripted use.
   bool exportTarget(const std::string& target);
@@ -60,6 +62,9 @@ private:
   void drawInspector();
   void drawSettings();
   void drawPalette();
+  bool drawScriptButtons(Script& script); // Open / New script under a Script component
+  std::string newScriptPath(const std::string& entityName);
+  bool writeScriptTemplate(const std::string& relativePath, const std::string& entityName);
   void loadPalette();   // palette image -> paletteRows_
   void applyPalette();  // paletteRows_ -> GPU texture (live preview)
   bool savePalette();   // -> PNG file

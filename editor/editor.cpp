@@ -7,6 +7,9 @@
 #include <imgui_impl_sdl3.h>
 #include <imgui_internal.h>
 #include <imgui_stdlib.h>
+#ifdef __APPLE__
+#include <spawn.h>
+#endif
 
 namespace ace {
 
@@ -239,6 +242,89 @@ void Editor::startExport(const char* script, const char* extraArg) {
     exporting_ = false;
   });
 #endif
+}
+
+// Open (or create, then open) the entity's Lua script in a code editor.
+bool Editor::drawScriptButtons(Script& script) {
+  std::error_code ec;
+  bool exists = !script.path.empty() && std::filesystem::is_regular_file(project_.path(script.path), ec);
+  if (exists) {
+    if (ImGui::Button("Open script", ImVec2(-1, 0))) openInCodeEditor(project_.path(script.path));
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Edit %s. Saving it while the game runs reloads it.", script.path.c_str());
+    return false;
+  }
+  if (!ImGui::Button(script.path.empty() ? "New script" : "Create this script", ImVec2(-1, 0))) return false;
+  std::string path = script.path.empty() ? newScriptPath(scene_.reg.get<Name>(selected_).value) : script.path;
+  if (!writeScriptTemplate(path, scene_.reg.get<Name>(selected_).value)) return false;
+  script.path = path;
+  assetsRefreshed_ = -10.0;
+  openInCodeEditor(project_.path(path));
+  return true;
+}
+
+// scripts/<name>.lua, made file-name safe and unique.
+std::string Editor::newScriptPath(const std::string& entityName) {
+  std::string base;
+  for (char c : entityName) base += isalnum((unsigned char)c) ? (char)tolower((unsigned char)c) : '_';
+  if (base.empty()) base = "script";
+  std::string path = "scripts/" + base + ".lua";
+  for (int n = 2; std::filesystem::exists(project_.path(path)); n++) path = "scripts/" + base + "_" + std::to_string(n) + ".lua";
+  return path;
+}
+
+bool Editor::writeScriptTemplate(const std::string& relativePath, const std::string& entityName) {
+  std::error_code ec;
+  std::filesystem::path file = project_.path(relativePath);
+  if (std::filesystem::exists(file, ec)) return true; // never overwrite someone's script
+  std::filesystem::create_directories(file.parent_path(), ec);
+  std::string text = "-- " + entityName + R"(: what this script does.
+-- Functions: docs/SCRIPTING.md in the engine (ace.position, ace.key, ace.move, ...).
+-- Saving this file while the game runs reloads it.
+local Script = {}
+
+function Script:start()
+  -- Runs once, when play starts.
+end
+
+function Script:update(dt)
+  -- Runs every frame; dt is the time since the last frame, in seconds.
+  -- local x, y, z = ace.position(self.entity)
+end
+
+return Script
+)";
+  if (!writeTextFile(file.string(), text)) {
+    ACE_ERROR("could not write %s", relativePath.c_str());
+    return false;
+  }
+  ACE_INFO("created %s", relativePath.c_str());
+  return true;
+}
+
+void Editor::openInCodeEditor(const std::string& file) {
+  if (automated_) { // tests must not launch apps on the user's desktop
+    ACE_INFO("would open %s", file.c_str());
+    return;
+  }
+#ifdef __APPLE__
+  // VS Code if it is installed (it knows Lua); otherwise the app macOS associates with .lua.
+  std::error_code ec;
+  if (std::filesystem::exists("/Applications/Visual Studio Code.app", ec)) {
+    pid_t pid;
+    const char* args[] = {"open", "-a", "Visual Studio Code", file.c_str(), nullptr};
+    if (posix_spawnp(&pid, "open", nullptr, nullptr, (char* const*)args, nullptr) == 0) return;
+  }
+#endif
+  std::string url = "file://";
+  for (unsigned char c : std::filesystem::absolute(file).string()) { // percent-encode all but safe characters
+    if (isalnum(c) || strchr("/-_.~", c)) url += (char)c;
+    else {
+      char hex[4];
+      snprintf(hex, sizeof(hex), "%%%02X", c);
+      url += hex;
+    }
+  }
+  if (!SDL_OpenURL(url.c_str())) ACE_ERROR("could not open %s: %s", file.c_str(), SDL_GetError());
 }
 
 bool Editor::confirmLeave() {
@@ -786,6 +872,7 @@ void Editor::drawInspector() {
     if (ImGui::CollapsingHeader(type.name, removable ? &keep : nullptr, ImGuiTreeNodeFlags_DefaultOpen)) {
       ImGui::PushID(type.name);
       finished |= editFields(component, type.fields);
+      if (strcmp(type.name, "Script") == 0) finished |= drawScriptButtons(*(Script*)component);
       ImGui::PopID();
     }
     if (!keep) {
@@ -1662,6 +1749,18 @@ void Editor::autotestStep() {
       break;
     case 41:
       expect(selected_ == scene_.find("Sun"), "clicking a light's icon in the viewport selects it");
+      // --- New script: creates scripts/<name>.lua from the template (never overwrites)
+      {
+        std::string path = newScriptPath("Orb");
+        expect(path == "scripts/orb.lua", "script names come from the entity name");
+        expect(writeScriptTemplate(path, "Orb"), "the template is written");
+        std::string text;
+        expect(readTextFile(project_.path(path), text) && text.find("function Script:update(dt)") != std::string::npos, "the template has update()");
+        expect(writeScriptTemplate(path, "Other") && readTextFile(project_.path(path), text) && text.rfind("-- Orb:", 0) == 0,
+               "an existing script is never overwritten");
+        expect(newScriptPath("Orb") == "scripts/orb_2.lua", "a taken name gets a number");
+        std::filesystem::remove(project_.path(path));
+      }
       // --- path tracing: switching it off and on again must restart the image
       // (regression: it kept averaging onto whatever the other mode drew).
       selected_ = kNoEntity;
