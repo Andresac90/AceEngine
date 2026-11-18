@@ -101,6 +101,8 @@ bool App::pump(const std::function<void(const SDL_Event&)>& hook) {
       default: break;
     }
   }
+  bool lock = input.wantMouseLock && allowMouseLock;
+  if (lock != input.mouseLocked && SDL_SetWindowRelativeMouseMode(window, lock)) input.mouseLocked = lock;
   memset(input.gamepadPressed, 0, sizeof(input.gamepadPressed));
   if (gamepad_) {
     for (int a = 0; a < SDL_GAMEPAD_AXIS_COUNT; a++) {

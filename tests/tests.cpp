@@ -2,6 +2,7 @@
 #include "render/path_tracer.h"
 #include "render/renderer.h"
 #include "render/texel_splat.h"
+#include "assets/assets.h"
 #include "scene/scene.h"
 #include "script/script.h"
 #include <filesystem>
@@ -269,6 +270,20 @@ static void testTexelSplatGeometry() {
   CHECK(TexelSplatter::snapOrigin({2.1f, 0, 0}, 4.0f) == vec3(4, 0, 0));
 }
 
+static void testRaycastMesh() {
+  // A 2x2 floor quad at y = 0 (two triangles), raised to y = 3 and scaled x2 by its transform.
+  Mesh m;
+  for (vec3 p : {vec3(-1, 0, -1), vec3(1, 0, -1), vec3(1, 0, 1), vec3(-1, 0, 1)}) m.vertices.push_back({p, vec3(0, 1, 0), vec2(0), {255, 255, 255, 255}});
+  m.indices = {0, 1, 2, 0, 2, 3};
+  for (const Vertex& v : m.vertices) m.bounds.grow(v.position);
+  mat4 world = glm::translate(mat4(1.0f), vec3(0, 3, 0)) * glm::scale(mat4(1.0f), vec3(2.0f));
+  f32 t = 0;
+  CHECK(raycastMesh(m, world, vec3(1.5f, 10, 1.5f), vec3(0, -1, 0), 100.0f, t) && fabsf(t - 7.0f) < 1e-4f); // inside after scaling
+  CHECK(!raycastMesh(m, world, vec3(2.5f, 10, 0), vec3(0, -1, 0), 100.0f, t));  // outside the scaled quad
+  CHECK(!raycastMesh(m, world, vec3(0, 10, 0), vec3(0, -1, 0), 5.0f, t));       // too short
+  CHECK(raycastMesh(m, world, vec3(0, -5, 0), vec3(0, 1, 0), 100.0f, t) && fabsf(t - 8.0f) < 1e-4f); // from below
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
@@ -281,6 +296,7 @@ int main() {
   testSpriteDirections();
   testCopyPaste();
   testTexelSplatGeometry();
+  testRaycastMesh();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

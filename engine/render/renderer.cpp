@@ -9,7 +9,7 @@ namespace ace {
 using namespace rhi;
 
 namespace {
-constexpr u32 kUniformRingSize = 4 << 20;
+constexpr u32 kUniformRingSize = 16 << 20; // per frame; hundreds of objects x several views (world pixels) add up
 constexpr u32 kUniformAlign = 256; // satisfies every backend's minimum offset alignment
 constexpr Format kColorFormat = Format::RGBA16F;
 constexpr u32 kShadowMapSize = 2048;

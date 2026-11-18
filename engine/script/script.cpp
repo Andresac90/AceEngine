@@ -295,6 +295,54 @@ int gamepadButton(lua_State* L, bool pressed) {
 int l_gamepad_button(lua_State* L) { return gamepadButton(L, false); }
 int l_gamepad_pressed(lua_State* L) { return gamepadButton(L, true); }
 
+// ace.set_look(e, yaw, pitch): first-person orientation in degrees: turn
+// around the vertical axis, then tilt up/down (never rolls the view).
+int l_set_look(lua_State* L) {
+  f32 yaw = glm::radians((f32)luaL_checknumber(L, 2)), pitch = glm::radians((f32)luaL_checknumber(L, 3));
+  transformOf(L).rotation = glm::angleAxis(yaw, vec3(0, 1, 0)) * glm::angleAxis(pitch, vec3(1, 0, 0));
+  return 0;
+}
+// ace.lock_mouse(on): hide the cursor and capture the mouse for looking around
+// (games only: ignored inside the editor). ace.mouse_locked() -> on
+int l_lock_mouse(lua_State* L) {
+  self(L).input.wantMouseLock = lua_toboolean(L, 1);
+  return 0;
+}
+int l_mouse_locked(lua_State* L) {
+  lua_pushboolean(L, self(L).input.mouseLocked);
+  return 1;
+}
+
+// ace.ground(x, z [, from_y [, ignore]]) -> height of the highest mesh surface
+// below (x, from_y, z), or nil. For walking on terrain.
+int l_ground(lua_State* L) {
+  ScriptSystem& s = self(L);
+  f32 x = (f32)luaL_checknumber(L, 1), z = (f32)luaL_checknumber(L, 2), from = (f32)luaL_optnumber(L, 3, 10000.0);
+  Entity ignore = lua_isnoneornil(L, 4) ? kNoEntity : checkEntity(L, 4);
+  vec3 origin(x, from, z);
+  f32 best = -1.0f;
+  for (auto [e, t, m] : s.scene.reg.view<Transform, MeshRenderer>().each()) {
+    if (e == ignore) continue;
+    f32 dist;
+    if (raycastMesh(*s.assets.mesh(m.mesh), t.world, origin, vec3(0, -1, 0), best < 0.0f ? 1e9f : best, dist)) best = dist;
+  }
+  if (best < 0.0f) lua_pushnil(L);
+  else lua_pushnumber(L, from - best);
+  return 1;
+}
+// ace.mouse_delta() -> dx, dy: mouse movement this frame, in window points
+int l_mouse_delta(lua_State* L) {
+  lua_pushnumber(L, self(L).input.mouseDelta.x);
+  lua_pushnumber(L, self(L).input.mouseDelta.y);
+  return 2;
+}
+// ace.mouse_button(n) -> held: 1 left, 2 middle, 3 right
+int l_mouse_button(lua_State* L) {
+  int b = (int)luaL_checkinteger(L, 1);
+  lua_pushboolean(L, b >= 1 && b <= 3 && self(L).input.mouseDown[b]);
+  return 1;
+}
+
 // ace.move(e, dx, dy, dz) -> moved x, y, z. Slides along solid colliders.
 int l_move(lua_State* L) { return pushVec3(L, self(L).scene.moveAndSlide(checkEntity(L, 1), checkVec3(L, 2))); }
 
@@ -335,7 +383,7 @@ bool callMethod(lua_State* L, int ref, const char* method, int nargs, f32 arg) {
 
 } // namespace
 
-ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), assets(a), input(i), audio(a.projectDir()) {
+ScriptSystem::ScriptSystem(Scene& s, Assets& a, Input& i) : scene(s), assets(a), input(i), audio(a.projectDir()) {
   L_ = luaL_newstate();
   // Scripts get the safe standard libraries only: no io/os/package, so a game
   // script cannot read or write arbitrary files on the player's machine.
@@ -353,7 +401,9 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
       {"log", l_log},           {"key", l_key},           {"key_pressed", l_key_pressed}, {"time", l_time},
       {"find", l_find},         {"spawn", l_spawn},       {"destroy", l_destroy},         {"position", l_position},
       {"set_position", l_set_position}, {"rotation", l_rotation}, {"set_rotation", l_set_rotation}, {"scale", l_scale},
-      {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},               {"pointer", l_pointer},
+      {"set_scale", l_set_scale}, {"set_mesh", l_set_mesh}, {"set_color", l_set_color},     {"set_sprite", l_set_sprite},   {"move", l_move},               {"pointer", l_pointer},         {"ground", l_ground},
+      {"set_look", l_set_look},       {"lock_mouse", l_lock_mouse}, {"mouse_locked", l_mouse_locked},
+      {"mouse_delta", l_mouse_delta}, {"mouse_button", l_mouse_button},
       {"play_sound", l_play_sound}, {"stop_sound", l_stop_sound},
       {"save_data", l_save_data},  {"load_data", l_load_data},
       {"load_scene", l_load_scene},  {"spawn_prefab", l_spawn_prefab},  {"overlaps", l_overlaps},   {"raycast", l_raycast},
@@ -366,7 +416,10 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, const Input& i) : scene(s), asse
   lua_setglobal(L_, "ace");
 }
 
-ScriptSystem::~ScriptSystem() { lua_close(L_); }
+ScriptSystem::~ScriptSystem() {
+  input.wantMouseLock = false; // stopping the game gives the cursor back
+  lua_close(L_);
+}
 
 void ScriptSystem::restart() {
   for (auto& [e, inst] : instances_)

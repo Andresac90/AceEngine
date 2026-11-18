@@ -28,6 +28,11 @@ struct Texture {
   std::vector<u8> pixels; // RGBA8, kept for the path tracer's texture atlas
 };
 
+// Nearest triangle of `mesh` (placed by `world`) hit by the ray within maxDistance.
+// `direction` need not be unit length; `distance` is in its units. CPU-side, for
+// gameplay queries (ground height, line of sight), not for rendering.
+bool raycastMesh(const Mesh& mesh, const mat4& world, vec3 origin, vec3 direction, f32 maxDistance, f32& distance);
+
 class Assets {
 public:
   Assets(rhi::Device& device, std::string projectDir);

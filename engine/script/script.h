@@ -18,13 +18,13 @@ std::vector<std::pair<std::string, std::string>> parseScriptParams(std::string_v
 
 class ScriptSystem {
 public:
-  ScriptSystem(Scene& scene, Assets& assets, const Input& input);
+  ScriptSystem(Scene& scene, Assets& assets, Input& input);
   ~ScriptSystem();
   void update(f32 dt); // instantiates scripts on new entities, then updates all
 
   Scene& scene;
   Assets& assets;
-  const Input& input;
+  Input& input;
   f64 time = 0.0;
   Audio audio; // sounds started by scripts; they stop when this system is destroyed
   std::vector<TextDraw> texts; // queued by ace.text during update(); hand them to Renderer::render

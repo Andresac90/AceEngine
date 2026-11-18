@@ -303,6 +303,15 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   // Anything that changes the geometry or its materials forces a BVH rebuild.
   vec3 cameraRight = vec3(target.spriteCamera[0]);
   vec3 cameraPosition = vec3(target.spriteCamera[3]);
+  if (target.skipSprites) {
+    // Primary rays ignore sprites here (they are drawn directly), so sprite cards
+    // only cast shadows: face them towards the sun. Then turning the camera does
+    // not change the scene, rebuild the BVH and reset every probe face's average.
+    vec3 sun, sunColor;
+    findSun(scene, sun, sunColor);
+    cameraRight = fabsf(sun.y) < 0.999f ? glm::cross(vec3(0, 1, 0), sun) : vec3(1, 0, 0);
+    cameraPosition = sun * 10000.0f;
+  }
   u64 sh = 14695981039346656037ull;
   for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
     sh = hashBytes(sh, &t.world, sizeof(mat4));

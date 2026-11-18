@@ -67,6 +67,7 @@ int main(int argc, char** argv) {
 
   App app;
   if (!app.init(desc)) return 1;
+  app.allowMouseLock = false; // play mode inside the editor looks with right-drag instead
   rhi::Device& device = *app.device;
 
   if (projectDir.empty()) projectDir = lastProject();

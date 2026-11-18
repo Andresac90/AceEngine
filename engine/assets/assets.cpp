@@ -115,6 +115,46 @@ static bool loadGltf(const std::string& file, Mesh& m) {
   return !m.indices.empty();
 }
 
+bool raycastMesh(const Mesh& mesh, const mat4& world, vec3 origin, vec3 direction, f32 maxDistance, f32& distance) {
+  // Work in the mesh's own space: one inverse transform instead of transforming every vertex.
+  mat4 inv = glm::inverse(world);
+  vec3 o = vec3(inv * vec4(origin, 1.0f)), d = vec3(inv * vec4(direction, 0.0f));
+  // Bounding box first: most queries miss most meshes.
+  f32 t0 = 0.0f, t1 = maxDistance;
+  for (int a = 0; a < 3; a++) {
+    if (fabsf(d[a]) < 1e-12f) {
+      if (o[a] < mesh.bounds.min[a] || o[a] > mesh.bounds.max[a]) return false;
+      continue;
+    }
+    f32 lo = (mesh.bounds.min[a] - o[a]) / d[a], hi = (mesh.bounds.max[a] - o[a]) / d[a];
+    if (lo > hi) std::swap(lo, hi);
+    t0 = std::max(t0, lo);
+    t1 = std::min(t1, hi);
+    if (t0 > t1) return false;
+  }
+  bool hit = false;
+  distance = maxDistance;
+  for (size_t i = 0; i + 2 < mesh.indices.size(); i += 3) { // Moller-Trumbore, both sides
+    vec3 a = mesh.vertices[mesh.indices[i]].position, b = mesh.vertices[mesh.indices[i + 1]].position, c = mesh.vertices[mesh.indices[i + 2]].position;
+    vec3 e1 = b - a, e2 = c - a, p = glm::cross(d, e2);
+    f32 det = glm::dot(e1, p);
+    if (fabsf(det) < 1e-12f) continue;
+    f32 invDet = 1.0f / det;
+    vec3 s = o - a;
+    f32 u = glm::dot(s, p) * invDet;
+    if (u < 0.0f || u > 1.0f) continue;
+    vec3 q = glm::cross(s, e1);
+    f32 v = glm::dot(d, q) * invDet;
+    if (v < 0.0f || u + v > 1.0f) continue;
+    f32 t = glm::dot(e2, q) * invDet;
+    if (t >= 0.0f && t < distance) {
+      distance = t;
+      hit = true;
+    }
+  }
+  return hit;
+}
+
 Assets::Assets(rhi::Device& device, std::string projectDir) : device_(device), root_(std::move(projectDir)) {
   if (!root_.empty() && root_.back() != '/') root_ += '/';
 }

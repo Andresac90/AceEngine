@@ -19,6 +19,8 @@ struct Input {
   f32 wheel = 0.0f;
   bool mouseDown[4] = {};
   bool mousePressed[4] = {};
+  bool wantMouseLock = false; // set by scripts (ace.lock_mouse); the App applies it if allowed
+  bool mouseLocked = false;    // hidden cursor, unlimited relative movement (first-person look)
   // First connected gamepad (all zero when none). Indexed by SDL_GamepadAxis /
   // SDL_GamepadButton; sticks are -1..1 with a small dead zone, triggers 0..1.
   f32 gamepadAxis[SDL_GAMEPAD_AXIS_COUNT] = {};
@@ -55,6 +57,9 @@ public:
 private:
   u64 lastCounter_ = 0;
   SDL_Gamepad* gamepad_ = nullptr;
+
+public:
+  bool allowMouseLock = true; // the editor turns this off: its UI needs the cursor
 };
 
 // Parses "--backend metal|vulkan|d3d12" style values. Returns false if unknown or not compiled in.

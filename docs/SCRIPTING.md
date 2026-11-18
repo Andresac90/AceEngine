@@ -68,6 +68,11 @@ Numbers become numbers, `true`/`false` become booleans, anything else is text. A
 | `ace.gamepad_button(name)` / `ace.gamepad_pressed(name)` | held / went down this frame: `"south"` (A / cross), `"east"`, `"west"`, `"north"`, `"start"`, `"back"`, `"dpup"`, `"dpdown"`, `"dpleft"`, `"dpright"`, `"leftshoulder"`, `"rightshoulder"` |
 | `ace.save_data(table)` | writes the table (numbers, strings, booleans, nested tables) as the game's save file; returns `true` on success |
 | `ace.load_data()` | the saved table, or `nil` if there is no save yet |
+| `ace.ground(x, z [, from_y [, ignore]])` | height of the highest mesh surface below `(x, from_y, z)` (default: from far above), or `nil`. For walking on terrain; `ignore` skips one entity (e.g. the player's own mesh) |
+| `ace.set_look(e, yaw, pitch)` | first-person orientation in degrees: turn around the vertical axis, then tilt up/down (no roll). The entity looks along its -Z |
+| `ace.lock_mouse(on)` / `ace.mouse_locked()` | hide the cursor and capture the mouse for looking around. Only in the game; inside the editor play mode keeps the cursor (look with right-drag) |
+| `ace.mouse_delta()` | `dx, dy`: how far the mouse moved this frame (window points) |
+| `ace.mouse_button(n)` | held: 1 left, 2 middle, 3 right |
 | `ace.find(name)` | entity id or `nil` |
 | `ace.spawn(name)` | new empty entity |
 | `ace.spawn_prefab(path [, x, y, z])` | a copy of a saved prefab (`prefabs/*.prefab.json`), optionally placed at x, y, z; returns its root entity |
