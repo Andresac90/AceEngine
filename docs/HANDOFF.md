@@ -82,7 +82,8 @@ looking at screenshots produced with `--screenshot`:
   prefab save/place/undo, Shift+click multi-select, copy/paste through the
   system clipboard (the test saves and restores the user's clipboard), delete
   of a multi-selection, a group gizmo drag, and the Palette panel (create,
-  edit with a live GPU update including a resize, save, read back from disk).
+  edit with a live GPU update including a resize, save, read back from disk),
+  and selecting a light by clicking its viewport icon.
   When you add an editor feature, add steps to `Editor::autotestStep`.
 - Raster sun shadows, direct sampling of emissive triangles in the path tracer,
   a hand-made glTF model (`assets/pine.gltf`), and the pixel-art feature set
@@ -403,11 +404,10 @@ otherwise; ask the owner before installing anything.
    files `ace.save_data`/`ace.load_data` and Lua globals surviving scene
    changes are done and were tested with a throwaway project.)
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
-   outline, Build mode, File > Export, verified with `ace_editor <project>
+   outline, Build mode, light/camera icons and lamp range, File > Export, verified with `ace_editor <project>
    --export macos` on a path containing a space; prefabs, which are
    independent copies with no live link to the file; multi-select; copy/paste).
-   Next: box (marquee) selection,
-   camera/light icons, a file dialog (`SDL_ShowOpenFileDialog`), crisp fonts on HiDPI displays, a
+   Next: box (marquee) selection, a file dialog (`SDL_ShowOpenFileDialog`), crisp fonts on HiDPI displays, a
    game-resolution preview, asset thumbnails.
 9. **Engine scale**: replace `Scene::children`' linear scans with cached child
    lists, GPU sub-allocation in Vulkan (VMA), frames in flight, a render graph

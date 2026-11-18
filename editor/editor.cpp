@@ -1178,9 +1178,72 @@ void Editor::drawViewport() {
         if (gizmoWasUsing_ && !gizmoActive) commit(); // one undo step per drag
         gizmoWasUsing_ = gizmoActive;
       }
+      // Icons for lights and cameras, which have nothing to click on otherwise.
+      Entity iconHit = kNoEntity;
+      {
+        CameraView cv = camera_.view();
+        mat4 viewProj = cv.camera.projection(size.x / size.y) * glm::inverse(cv.world);
+        auto toScreen = [&](vec3 p, ImVec2& out) {
+          vec4 clip = viewProj * vec4(p, 1.0f);
+          if (clip.w <= 0.001f) return false;
+          out = ImVec2(pos.x + (clip.x / clip.w * 0.5f + 0.5f) * size.x, pos.y + (0.5f - clip.y / clip.w * 0.5f) * size.y);
+          return out.x >= pos.x && out.y >= pos.y && out.x <= pos.x + size.x && out.y <= pos.y + size.y;
+        };
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->PushClipRect(pos, ImVec2(pos.x + size.x, pos.y + size.y), true);
+        const f32 radius = 9.0f;
+        for (auto [e, t] : scene_.reg.view<Transform>().each()) {
+          const Light* light = scene_.reg.try_get<Light>(e);
+          bool camera = scene_.reg.all_of<Camera>(e);
+          if (!light && !camera) continue;
+          bool icon = !scene_.reg.any_of<MeshRenderer, SpriteRenderer>(e); // meshes are clickable already
+          ImVec2 c;
+          bool onScreen = toScreen(vec3(t.world[3]), c);
+          ImU32 ink = isSelected(e) ? IM_COL32(90, 255, 140, 255) : IM_COL32(255, 255, 255, 220);
+          if (icon && onScreen) dl->AddCircleFilled(c, radius, IM_COL32(20, 22, 30, 200));
+          if (!icon || !onScreen) {
+          } else if (camera) {
+            dl->AddRect(ImVec2(c.x - 5, c.y - 3), ImVec2(c.x + 3, c.y + 4), ink, 0.0f, 0, 1.5f);
+            dl->AddTriangleFilled(ImVec2(c.x + 3, c.y), ImVec2(c.x + 7, c.y - 3), ImVec2(c.x + 7, c.y + 4), ink);
+          } else if (light->point) {
+            dl->AddCircleFilled(c, 4.0f, ink);
+          } else { // sun: a disc with rays, plus a line showing where it shines
+            dl->AddCircle(c, 4.0f, ink, 0, 1.5f);
+            for (int k = 0; k < 8; k++) {
+              f32 a = k * glm::quarter_pi<f32>();
+              dl->AddLine(ImVec2(c.x + cosf(a) * 6, c.y + sinf(a) * 6), ImVec2(c.x + cosf(a) * 8, c.y + sinf(a) * 8), ink, 1.5f);
+            }
+            ImVec2 tip;
+            if (toScreen(vec3(t.world[3]) - glm::normalize(vec3(t.world[2])) * 2.0f, tip)) dl->AddLine(c, tip, ink, 1.0f);
+          }
+          if (light && light->point && isSelected(e)) { // show the reach of a selected lamp
+            vec3 p = vec3(t.world[3]);
+            for (int axis = 0; axis < 3; axis++) {
+              ImVec2 prev;
+              bool havePrev = false;
+              for (int k = 0; k <= 48; k++) {
+                f32 a = glm::two_pi<f32>() * k / 48.0f;
+                vec3 o(0.0f);
+                o[(axis + 1) % 3] = cosf(a) * light->range;
+                o[(axis + 2) % 3] = sinf(a) * light->range;
+                ImVec2 q;
+                vec4 clip = viewProj * vec4(p + o, 1.0f);
+                bool ok = clip.w > 0.001f;
+                if (ok) q = ImVec2(pos.x + (clip.x / clip.w * 0.5f + 0.5f) * size.x, pos.y + (0.5f - clip.y / clip.w * 0.5f) * size.y);
+                if (ok && havePrev) dl->AddLine(prev, q, IM_COL32(255, 210, 120, 160), 1.0f);
+                prev = q;
+                havePrev = ok;
+              }
+            }
+          }
+          ImVec2 m = io.MousePos;
+          if (icon && onScreen && (m.x - c.x) * (m.x - c.x) + (m.y - c.y) * (m.y - c.y) <= radius * radius) iconHit = e;
+        }
+        dl->PopClipRect();
+      }
       if (!buildMode_ && hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !gizmoActive && !(selected_ != kNoEntity && ImGuizmo::IsOver()))
       {
-        Entity hit = pick(mouseUv);
+        Entity hit = iconHit != kNoEntity ? iconHit : pick(mouseUv); // icons sit on top of the scene
         if (io.KeyShift && hit != kNoEntity) toggleSelected(hit); // Shift+click adds to / removes from the selection
         else selected_ = hit;
       }
@@ -1461,12 +1524,27 @@ void Editor::autotestStep() {
         expect(paletteRows_.size() == 4 && paletteRows_[3].size() == 6 && paletteRows_[2][1].r > 0.99f, "the saved file reads back with the edits");
         std::filesystem::remove(project_.path(path));
       }
+      break;
+    }
+    case 39: { // --- light icons: lights have no mesh, but their icon selects them
+      // Click on the Sun's icon (placed at its position on screen).
+      Entity sun = scene_.find("Sun");
+      selected_ = kNoEntity;
+      ImVec2 p = toScreen(vec3(scene_.reg.get<Transform>(sun).world[3]));
+      moveTo(p.x, p.y);
+      break;
+    }
+    case 40:
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+      break;
+    case 41:
+      expect(selected_ == scene_.find("Sun"), "clicking a light's icon in the viewport selects it");
       if (autotestResult_ == 0) {
         ACE_INFO("autotest passed");
         autotestResult_ = 1;
       }
       break;
-    }
     default: break;
   }
 }

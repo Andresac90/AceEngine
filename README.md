@@ -36,7 +36,7 @@ Add `--backend vulkan` (or `metal`) to pick the GPU backend.
 | Action | How |
 | --- | --- |
 | Orbit / pan / zoom | right-drag / middle-drag or Shift+right-drag / wheel |
-| Select | click in the viewport or the Hierarchy |
+| Select | click in the viewport or the Hierarchy. Lights and cameras show as small icons (sun, lamp, camera) you can click; a selected lamp shows its range |
 | Select several | Shift+click in the viewport; Cmd+click (Ctrl on Windows) or Shift+click in the Hierarchy. The gizmo, delete, duplicate and copy act on all of them |
 | Copy / paste | Cmd+C / Cmd+V, also between scenes (uses the system clipboard; pasted entities keep their world position) |
 | Move / rotate / scale | W / E / R, then drag the gizmo |
