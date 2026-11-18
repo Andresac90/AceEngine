@@ -208,6 +208,7 @@ void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const
       t.color = v.color;
       t.normalDepth = v.normalDepth;
       t.viewport = v.viewport;
+      t.textureSize = vec2((f32)(6 * n), (f32)n);
       t.capture = true;
       t.skipSprites = true;
       t.spriteCamera = cameraWorld;

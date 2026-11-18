@@ -43,6 +43,8 @@ PathTracer::PathTracer(Renderer& renderer) : r_(renderer) {
   p.colorCount = 2;
   p.cull = CullMode::None;
   p.colorFormats[0] = Format::RGBA16F;
+  p.colorCount = 4; // light, normal/depth, surface color, emission
+  p.colorFormats[2] = p.colorFormats[3] = Format::RGBA16F;
   for (int capture = 0; capture < 2; capture++) {
     for (int first = 0; first < 2; first++) {
       p.colorFormats[1] = capture ? Format::RGBA32F : Format::RGBA16F;
@@ -54,9 +56,100 @@ PathTracer::PathTracer(Renderer& renderer) : r_(renderer) {
     }
   }
   atlas_ = dev.createTexture({kAtlasSize, kAtlasSize, Format::RGBA8_SRGB, TextureUsage_Sampled, "path tracer atlas"});
+
+  BindGroupLayoutDesc dl;
+  dl.bindings[0] = BindingType::UniformBuffer;
+  dl.bindings[1] = dl.bindings[2] = BindingType::Texture;
+  denoiseLayout_ = dev.createBindGroupLayout(dl);
+  BindGroupLayoutDesc cl;
+  cl.bindings[0] = BindingType::UniformBuffer;
+  for (int b = 1; b <= 5; b++) cl.bindings[b] = BindingType::Texture;
+  composeLayout_ = dev.createBindGroupLayout(cl);
+  PipelineDesc dp;
+  dp.name = "pt denoise";
+  dp.vertexShader = r_.loadShader("pt_denoise", ShaderStage::Vertex);
+  dp.fragmentShader = r_.loadShader("pt_denoise", ShaderStage::Fragment);
+  dp.bindGroupLayouts[0] = denoiseLayout_;
+  dp.colorFormats[0] = Format::RGBA16F;
+  dp.cull = CullMode::None;
+  denoisePipeline_ = dev.createPipeline(dp);
+  dp.name = "pt compose";
+  dp.vertexShader = r_.loadShader("pt_compose", ShaderStage::Vertex);
+  dp.fragmentShader = r_.loadShader("pt_compose", ShaderStage::Fragment);
+  dp.bindGroupLayouts[0] = composeLayout_;
+  composePipeline_ = dev.createPipeline(dp);
+  ACE_ASSERT(denoisePipeline_ && composePipeline_, "failed to create the denoising pipelines");
 }
 
-PathTracer::~PathTracer() = default;
+PathTracer::~PathTracer() {
+  for (auto& [id, b] : buffers_) destroy(b);
+}
+
+void PathTracer::destroy(Buffers& b) {
+  Device& dev = r_.device();
+  for (BindGroupHandle g : b.denoise) dev.destroy(g);
+  dev.destroy(b.compose);
+  for (TextureHandle t : {b.light, b.albedo, b.emission, b.scratch[0], b.scratch[1]}) dev.destroy(t);
+  b = Buffers{};
+}
+
+namespace {
+struct DenoiseData {
+  vec4 rect, params;
+};
+struct ComposeData {
+  vec4 rect, ramp;
+};
+constexpr int kDenoisePasses = 3; // tap spacing 1, 2, 4
+} // namespace
+
+PathTracer::Buffers& PathTracer::buffers(const Target& target, bool denoise, TextureHandle palette) {
+  Device& dev = r_.device();
+  Buffers& b = buffers_[target.color.id];
+  if (b.size != target.textureSize || b.normalDepthId != target.normalDepth.id) {
+    if (b.light) {
+      dev.waitIdle();
+      destroy(b);
+    }
+    b.size = target.textureSize;
+    b.normalDepthId = target.normalDepth.id;
+    u32 w = (u32)target.textureSize.x, h = (u32)target.textureSize.y, rt = TextureUsage_RenderTarget | TextureUsage_Sampled;
+    b.light = dev.createTexture({w, h, Format::RGBA16F, rt, "pt light"});
+    b.albedo = dev.createTexture({w, h, Format::RGBA16F, rt, "pt surface color"});
+    b.emission = dev.createTexture({w, h, Format::RGBA16F, rt, "pt emission"});
+    b.scratch[0] = dev.createTexture({w, h, Format::RGBA16F, rt, "pt denoise a"});
+    b.scratch[1] = dev.createTexture({w, h, Format::RGBA16F, rt, "pt denoise b"});
+    TextureHandle inputs[3] = {b.light, b.scratch[0], b.scratch[1]};
+    for (int k = 0; k < 3; k++) {
+      BindGroupDesc g;
+      g.layout = denoiseLayout_;
+      g.entries[0].buffer = r_.uniformBuffer();
+      g.entries[0].size = sizeof(DenoiseData);
+      g.entries[1].texture = inputs[k];
+      g.entries[2].texture = target.normalDepth;
+      b.denoise[k] = dev.createBindGroup(g);
+    }
+  }
+  // Pass k writes scratch[k % 2]; compose reads the last one (or the raw light).
+  u32 input = denoise ? (u32)((kDenoisePasses - 1) % 2) + 1 : 0;
+  if (!b.compose || b.composeInput != input || b.composePalette != palette.id) {
+    if (b.compose) dev.destroy(b.compose);
+    TextureHandle inputs[3] = {b.light, b.scratch[0], b.scratch[1]};
+    BindGroupDesc g;
+    g.layout = composeLayout_;
+    g.entries[0].buffer = r_.uniformBuffer();
+    g.entries[0].size = sizeof(ComposeData);
+    g.entries[1].texture = inputs[input];
+    g.entries[2].texture = b.albedo;
+    g.entries[3].texture = b.emission;
+    g.entries[4].texture = palette;
+    g.entries[5].texture = target.normalDepth;
+    b.compose = dev.createBindGroup(g);
+    b.composeInput = input;
+    b.composePalette = palette.id;
+  }
+  return b;
+}
 
 // Median split on the longest axis of the centroid bounds.
 // shortcut: no SAH and a full rebuild whenever anything moves; upgrade to a
@@ -298,7 +391,8 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
 
   // Anything else that changes the image restarts the running average.
   u64 vh = hashBytes(14695981039346656037ull, &d, sizeof(d));
-  u32 key[3] = {target.color.id, target.normalDepth.id, target.capture ? 1u : 0u};
+  bool denoise = scene.settings.denoise;
+  u32 key[5] = {target.color.id, target.normalDepth.id, target.capture ? 1u : 0u, palette->handle.id, denoise ? 1u : 0u};
   vh = hashBytes(vh, key, sizeof(key));
   vh = hashBytes(vh, &target.viewport, sizeof(vec4));
   History& h = history_[target.slot];
@@ -316,21 +410,63 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   d.params.x = (f32)h.frame;
   if (h.frame < kMaxAccumulatedFrames) h.frame++;
   u32 offset = r_.pushUniform(&d, sizeof(d));
+  Buffers& buf = buffers(target, denoise, palette->handle);
+  const vec4& v = target.viewport;
+  auto region = [&] {
+    cmd.setViewport(v.x, v.y, v.z, v.w);
+    cmd.setScissor((i32)v.x, (i32)v.y, (u32)v.z, (u32)v.w);
+  };
 
+  // 1. trace: light (blended into the running average), normal/depth, surface color, emission
   RenderPassDesc pass;
   pass.name = "pathtrace";
-  pass.colorCount = 2;
-  pass.color[0].texture = target.color;
+  pass.colorCount = 4;
+  pass.color[0].texture = buf.light;
   pass.color[1].texture = target.normalDepth;
+  pass.color[2].texture = buf.albedo;
+  pass.color[3].texture = buf.emission;
   // Load, never clear: a clear would wipe the whole texture, and probe atlases
   // hold six faces with separate histories. The first frame overwrites instead.
-  pass.color[0].load = pass.color[1].load = LoadOp::Load;
+  for (int k = 0; k < 4; k++) pass.color[k].load = LoadOp::Load;
   cmd.beginRenderPass(pass);
-  const vec4& v = target.viewport;
-  cmd.setViewport(v.x, v.y, v.z, v.w);
-  cmd.setScissor((i32)v.x, (i32)v.y, (u32)v.z, (u32)v.w);
+  region();
   cmd.setPipeline(pipelines_[target.capture ? 1 : 0][first ? 1 : 0]);
   cmd.setBindGroup(0, group_, {&offset, 1});
+  cmd.draw(3);
+  cmd.endRenderPass();
+
+  // 2. denoise the light: a-trous passes with growing tap spacing. The
+  // brightness tolerance shrinks as samples accumulate, so the blur fades out
+  // as the image converges and shadow edges come back sharp.
+  if (denoise) {
+    f32 tolerance = 0.4f * d.ramp.z / sqrtf((f32)h.frame);
+    for (int k = 0; k < kDenoisePasses; k++) {
+      DenoiseData dd{v, vec4((f32)(1 << k), tolerance, 0, 0)};
+      u32 dOffset = r_.pushUniform(&dd, sizeof(dd));
+      RenderPassDesc dp;
+      dp.name = "pt denoise";
+      dp.color[0].texture = buf.scratch[k % 2];
+      dp.color[0].load = LoadOp::Load;
+      cmd.beginRenderPass(dp);
+      region();
+      cmd.setPipeline(denoisePipeline_);
+      cmd.setBindGroup(0, buf.denoise[k == 0 ? 0 : 1 + (k - 1) % 2], {&dOffset, 1});
+      cmd.draw(3);
+      cmd.endRenderPass();
+    }
+  }
+
+  // 3. compose: surface color x light (or the palette ramp color), plus emission
+  ComposeData cd{v, d.ramp};
+  u32 cOffset = r_.pushUniform(&cd, sizeof(cd));
+  RenderPassDesc cp;
+  cp.name = "pt compose";
+  cp.color[0].texture = target.color;
+  cp.color[0].load = LoadOp::Load;
+  cmd.beginRenderPass(cp);
+  region();
+  cmd.setPipeline(composePipeline_);
+  cmd.setBindGroup(0, buf.compose, {&cOffset, 1});
   cmd.draw(3);
   cmd.endRenderPass();
 }

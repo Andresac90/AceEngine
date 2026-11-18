@@ -21,6 +21,7 @@ public:
     mat4 spriteCamera{1.0f};  // camera-to-world of the real camera: billboards face it
     int samples = 0;          // rays per pixel per frame; 0 = the scene's ptSamples
     u32 settleFrames = 0;     // > 0: once this many frames are averaged and nothing changed, stop tracing (keep the image)
+    vec2 textureSize{0.0f};   // full size of the color/normalDepth textures (the viewport may be part of them)
   };
   void render(rhi::CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj, const Target& target);
 
@@ -41,6 +42,7 @@ public:
     sceneHash_ = 0;
     paletteId_ = 0;
     history_.clear();
+    for (auto& [id, b] : buffers_) b.composePalette = 0; // compose bind groups reference the palette texture
   }
 
 private:
@@ -49,6 +51,22 @@ private:
   rhi::BindGroupLayoutHandle layout_;
   rhi::BindGroupHandle group_;
   rhi::PipelineHandle pipelines_[2][2]; // [RGBA32F normal/depth][first frame: no blending]
+  // Denoising: per traced image (screen, or a probe atlas), the raw light, the
+  // surface color and glow, and two scratch images for the filter passes.
+  struct Buffers {
+    vec2 size{0.0f};
+    u32 normalDepthId = 0;
+    rhi::TextureHandle light, albedo, emission, scratch[2];
+    rhi::BindGroupHandle denoise[3]; // input: light, scratch[0], scratch[1]
+    rhi::BindGroupHandle compose;
+    u32 composeInput = 0;            // which image compose reads (depends on the pass count)
+    u32 composePalette = 0;          // palette texture compose was bound to
+  };
+  Buffers& buffers(const Target& target, bool denoise, rhi::TextureHandle palette);
+  void destroy(Buffers& b);
+  std::unordered_map<u32, Buffers> buffers_; // by target color texture id
+  rhi::BindGroupLayoutHandle denoiseLayout_, composeLayout_;
+  rhi::PipelineHandle denoisePipeline_, composePipeline_;
   rhi::BufferHandle nodeBuffer_, triBuffer_, lightBuffer_;
   u64 nodeCapacity_ = 0, triCapacity_ = 0, lightCapacity_ = 0;
   u32 lightCount_ = 0;

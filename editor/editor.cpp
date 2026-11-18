@@ -942,7 +942,8 @@ void Editor::drawSettings() {
        {{"pathTraced", "Trace light rays: soft shadows, bounce light, glowing objects light their surroundings. Slower. "
                        "Works with world pixels (the image settles while the camera is still)."},
         {"ptSamples", "Rays per pixel per frame (screen pixels). More = less noise, slower."},
-        {"ptBounces", "How many times light bounces. More = brighter, softer indirect light, slower."}}},
+        {"ptBounces", "How many times light bounces. More = brighter, softer indirect light, slower."},
+        {"denoise", "Smooth the path-traced light while there are few samples (textures stay sharp). The smoothing fades as the image settles."}}},
   };
   // Settings that do nothing with the current choices are greyed out.
   auto active = [&](const std::string& n) {
@@ -952,7 +953,7 @@ void Editor::drawSettings() {
     if (n == "pixelSnap") return rs.pixelArt;
     if (n == "rampShading" || n == "rampShadowSteps") return !rs.palette.empty() && (n == "rampShading" || rs.rampShading);
     if (n == "outlineStrength") return rs.outlines;
-    if (n == "ptSamples" || n == "ptBounces") return rs.pathTraced;
+    if (n == "ptSamples" || n == "ptBounces" || n == "denoise") return rs.pathTraced;
     if (n == "shadows") return !rs.pathTraced;
     return true;
   };

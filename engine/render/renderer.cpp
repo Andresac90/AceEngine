@@ -562,6 +562,7 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
     t.color = color_;
     t.normalDepth = normalDepth_;
     t.viewport = vec4(0, 0, (f32)lowWidth_, (f32)lowHeight_);
+    t.textureSize = vec2((f32)lowWidth_, (f32)lowHeight_);
     t.spriteCamera = glm::inverse(view);
     pathTracer_->render(cmd, scene, assets, view, proj, t);
   } else {

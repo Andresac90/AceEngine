@@ -118,6 +118,7 @@ struct RenderSettings {
   vec3 skyBottom{0.80f, 0.86f, 0.92f};
   int ptSamples = 4; // path tracer: samples per pixel per frame
   int ptBounces = 3;
+  bool denoise = true; // path tracing: smooth the light (not the textures) while samples are few
   f32 exposure = 1.0f;
 };
 

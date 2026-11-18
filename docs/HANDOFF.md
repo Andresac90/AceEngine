@@ -154,6 +154,15 @@ looking at screenshots produced with `--screenshot`:
   primary rays but casting shadows. Metal = Vulkan pixel for pixel. Still
   camera on the village: 16.5 ms/frame vs 11.4 ms raster world pixels (machine
   under load, load average ~14).
+- Path-tracing denoiser (`denoise`, default on): the path tracer writes light,
+  surface color and emission separately; three a-trous passes (pt_denoise.slang,
+  normal/depth/brightness edge-stopping, brightness tolerance 0.4 x full-light /
+  sqrt(frames)) smooth only the light, then pt_compose.slang applies color or
+  picks the palette-ramp color. Share of pixels differing from a converged image
+  (village, still camera): world pixels 13.7% -> 5.9% after 1 frame, 6.2% -> 0.6%
+  after 4, 3.1% -> 0.4% after 16; screen pixels 9.3% -> 5.4%, 3.1% -> 1.1%,
+  1.9% -> 0.8%. Measured with a throwaway script (render frames 1/4/16/300,
+  count pixels differing by >24 from frame 300).
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
@@ -387,6 +396,8 @@ otherwise; ask the owner before installing anything.
    is lost); raster shadows for point lights; a
    day/night setting that animates sun, ambient and sky together.
 3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;
+   ~~denoiser~~ done (spatial only; a temporal pass with motion reprojection
+   would keep history while the camera moves, which is the next big win);
    ~~textures (one 1024 atlas) and sprites~~ done; then a two-level BVH (per-mesh
    BLAS built once + TLAS rebuilt per frame) so moving objects are cheap; then
    a denoiser. Hardware ray tracing (Metal/Vulkan/DXR ray queries) is a later

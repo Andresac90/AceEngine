@@ -48,9 +48,14 @@ struct VsOut {
   float4 position : SV_Position;
   float2 uv : TEXCOORD0;
 };
+// Light and surface are kept apart so the light can be denoised without
+// blurring textures (pt_denoise.slang), and palette ramps are chosen from the
+// denoised light (pt_compose.slang).
 struct FsOut {
-  float4 color : SV_Target0;
+  float4 color : SV_Target0;       // light arriving at the surface (averaged over frames)
   float4 normalDepth : SV_Target1;
+  float4 albedo : SV_Target2;      // rgb: surface color, a: 1 = may use palette ramps (0 for sprites)
+  float4 emission : SV_Target3;    // light the surface gives off itself
 };
 
 VsOut vsMain(uint id : SV_VertexID) {
@@ -213,6 +218,8 @@ FsOut fsMain(VsOut i) {
   uint frame = uint(data.params.x);
   o.color = float4(0, 0, 0, 1.0 / float(frame + 1));
   o.normalDepth = float4(0, 1, 0, 10000.0);
+  o.albedo = float4(0, 0, 0, 0);
+  o.emission = float4(0, 0, 0, 0);
 
   Hit primary;
   if (!trace(origin, dir, 1e30, false, primary, data.lightInfo.w > 0.5)) return o; // sky: filled in by the present pass
@@ -222,11 +229,10 @@ FsOut fsMain(VsOut i) {
   o.normalDepth = float4(pn, -mul(data.view, float4(ppos, 1.0)).z);
 
   float2 ptexel = texelAt(ptri, ppos, primary.u, primary.v);
-  float3 palbedo = ptri.color.rgb * texelColor(ptri, ptexel).rgb;
-  // Ramp shading: gather light onto a white surface, then pick the ramp color.
-  bool ramp = data.ramp.x > 0.5 && (flagsOf(ptri) & 2) == 0;
-  float3 surfaceAlbedo = palbedo;
-  if (ramp) palbedo = float3(1, 1, 1);
+  // The first surface is traced as white: its color is applied after denoising.
+  o.albedo = float4(ptri.color.rgb * texelColor(ptri, ptexel).rgb, (flagsOf(ptri) & 2) == 0 ? 1.0 : 0.0);
+  o.emission = float4(ptri.emissive.rgb, 0.0);
+  float3 palbedo = float3(1, 1, 1);
   uint rng = uint(i.position.x) * 1973u + uint(i.position.y) * 9277u + frame * 26699u + 1u;
   if ((flagsOf(ptri) & 4) != 0 && data.lightInfo.z > 0.5) {
     // Texel-space lighting: every screen pixel showing this texel gathers light
@@ -248,10 +254,9 @@ FsOut fsMain(VsOut i) {
     float3 albedo = palbedo;
     float3 throughput = 1, radiance = 0;
     for (int b = 0; b < bounces; b++) {
-      // Emission is added only when seen directly; light reaching other surfaces
-      // comes from sampling the emissive triangles below. Counting it on bounce
-      // hits as well would double it (and brings back single-pixel sparkles).
-      if (b == 0) radiance += throughput * tri.emissive.rgb;
+      // Emission seen directly goes to the emission output; light reaching other
+      // surfaces comes from sampling the emissive triangles below. Counting it
+      // on bounce hits as well would double it (and brings back sparkles).
       throughput *= albedo;
       // A sprite is a flat drawing, not a surface: it takes light as if facing it.
       bool sprite = (flagsOf(tri) & 2) != 0;
@@ -314,10 +319,5 @@ FsOut fsMain(VsOut i) {
     total += min(radiance, 16.0); // firefly clamp: slightly biased, removes single-pixel sparkles
   }
   o.color.rgb = total / float(spp);
-  if (ramp) {
-    float3 emitted = ptri.emissive.rgb;
-    float light = dot(max(o.color.rgb - emitted, 0.0), float3(0.2126, 0.7152, 0.0722)) / max(data.ramp.z, 1e-4);
-    o.color.rgb = rampShade(paletteTexture, surfaceAlbedo, light, int(data.ramp.y)) + emitted;
-  }
   return o;
 }
