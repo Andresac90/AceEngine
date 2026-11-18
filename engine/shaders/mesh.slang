@@ -62,6 +62,11 @@ float sunVisibility(float3 worldPos, float3 n) {
   return lp.z - 0.0015 > occluder ? 0.0 : 1.0;
 }
 
+// Toon bands (none if bands is 0) with ordered dithering between them.
+float banded(float v, float bands, float jitter) {
+  return bands > 0.5 ? clamp(ceil(v * bands - 0.001 + jitter), 0.0, bands) / bands : v;
+}
+
 FsOut fsMain(VsOut i) {
   float3 n = normalize(i.normal);
   uint tw, th;
@@ -106,12 +111,28 @@ FsOut fsMain(VsOut i) {
                        : saturate(dot(n, frame.lightDir.xyz));
   if (!sprite && light > 0.0) light *= sunVisibility(shadePos, n);
   float bands = frame.params.x;
-  if (bands > 0.5) {
-    float jitter = sprite ? 0.0 : (bayer4(ditherCoord) - 0.5) * frame.params.w;
-    light = clamp(ceil(light * bands - 0.001 + jitter), 0.0, bands) / bands;
+  float jitter = sprite ? 0.0 : (bayer4(ditherCoord) - 0.5) * frame.params.w;
+  light = banded(light, bands, jitter);
+  float3 radiance = frame.lightColor.rgb * light;
+
+  // Point lights: banded the same way, so pools of light have hard pixel-art steps.
+  // Sprites take them at their feet, as a whole, like the sun.
+  float3 at = sprite ? draw.origin.xyz : shadePos;
+  for (int k = 0; k < int(frame.pointInfo.x); k++) {
+    float3 toLamp = frame.pointPosition[k].xyz - at;
+    float dist = length(toLamp);
+    float fade = saturate(1.0 - dist / frame.pointPosition[k].w);
+    float facing = sprite ? 1.0 : saturate(dot(n, toLamp / max(dist, 1e-4)));
+    radiance += frame.pointColor[k].rgb * banded(facing * fade * fade, bands, jitter);
   }
-  float3 lit = albedo.rgb * (frame.ambient.rgb + frame.lightColor.rgb * light * (sprite ? 0.25 : 0.318));
-  if (frame.params2.z > 0.5 && !sprite) lit = rampShade(paletteTexture, albedo.rgb, light, int(frame.params2.w)); // sprites keep their drawn colors
+  float3 lit = albedo.rgb * (frame.ambient.rgb + radiance * (sprite ? 0.25 : 0.318));
+  if (frame.params2.z > 0.5 && !sprite) {
+    // Ramp shading takes an amount of light. Fully lit = a white light of
+    // intensity 3 (a typical daytime sun), so a dim night sun or a far torch
+    // lands on the darker colors of each ramp.
+    float amount = dot(radiance, float3(0.2126, 0.7152, 0.0722)) / 3.0;
+    lit = rampShade(paletteTexture, albedo.rgb, amount, int(frame.params2.w)); // sprites keep their drawn colors
+  }
   FsOut o;
   o.color = float4(lit + draw.emissive.rgb, 1.0);
   o.normalDepth = float4(n, i.viewDepth);

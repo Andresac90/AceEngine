@@ -890,6 +890,16 @@
             0.7
           ],
           "worldTexels": false
+        },
+        "Light": {
+          "color": [
+            1.0,
+            0.72,
+            0.38
+          ],
+          "intensity": 4.0,
+          "point": true,
+          "range": 4.5
         }
       }
     },

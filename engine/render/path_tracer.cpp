@@ -253,6 +253,7 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   d.lightDir = vec4(glm::normalize(vec3(0.4f, 1.0f, 0.3f)), 0);
   d.lightColor = vec4(0);
   for (auto [e, t, l] : scene.reg.view<Transform, Light>().each()) {
+    if (l.point) continue; // the path tracer lights with emissive meshes instead
     d.lightDir = vec4(glm::normalize(vec3(t.world[2])), 0);
     d.lightColor = vec4(toLinear(l.color) * l.intensity, 0);
     break;

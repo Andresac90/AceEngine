@@ -37,7 +37,8 @@ const std::vector<ComponentType>& componentTypes() {
                                                   ACE_FIELD(SpriteRenderer, flipX, Bool)}),
       makeType<Camera>("Camera", {ACE_FIELD(Camera, orthographic, Bool), ACE_FIELD(Camera, orthoSize, Float), ACE_FIELD(Camera, fov, Float),
                                   ACE_FIELD(Camera, nearPlane, Float), ACE_FIELD(Camera, farPlane, Float)}),
-      makeType<Light>("Light", {ACE_FIELD(Light, color, Color3), ACE_FIELD(Light, intensity, Float)}),
+      makeType<Light>("Light", {ACE_FIELD(Light, color, Color3), ACE_FIELD(Light, intensity, Float), ACE_FIELD(Light, point, Bool),
+                                ACE_FIELD(Light, range, Float)}),
       makeType<Collider>("Collider", {ACE_FIELD(Collider, size, Vec3), ACE_FIELD(Collider, offset, Vec3), ACE_FIELD(Collider, solid, Bool)}),
       makeType<Script>("Script", {ACE_FIELD(Script, path, Asset), ACE_FIELD(Script, params, String)}),
   };

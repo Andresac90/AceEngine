@@ -196,7 +196,8 @@ def scene():
     box("Crate Small", "planks.png", (4.5, 0.3, 1.0), (0.6, 0.6, 0.6), yaw(-25))
     box("Crate Top", "planks.png", (3.6, 1.3, 0.2), (0.6, 0.6, 0.6), yaw(40))
     ent("Lantern", (0.3, 0.3, 0.6), scale=(0.25, 0.6, 0.25),
-        MeshRenderer={"mesh": "builtin:cube", "texture": "", "color": [1, 0.84, 0.35, 1], "emissive": [3.5, 2.2, 0.7], "worldTexels": False})
+        MeshRenderer={"mesh": "builtin:cube", "texture": "", "color": [1, 0.84, 0.35, 1], "emissive": [3.5, 2.2, 0.7], "worldTexels": False},
+        Light={"color": [1.0, 0.72, 0.38], "intensity": 4.0, "point": True, "range": 4.5})
     for i, (x, z, s) in enumerate([(-8, -6, 1.6), (-9.5, 1.5, 1.3), (7, 4.5, 1.4), (2.5, -8, 1.8), (-5.5, 6.5, 1.1), (10, -8.5, 1.7)]):
         ent("Pine %d" % (i + 1), (x, 0, z), scale=(s, s, s),
             MeshRenderer={"mesh": "assets/pine.gltf", "texture": "", "color": [1, 1, 1, 1], "emissive": [0, 0, 0], "worldTexels": False},
@@ -243,7 +244,8 @@ def house():
     box("Table", "planks.png", (1.6, 0.4, -1.2), (1.6, 0.8, 1.0))
     box("Shelf", "planks.png", (-3.2, 1.0, -2.6), (1.2, 2.0, 0.8))
     ent("Lantern", (1.6, 1.05, -1.2), scale=(0.25, 0.5, 0.25),
-        MeshRenderer={"mesh": "builtin:cube", "texture": "", "color": [1, 0.84, 0.35, 1], "emissive": [3.5, 2.2, 0.7], "worldTexels": False})
+        MeshRenderer={"mesh": "builtin:cube", "texture": "", "color": [1, 0.84, 0.35, 1], "emissive": [3.5, 2.2, 0.7], "worldTexels": False},
+        Light={"color": [1.0, 0.72, 0.38], "intensity": 4.0, "point": True, "range": 5.0})
     ent("Hero", (0.0, 0.6875, 2.2), yaw(math.degrees(math.atan2(-(eye[0] - 0.0), -(eye[2] - 2.2)))),
         SpriteRenderer={"texture": "assets/hero.png", "color": [1, 1, 1, 1], "size": [1.0, 1.375], "billboard": True,
                         "columns": 4, "rows": 1, "directions": 4, "frame": 0, "fps": 0, "flipX": False},

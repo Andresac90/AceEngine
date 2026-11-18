@@ -42,6 +42,7 @@ Add `--backend vulkan` (or `metal`) to pick the GPU backend.
 | Move / rotate / scale | W / E / R, then drag the gizmo |
 | Snap the gizmo to a grid | Snap checkbox + step in the toolbar |
 | Build levels from blocks | tick **Build**, pick a texture and block size, click any surface to add a block there; Shift+click removes a block |
+| Torches, lanterns, lamps | a **Light** with `point` ticked: lights everything within `range`, in toon steps like the sun (up to 8 nearest the camera, no shadows). The first light without `point` is the sun; a dim sun + point lights makes night |
 | Edit the palette | **Palette** tab: one row per color ramp (darkest left); click a swatch to change it, `+`/`-` to grow or shrink a ramp, **Add ramp**. The scene updates as you edit; **Save** writes the PNG. A scene without a palette gets a **Create palette** button |
 | Reuse an object (prefab) | right-click it in the Hierarchy > **Save as Prefab**; double-click the `.prefab.json` in Assets to place a copy. Scripts use `ace.spawn_prefab` |
 | Pick a mesh / texture / script | the arrow button beside the field, or drag from Assets |

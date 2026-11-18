@@ -18,6 +18,8 @@ struct FrameData {
   mat4 view, viewProj;
   vec4 lightDir, lightColor, ambient, params, params2;
   mat4 lightViewProj;
+  vec4 pointInfo;
+  vec4 pointPosition[8], pointColor[8];
 };
 struct DrawData {
   mat4 model, normalMatrix;
@@ -271,14 +273,33 @@ f32 Renderer::fitShadowFrustum(Scene& scene, Assets& assets, vec3 lightDir, mat4
 
 void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, std::span<const RasterView> views, const mat4& spriteCamera) {
   if (views.empty()) return;
-  FrameData frame;
+  FrameData frame{};
   frame.lightDir = vec4(glm::normalize(vec3(0.4f, 1.0f, 0.3f)), 0.0f);
   frame.lightColor = vec4(0.0f);
+  bool haveSun = false;
+  struct Lamp {
+    f32 distance;
+    vec4 position, color;
+  };
+  std::vector<Lamp> lamps;
+  vec3 eye = vec3(spriteCamera[3]);
   for (auto [e, t, l] : scene.reg.view<Transform, Light>().each()) {
-    frame.lightDir = vec4(glm::normalize(vec3(t.world[2])), 0.0f); // light shines along -Z
-    frame.lightColor = vec4(toLinear(l.color) * l.intensity, 0.0f);
-    break;
+    if (l.point) {
+      vec3 p = vec3(t.world[3]);
+      lamps.push_back({glm::distance(p, eye), vec4(p, std::max(l.range, 0.01f)), vec4(toLinear(l.color) * l.intensity, 0.0f)});
+    } else if (!haveSun) {
+      frame.lightDir = vec4(glm::normalize(vec3(t.world[2])), 0.0f); // light shines along -Z
+      frame.lightColor = vec4(toLinear(l.color) * l.intensity, 0.0f);
+      haveSun = true;
+    }
   }
+  std::sort(lamps.begin(), lamps.end(), [](const Lamp& a, const Lamp& b) { return a.distance < b.distance; });
+  int lampCount = (int)std::min<size_t>(lamps.size(), 8);
+  for (int i = 0; i < lampCount; i++) {
+    frame.pointPosition[i] = lamps[i].position;
+    frame.pointColor[i] = lamps[i].color;
+  }
+  frame.pointInfo = vec4((f32)lampCount, 0, 0, 0);
   frame.ambient = vec4(toLinear(scene.settings.ambient), 0.0f);
   f32 shadowTexel = fitShadowFrustum(scene, assets, vec3(frame.lightDir), frame.lightViewProj);
   frame.params = vec4((f32)scene.settings.toonBands, scene.settings.shadows ? 1.0f : 0.0f, shadowTexel, scene.settings.dither);

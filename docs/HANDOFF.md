@@ -135,6 +135,10 @@ looking at screenshots produced with `--screenshot`:
   re-measurement under heavy machine load (load average 10) showed Vulkan 12%
   slower than Metal instead of 33%, but absolute times were not trustworthy:
   re-time on an idle machine.
+- Point lights (`Light.point`, up to 8 nearest the camera, banded, no shadows,
+  raster/world-pixel modes only): lantern light in `house.scene.json`; a night
+  copy of the village renders dark with the lantern lighting the path, Metal and
+  Vulkan identical. Ramp shading treats a white intensity-3 light as fully lit.
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
@@ -362,7 +366,8 @@ otherwise; ask the owner before installing anything.
    owner's verdict on `village.scene.json` against their references;
    water and foliage (wind-swayed sprite cards); colored light in ramp mode
    (path-traced ramp shading uses light *amount*, so the lantern's warm tint
-   is lost); point/spot lights in the raster path.
+   is lost); shadows for point lights; point lights in the path tracer; a
+   day/night setting that animates sun, ambient and sky together.
 3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;
    ~~textures (one 1024 atlas) and sprites~~ done; then a two-level BVH (per-mesh
    BLAS built once + TLAS rebuilt per frame) so moving objects are cheap; then
