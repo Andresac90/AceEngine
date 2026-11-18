@@ -811,8 +811,92 @@ void Editor::drawInspector() {
 
 void Editor::drawSettings() {
   ImGui::Begin("Render Settings");
-  ImGui::TextDisabled("Saved with the scene.");
-  if (editFields(&scene_.settings, renderSettingsFields()) && !playing_) commit();
+  ImGui::TextDisabled("Saved with the scene. Hover a setting for what it does.");
+  RenderSettings& rs = scene_.settings;
+  struct Item {
+    const char* name;
+    const char* tip;
+  };
+  struct Group {
+    const char* title;
+    std::vector<Item> items;
+  };
+  // Every RenderSettings field, grouped and explained. Fields missing here still
+  // show up under "Other", so adding a setting never hides it.
+  static const std::vector<Group> groups = {
+      {"Pixels",
+       {{"worldPixels", "Pixels belong to the 3D world (texel splatting): they stay put when a perspective camera turns or moves. "
+                        "Orthographic cameras use screen pixels instead."},
+        {"probeResolution", "World pixels: pixels per cube-map face (90 degrees of view). Lower = bigger, chunkier pixels."},
+        {"probeCell", "World pixels: how far (world units) the camera moves before the pixel grid re-centres, with a short dissolve."},
+        {"pixelArt", "Screen pixels: render a low-resolution image and scale it up with hard edges."},
+        {"pixelHeight", "Screen pixels: height of that image in pixels. Also sets the size of on-screen text in every mode."},
+        {"integerScale", "Screen pixels: make every game pixel the same whole number of screen pixels (adjusts the height slightly)."},
+        {"pixelSnap", "Screen pixels with an orthographic camera: snap the camera to the pixel grid so nothing shimmers."}}},
+      {"Shading",
+       {{"toonBands", "Light comes in this many hard steps (0 = smooth)."},
+        {"dither", "Ordered dithering between light steps and palette colors (0 = none)."},
+        {"texelLighting", "Light and shadow follow the texture's pixel grid instead of the screen's."},
+        {"texelsPerUnit", "Texture pixels per world unit, for meshes with worldTexels ticked."},
+        {"shadows", "Sun shadows (raster). Path tracing always has shadows."},
+        {"outlines", "Dark outlines on silhouettes."},
+        {"outlineStrength", "How dark outlines are (0..1)."},
+        {"highlightStrength", "Light edge on convex creases (0 = off)."}}},
+      {"Palette",
+       {{"palette", "Image whose colors are the only ones allowed on screen (up to 64). Edit it in the Palette tab."},
+        {"rampShading", "Shade by stepping along the palette's rows (color ramps) instead of darkening colors."},
+        {"rampShadowSteps", "How many ramp colors darker a surface gets in full shadow."}}},
+      {"Sky and light",
+       {{"ambient", "Light that reaches everything, including shadows."},
+        {"skyTop", "Sky color overhead."},
+        {"skyBottom", "Sky color at the horizon."},
+        {"exposure", "Overall brightness before colors are snapped to the palette."}}},
+      {"Path tracing",
+       {{"pathTraced", "Trace light rays: soft shadows, bounce light, glowing objects light their surroundings. Slower. "
+                       "Works with world pixels (the image settles while the camera is still)."},
+        {"ptSamples", "Rays per pixel per frame (screen pixels). More = less noise, slower."},
+        {"ptBounces", "How many times light bounces. More = brighter, softer indirect light, slower."}}},
+  };
+  // Settings that do nothing with the current choices are greyed out.
+  auto active = [&](const std::string& n) {
+    bool world = rs.worldPixels;
+    if (n == "probeResolution" || n == "probeCell") return world;
+    if (n == "pixelHeight" || n == "integerScale") return rs.pixelArt || n == "pixelHeight";
+    if (n == "pixelSnap") return rs.pixelArt;
+    if (n == "rampShading" || n == "rampShadowSteps") return !rs.palette.empty() && (n == "rampShading" || rs.rampShading);
+    if (n == "outlineStrength") return rs.outlines;
+    if (n == "ptSamples" || n == "ptBounces") return rs.pathTraced;
+    if (n == "shadows") return !rs.pathTraced;
+    return true;
+  };
+  const std::vector<Field>& fields = renderSettingsFields();
+  std::vector<bool> shown(fields.size(), false);
+  bool finished = false;
+  auto drawField = [&](size_t i, const char* tip) {
+    shown[i] = true;
+    ImGui::BeginDisabled(!active(fields[i].name));
+    finished |= editFields(&rs, {fields[i]});
+    ImGui::EndDisabled();
+    if (tip && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled | ImGuiHoveredFlags_DelayShort)) ImGui::SetTooltip("%s", tip);
+  };
+  for (const Group& g : groups) {
+    if (!ImGui::CollapsingHeader(g.title, ImGuiTreeNodeFlags_DefaultOpen)) {
+      for (const Item& it : g.items)
+        for (size_t i = 0; i < fields.size(); i++)
+          if (it.name == std::string(fields[i].name)) shown[i] = true;
+      continue;
+    }
+    for (const Item& it : g.items)
+      for (size_t i = 0; i < fields.size(); i++)
+        if (it.name == std::string(fields[i].name)) drawField(i, it.tip);
+  }
+  bool other = false;
+  for (size_t i = 0; i < fields.size(); i++) {
+    if (shown[i]) continue;
+    if (!other) other = ImGui::CollapsingHeader("Other", ImGuiTreeNodeFlags_DefaultOpen);
+    if (other) drawField(i, nullptr);
+  }
+  if (finished && !playing_) commit();
   ImGui::End();
 }
 
