@@ -136,8 +136,8 @@ looking at screenshots produced with `--screenshot`:
   re-measurement under heavy machine load (load average 10) showed Vulkan 12%
   slower than Metal instead of 33%, but absolute times were not trustworthy:
   re-time on an idle machine.
-- Point lights (`Light.point`, up to 8 nearest the camera, banded, no shadows,
-  raster/world-pixel modes only): lantern light in `house.scene.json`; a night
+- Point lights (`Light.point`, up to 8 nearest the camera, banded; shadows only
+  when path traced; every mode, path-traced night checked on both backends): lantern light in `house.scene.json`; a night
   copy of the village renders dark with the lantern lighting the path, Metal and
   Vulkan identical. Ramp shading treats a white intensity-3 light as fully lit.
 - `tools/make_editor_app.sh` -> `build-export/AceEngine.app` (Metal only, SDL
@@ -384,7 +384,7 @@ otherwise; ask the owner before installing anything.
    owner's verdict on `village.scene.json` against their references;
    water and foliage (wind-swayed sprite cards); colored light in ramp mode
    (path-traced ramp shading uses light *amount*, so the lantern's warm tint
-   is lost); shadows for point lights; point lights in the path tracer; a
+   is lost); raster shadows for point lights; a
    day/night setting that animates sun, ambient and sky together.
 3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;
    ~~textures (one 1024 atlas) and sprites~~ done; then a two-level BVH (per-mesh

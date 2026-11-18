@@ -62,8 +62,9 @@ struct Camera {
 // a lamp/torch at the entity's position that fades out at `range`.
 // The first non-point light is the sun. Up to 8 point lights are used per frame
 // (the 8 nearest the camera); they cast no shadows.
-// shortcut: point lights are raster-only (the path tracer lights with emissive
-// meshes) and shadowless; add cube shadow maps if torch-lit dungeons need them.
+// Point lights cast shadows in path-traced mode only.
+// shortcut: no raster shadows for point lights; add cube shadow maps if
+// torch-lit dungeons need them without path tracing.
 struct Light {
   vec3 color{1.0f, 0.96f, 0.88f};
   f32 intensity = 3.0f;

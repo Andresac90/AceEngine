@@ -19,6 +19,9 @@ struct TraceData {
   float4 params;    // x: accumulated frames, y: samples per pixel, z: bounces, w: toon bands
   float4 lightInfo; // x: number of emissive triangles, y: texels per world unit, z: texel-space lighting on, w: primary rays skip sprites
   float4 ramp;      // x: ramp shading on, y: shadow steps, z: luminance of a fully lit white surface
+  float4 pointInfo; // x: number of point lights
+  float4 pointPosition[8]; // xyz: position, w: range
+  float4 pointColor[8];    // rgb * intensity
 };
 struct BvhNode {
   float4 minLeft;  // xyz: box min, w (bits): left child, or first triangle for leaves
@@ -262,6 +265,22 @@ FsOut fsMain(VsOut i) {
           if (b == 0 && bands > 0.5 && !sprite) direct = ceil(ndl * bands - 0.001) / bands; // toon bands on first hit
           radiance += throughput * data.lightColor.rgb * direct * 0.318;
         }
+      }
+      // Point lights (lamps, torches): same falloff and toon steps as the raster
+      // path, plus real shadows.
+      for (int k = 0; k < int(data.pointInfo.x); k++) {
+        float3 toLamp = data.pointPosition[k].xyz - pos;
+        float dist = length(toLamp);
+        float fade = saturate(1.0 - dist / data.pointPosition[k].w);
+        if (fade <= 0.0) continue;
+        toLamp /= max(dist, 1e-4);
+        float facing = sprite ? 0.8 : dot(n, toLamp);
+        if (facing <= 0.0) continue;
+        Hit lh;
+        if (trace(pos + (sprite ? toLamp * 0.75 : n * 1e-3), toLamp, max(dist - (sprite ? 0.76 : 2e-3), 1e-3), true, lh)) continue;
+        float amount = facing * fade * fade;
+        if (b == 0 && bands > 0.5 && !sprite) amount = ceil(amount * bands - 0.001) / bands;
+        radiance += throughput * data.pointColor[k].rgb * amount * 0.318;
       }
       // Direct light from one randomly chosen emissive triangle.
       if (lightCount > 0) {

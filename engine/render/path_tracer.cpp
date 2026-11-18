@@ -12,6 +12,8 @@ namespace {
 struct TraceData {
   mat4 invViewProj, view;
   vec4 lightDir, lightColor, skyTop, skyBottom, params, lightInfo, ramp;
+  vec4 pointInfo;
+  vec4 pointPosition[8], pointColor[8];
 };
 constexpr u32 kAtlasSize = 1024;
 constexpr u32 kMovingHistoryFrames = 6;
@@ -252,27 +254,45 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     paletteId_ = palette->handle.id;
   }
 
-  TraceData d;
+  TraceData d{};
   d.invViewProj = glm::inverse(proj * view);
   d.view = view;
   d.lightDir = vec4(glm::normalize(vec3(0.4f, 1.0f, 0.3f)), 0);
   d.lightColor = vec4(0);
+  // The sun is the first non-point light; point lights: the 8 nearest the camera.
+  bool haveSun = false;
+  std::vector<std::pair<f32, int>> lamps;
+  std::vector<Entity> lampEntities;
   for (auto [e, t, l] : scene.reg.view<Transform, Light>().each()) {
-    if (l.point) continue; // the path tracer lights with emissive meshes instead
-    d.lightDir = vec4(glm::normalize(vec3(t.world[2])), 0);
-    d.lightColor = vec4(toLinear(l.color) * l.intensity, 0);
-    break;
+    if (l.point) {
+      lamps.push_back({glm::distance(vec3(t.world[3]), cameraPosition), (int)lampEntities.size()});
+      lampEntities.push_back(e);
+    } else if (!haveSun) {
+      d.lightDir = vec4(glm::normalize(vec3(t.world[2])), 0);
+      d.lightColor = vec4(toLinear(l.color) * l.intensity, 0);
+      haveSun = true;
+    }
   }
+  std::sort(lamps.begin(), lamps.end());
+  int lampCount = (int)std::min<size_t>(lamps.size(), 8);
+  for (int i = 0; i < lampCount; i++) {
+    Entity e = lampEntities[lamps[i].second];
+    const Light& l = scene.reg.get<Light>(e);
+    d.pointPosition[i] = vec4(vec3(scene.reg.get<Transform>(e).world[3]), std::max(l.range, 0.01f));
+    d.pointColor[i] = vec4(toLinear(l.color) * l.intensity, 0);
+  }
+  d.pointInfo = vec4((f32)lampCount, 0, 0, 0);
   d.skyTop = vec4(toLinear(scene.settings.skyTop), 0);
   d.skyBottom = vec4(toLinear(scene.settings.skyBottom), 0);
   d.params = vec4(0, (f32)(target.samples > 0 ? target.samples : scene.settings.ptSamples), (f32)scene.settings.ptBounces, (f32)scene.settings.toonBands);
 
   d.lightInfo = vec4((f32)lightCount_, (f32)std::max(scene.settings.texelsPerUnit, 1), scene.settings.texelLighting ? 1.0f : 0.0f,
                      target.skipSprites ? 1.0f : 0.0f);
-  // Ramp shading needs to know what "fully lit" is: a white surface facing the
-  // sun, plus roughly what the sky adds.
-  auto luminance = [](vec3 c) { return glm::dot(c, vec3(0.2126f, 0.7152f, 0.0722f)); };
-  f32 fullyLit = luminance(vec3(d.lightColor)) * 0.318f + luminance(vec3(d.skyTop) + vec3(d.skyBottom)) * 0.25f;
+  // Ramp shading needs to know what "fully lit" is. Fixed, as in the raster
+  // path: a white surface facing an intensity-3 white light (0.954), plus what a
+  // typical daytime sky adds by bouncing (~0.25). A dim night then lands on the
+  // dark end of each ramp instead of being stretched to full brightness.
+  f32 fullyLit = 3.0f * 0.318f + 0.25f;
   bool ramps = scene.settings.rampShading && !scene.settings.palette.empty();
   d.ramp = vec4(ramps ? 1.0f : 0.0f, (f32)glm::clamp(scene.settings.rampShadowSteps, 0, 15), fullyLit, 0);
 
