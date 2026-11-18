@@ -54,7 +54,10 @@ const std::vector<Field>& renderSettingsFields() {
       ACE_FIELD(R, pixelSnap, Bool),      ACE_FIELD(R, toonBands, Int),         ACE_FIELD(R, dither, Float),  ACE_FIELD(R, texelLighting, Bool),
       ACE_FIELD(R, texelsPerUnit, Int),   ACE_FIELD(R, palette, Asset),       ACE_FIELD(R, rampShading, Bool), ACE_FIELD(R, rampShadowSteps, Int),         ACE_FIELD(R, shadows, Bool),  ACE_FIELD(R, outlines, Bool),
       ACE_FIELD(R, outlineStrength, Float), ACE_FIELD(R, highlightStrength, Float), ACE_FIELD(R, ambient, Color3),
-      ACE_FIELD(R, skyTop, Color3),       ACE_FIELD(R, skyBottom, Color3),      ACE_FIELD(R, ptSamples, Int),
+      ACE_FIELD(R, skyTop, Color3),       ACE_FIELD(R, skyBottom, Color3),
+      ACE_FIELD(R, sunSize, Float),       ACE_FIELD(R, sunGlow, Float),         ACE_FIELD(R, fogColor, Color3),
+      ACE_FIELD(R, fogDensity, Float),    ACE_FIELD(R, cloudCoverage, Float),   ACE_FIELD(R, cloudScale, Float),
+      ACE_FIELD(R, cloudSpeed, Float),    ACE_FIELD(R, stars, Float),      ACE_FIELD(R, ptSamples, Int),
       ACE_FIELD(R, ptBounces, Int),       ACE_FIELD(R, denoise, Bool),       ACE_FIELD(R, exposure, Float),
   };
   return fields;

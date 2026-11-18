@@ -16,6 +16,8 @@ struct PostData {
   vec4 info; // x: face size, y: outline strength, z: highlight strength, w: outlines on
   vec4 tone; // x: exposure, y: palette colors, z: dither
   vec4 palette[64];
+  vec4 forward[6], right[6], up[6];
+  Atmosphere atmosphere;
 };
 struct SplatData {
   mat4 viewProj, view;
@@ -225,6 +227,13 @@ void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const
   PostData post{};
   post.info = vec4((f32)n, s.outlineStrength, s.highlightStrength, s.outlines ? 1.0f : 0.0f);
   post.tone = vec4(s.exposure, (f32)r_.paletteColors(scene, assets, post.palette), s.dither, 0.0f);
+  for (int f = 0; f < 6; f++) {
+    Face fc = face(f);
+    post.forward[f] = vec4(fc.forward, 0);
+    post.right[f] = vec4(fc.right, 0);
+    post.up[f] = vec4(fc.up, 0);
+  }
+  post.atmosphere = makeAtmosphere(scene, r_.time());
   u32 postOffset = r_.pushUniform(&post, sizeof(post));
   for (int pi = 0; pi < probeCount; pi++) {
     Probe& p = probes_[pi];

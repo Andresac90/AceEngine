@@ -7,6 +7,8 @@ struct PostData {
   float4 info; // x: face size, y: outline strength, z: highlight strength, w: outlines on
   float4 tone; // x: exposure, y: palette colors, z: dither
   float4 palette[64]; // sRGB
+  float4 forward[6], right[6], up[6]; // cube face bases (texel_splat.cpp)
+  Atmosphere atmosphere;
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<PostData> data;
@@ -36,6 +38,14 @@ float4 fsMain(VsOut i) : SV_Target0 {
   float4 nd = normalDepthAtlas.Load(int3(p, 0));
   if (nd.w > kSkyDepth) return float4(0, 0, 0, 0); // nothing here: never splatted
   float3 color = tonemap(colorAtlas.Load(int3(p, 0)).rgb);
+  // Haze, per texel: distance from the probe (close to the camera's) along this texel's direction.
+  {
+    int face = p.x / n;
+    float cx = (float(p.x - faceStart) + 0.5) / float(n) * 2.0 - 1.0;
+    float cy = 1.0 - (float(p.y) + 0.5) / float(n) * 2.0;
+    float3 ray = data.forward[face].xyz + data.right[face].xyz * cx + data.up[face].xyz * cy;
+    color = applyFog(data.atmosphere, color, nd.w * length(ray), normalize(ray));
+  }
 
   if (data.info.w > 0.5) {
     static const int2 offsets[4] = {int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1)};

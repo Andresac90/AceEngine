@@ -41,6 +41,15 @@ mat4 uprightCard(const mat4& world, vec3 right);
 class PathTracer;
 class TexelSplatter;
 
+// Sky, sun, clouds and haze for the shaders (common.slangh, struct Atmosphere).
+struct Atmosphere {
+  vec4 skyTop, skyBottom, sunDir, sunColor, fog, clouds;
+};
+// The sun: the first Light without `point`. Returns false (and a default
+// direction, no light) if the scene has none.
+bool findSun(Scene& scene, vec3& towardsSun, vec3& color);
+Atmosphere makeAtmosphere(Scene& scene, f64 seconds);
+
 // One raster pass target: where and from where to draw the scene.
 struct RasterView {
   mat4 view{1.0f}, proj{1.0f};

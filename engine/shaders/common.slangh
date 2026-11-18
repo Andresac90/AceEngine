@@ -67,5 +67,78 @@ float3 rampShade(Texture2D palette, float3 albedoLinear, float light, int steps)
   return palette.Load(int3(x, at.y, 0)).rgb;
 }
 
+// ---------------------------------------------------------------- atmosphere
+// Sky, sun, clouds, stars and distance haze, shared by the present pass (screen
+// pixels, and the sky in every mode) and the probe post pass (world pixels).
+// Must match Atmosphere in render/renderer.h.
+struct Atmosphere {
+  float4 skyTop;      // rgb: color overhead
+  float4 skyBottom;   // rgb: color at the horizon
+  float4 sunDir;      // xyz: towards the sun, w: cosine of the sun disc's radius
+  float4 sunColor;    // rgb: sun light (linear, x intensity), w: glow strength
+  float4 fog;         // rgb: haze color, w: density per world unit (0 = none)
+  float4 clouds;      // x: coverage 0..1, y: scale, z: drift, w: stars 0..1
+};
+
+float hash12(float2 p) {
+  float3 q = frac(float3(p.xyx) * 0.1031);
+  q += dot(q, q.yzx + 33.33);
+  return frac((q.x + q.y) * q.z);
+}
+float valueNoise(float2 p) {
+  float2 i = floor(p), f = frac(p);
+  float2 u = f * f * (3.0 - 2.0 * f);
+  return lerp(lerp(hash12(i), hash12(i + float2(1, 0)), u.x), lerp(hash12(i + float2(0, 1)), hash12(i + float2(1, 1)), u.x), u.y);
+}
+float fbm(float2 p) {
+  float v = 0.0, a = 0.5;
+  for (int k = 0; k < 5; k++) {
+    v += a * valueNoise(p);
+    p = p * 2.03 + float2(17.1, 9.2);
+    a *= 0.5;
+  }
+  return v;
+}
+
+// What the sky looks like in direction `dir` (unit length).
+float3 skyRadiance(Atmosphere a, float3 dir) {
+  float h = dir.y;
+  // Most of the change happens near the horizon, where low cameras look.
+  float3 sky = lerp(a.skyBottom.rgb, a.skyTop.rgb, saturate(sqrt(max(h, 0.0)) * 1.35));
+  if (h < 0.0) sky = a.skyBottom.rgb * (1.0 + h * 0.6); // below the horizon: a little darker
+  float s = dot(dir, a.sunDir.xyz);
+  float3 sunTint = a.sunColor.rgb / max(max(a.sunColor.r, max(a.sunColor.g, a.sunColor.b)), 1e-3);
+  // Stars where the sky is dark, fixed to directions so they turn with the sky.
+  if (a.clouds.w > 0.0 && h > 0.0) {
+    float2 cell = floor(float2(atan2(dir.z, dir.x) * 220.0, asin(saturate(h)) * 220.0));
+    float star = step(0.9975, hash12(cell)) * a.clouds.w * saturate(1.0 - dot(sky, float3(0.3, 0.6, 0.1)) * 6.0);
+    sky += star * float3(0.9, 0.9, 1.0);
+  }
+  // Sun: a disc and a soft glow around it.
+  sky += sunTint * a.sunColor.w * (pow(saturate(s), 10.0) * 0.45 + pow(saturate(s), 120.0) * 0.8);
+  if (s > a.sunDir.w) sky = lerp(sky, sunTint * 1.6 + 0.4, 0.9);
+  // Clouds: noise on a ceiling, thick parts darker and cooler, the sun side warm.
+  if (a.clouds.x > 0.0 && h > 0.0) {
+    float2 uv = dir.xz / (h + 0.12) * a.clouds.y + float2(a.clouds.z, a.clouds.z * 0.37);
+    float n = fbm(uv);
+    float threshold = 1.0 - a.clouds.x;
+    float cover = smoothstep(threshold, threshold + 0.12, n) * saturate(h * 6.0);
+    float thick = smoothstep(threshold, 1.0, fbm(uv + float2(0.35, 0.2)));
+    float3 lit = lerp(a.skyBottom.rgb, float3(1, 1, 1), 0.45) * lerp(float3(1, 1, 1), sunTint, 0.6) * (0.85 + 0.45 * saturate(s * 0.5 + 0.5));
+    float3 shade = lerp(a.skyTop.rgb, a.skyBottom.rgb, 0.35) * float3(0.75, 0.7, 0.9);
+    sky = lerp(sky, lerp(lit, shade, saturate(thick * 1.3)), cover);
+  }
+  return sky;
+}
+
+// Distance haze; brighter and warmer towards the sun.
+float3 applyFog(Atmosphere a, float3 color, float dist, float3 dir) {
+  if (a.fog.w <= 0.0) return color;
+  float f = 1.0 - exp(-a.fog.w * dist);
+  float3 sunTint = a.sunColor.rgb / max(max(a.sunColor.r, max(a.sunColor.g, a.sunColor.b)), 1e-3);
+  float3 haze = a.fog.rgb + sunTint * a.sunColor.w * pow(saturate(dot(dir, a.sunDir.xyz)), 6.0) * 0.6;
+  return lerp(color, haze, f);
+}
+
 // Views below this depth are "sky": no geometry was drawn there.
 static const float kSkyDepth = 9000.0;

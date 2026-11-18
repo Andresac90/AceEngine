@@ -13,6 +13,9 @@ struct PresentData {
   float4 camForward;
   float4 paletteInfo;  // x: number of palette colors (0 = no palette), y: dither amount, z: 1 = geometry colors are final (world pixels), w: sky pixel size
   float4 palette[64];  // sRGB colors
+  float4x4 invViewProj; // of the projection the scene targets were drawn with
+  float4 cameraPos;
+  Atmosphere atmosphere;
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<PresentData> data;
@@ -29,6 +32,13 @@ VsOut vsMain(uint id : SV_VertexID) {
   o.uv = float2((id << 1) & 2, id & 2);
   o.position = float4(o.uv.x * 2.0 - 1.0, 1.0 - o.uv.y * 2.0, 0.0, 1.0);
   return o;
+}
+
+float3 rayDirection(float2 uv) { // uv 0..1 across the scene targets, y down
+  float2 ndc = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+  float4 a = mul(data.invViewProj, float4(ndc, 0.0, 1.0));
+  float4 b = mul(data.invViewProj, float4(ndc, 1.0, 1.0));
+  return normalize(b.xyz / b.w - a.xyz / a.w);
 }
 
 float3 tonemap(float3 c) {
@@ -48,12 +58,19 @@ float4 fsMain(VsOut i) : SV_Target0 {
   // coarse pixel grid (paletteInfo.w screen pixels per sky pixel).
   int skyPixel = max(int(data.paletteInfo.w), 1);
   int2 sp = p / skyPixel;
-  float3 sky = lerp(data.skyTop.rgb, data.skyBottom.rgb, saturate((float(sp.y * skyPixel) - data.rect.y + 0.5) / data.rect.w));
+  float2 skyAt = (float2(sp) + 0.5) * float(skyPixel);
+  float3 skyDir = rayDirection(skyAt / float2(size));
+  float3 sky = skyRadiance(data.atmosphere, skyDir);
   bool final = data.paletteInfo.z > 0.5;
   bool isSky = nd.w > kSkyDepth;
   float4 sceneColor = colorTexture.Load(int3(p, 0));
   bool done = final && sceneColor.a < 0.5; // world-pixel splats arrive finished (alpha 0); sprites over them do not
   float3 color = isSky ? sky : (done ? sceneColor.rgb : tonemap(sceneColor.rgb));
+  if (!isSky && !done) { // haze (world-pixel splats got theirs per texel already)
+    float3 dir = rayDirection((float2(p) + 0.5) / float2(size));
+    float dist = nd.w / max(dot(dir, data.camForward.xyz), 1e-3);
+    color = applyFog(data.atmosphere, color, dist, dir);
+  }
 
   if (data.outline.w > 0.5) {
     static const int2 offsets[4] = {int2(1, 0), int2(-1, 0), int2(0, 1), int2(0, -1)};

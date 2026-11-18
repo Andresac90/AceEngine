@@ -30,6 +30,9 @@ struct PresentData {
   vec4 camRight, camUp, camForward; // world space; camRight.w: texel size (ortho), camUp.w: texel size per unit depth (perspective)
   vec4 paletteInfo; // x: color count, y: dither amount
   vec4 palette[64]; // sRGB
+  mat4 invViewProj;
+  vec4 cameraPos;
+  Atmosphere atmosphere;
 };
 } // namespace
 
@@ -207,6 +210,32 @@ void Renderer::clearTextureCaches() {
   pathTracer_->invalidate();
 }
 
+bool findSun(Scene& scene, vec3& towardsSun, vec3& color) {
+  for (auto [e, t, l] : scene.reg.view<Transform, Light>().each()) {
+    if (l.point) continue;
+    towardsSun = glm::normalize(vec3(t.world[2])); // the light shines along -Z
+    color = toLinear(l.color) * l.intensity;
+    return true;
+  }
+  towardsSun = glm::normalize(vec3(0.4f, 1.0f, 0.3f));
+  color = vec3(0.0f);
+  return false;
+}
+
+Atmosphere makeAtmosphere(Scene& scene, f64 seconds) {
+  const RenderSettings& s = scene.settings;
+  vec3 dir, color;
+  findSun(scene, dir, color);
+  Atmosphere a;
+  a.skyTop = vec4(toLinear(s.skyTop), 0);
+  a.skyBottom = vec4(toLinear(s.skyBottom), 0);
+  a.sunDir = vec4(dir, cosf(glm::radians(std::max(s.sunSize, 0.0f))));
+  a.sunColor = vec4(color, s.sunGlow);
+  a.fog = vec4(toLinear(s.fogColor), std::max(s.fogDensity, 0.0f));
+  a.clouds = vec4(glm::clamp(s.cloudCoverage, 0.0f, 1.0f), std::max(s.cloudScale, 0.01f), (f32)(seconds * s.cloudSpeed), glm::clamp(s.stars, 0.0f, 1.0f));
+  return a;
+}
+
 BindGroupHandle Renderer::frameGroup(const Texture* palette) {
   BindGroupHandle& group = frameGroups_[palette->handle.id];
   if (!group) {
@@ -289,8 +318,10 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, std::s
       vec3 p = vec3(t.world[3]);
       lamps.push_back({glm::distance(p, eye), vec4(p, std::max(l.range, 0.01f)), vec4(toLinear(l.color) * l.intensity, 0.0f)});
     } else if (!haveSun) {
-      frame.lightDir = vec4(glm::normalize(vec3(t.world[2])), 0.0f); // light shines along -Z
-      frame.lightColor = vec4(toLinear(l.color) * l.intensity, 0.0f);
+      vec3 dir, color;
+      findSun(scene, dir, color); // the first non-point light, i.e. this one
+      frame.lightDir = vec4(dir, 0.0f);
+      frame.lightColor = vec4(color, 0.0f);
       haveSun = true;
     }
   }
@@ -591,6 +622,9 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
   pd.camRight = vec4(vec3(cv.world[0]), cam.orthographic ? 2.0f * cam.orthoSize / texelsHigh : 0.0f);
   pd.camUp = vec4(vec3(cv.world[1]), cam.orthographic ? 0.0f : 2.0f * tanf(glm::radians(cam.fov) * 0.5f) / texelsHigh);
   pd.camForward = vec4(-vec3(cv.world[2]), 0.0f);
+  pd.invViewProj = glm::inverse((worldPixels ? cv.camera.projection(aspect) : proj) * (worldPixels ? glm::inverse(cv.world) : view));
+  pd.cameraPos = vec4(vec3(cv.world[3]), 0.0f);
+  pd.atmosphere = makeAtmosphere(scene, time_);
   // Palette: the distinct colors of the palette image, in reading order.
   // shortcut: searched per output pixel in the shader; move to a low-resolution
   // pass + 3D lookup if it shows up in a profile.

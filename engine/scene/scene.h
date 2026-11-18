@@ -116,6 +116,14 @@ struct RenderSettings {
   vec3 ambient{0.25f, 0.28f, 0.38f};
   vec3 skyTop{0.30f, 0.52f, 0.86f};
   vec3 skyBottom{0.80f, 0.86f, 0.92f};
+  f32 sunSize = 2.0f;        // sun disc radius in degrees (0 = no disc)
+  f32 sunGlow = 0.6f;        // glow around the sun, in the sky and in the haze
+  vec3 fogColor{0.75f, 0.78f, 0.85f};
+  f32 fogDensity = 0.0f;     // haze per world unit (0 = none; 0.02 = far things fade over ~50 units)
+  f32 cloudCoverage = 0.0f;  // 0 = clear sky, 1 = overcast
+  f32 cloudScale = 1.2f;     // larger = smaller clouds
+  f32 cloudSpeed = 0.01f;    // drift
+  f32 stars = 0.0f;          // stars where the sky is dark (0..1)
   int ptSamples = 4; // path tracer: samples per pixel per frame
   int ptBounces = 3;
   bool denoise = true; // path tracing: smooth the light (not the textures) while samples are few
