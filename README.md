@@ -33,6 +33,7 @@ empty folder to start a new project. It asks before closing with unsaved changes
 ```sh
 build/bin/ace_editor projects/pixel_demo     # level editor
 build/bin/ace_player projects/pixel_demo     # the game alone
+build/bin/ace_player projects/forest         # first-person open-world forest and castle (path traced)
 build/bin/ace_editor --new ~/games/my_game   # create and open a new project
 ```
 
@@ -139,6 +140,6 @@ engine/runtime   project files
 engine/shaders   Slang shaders
 editor/          level editor (Dear ImGui)
 player/          game runtime executable
-projects/        sample project
+projects/        sample projects: pixel_demo (village), forest (first-person open world)
 tests/           unit tests
 ```

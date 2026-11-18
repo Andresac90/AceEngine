@@ -1,0 +1,6 @@
+{
+  "name": "Shadow Forest",
+  "startScene": "scenes/forest.scene.json",
+  "width": 1280,
+  "height": 720
+}
