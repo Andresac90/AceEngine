@@ -22,6 +22,7 @@ struct SplatData {
   vec4 forward[6], right[6], up[6];
   vec4 camera;
   vec4 params; // x: quad half-size scale, y: push away from the camera (fraction of the distance), z: dither threshold, w: 1 = keep texels below it, -1 = keep texels above it, 0 = keep all
+  vec4 face;   // x: which cube face this draw covers
 };
 } // namespace
 
@@ -37,6 +38,33 @@ TexelSplatter::Face TexelSplatter::face(int i) {
 vec3 TexelSplatter::snapOrigin(vec3 p, f32 cell) {
   cell = std::max(cell, 0.01f);
   return glm::round(p / cell) * cell;
+}
+
+u32 TexelSplatter::visibleFaces(vec3 origin, const mat4& invViewProj, vec3 cameraPosition, f32 maxDistance) {
+  // Sample the view volume: a 9x9 grid of rays, several distances along each.
+  // A face counts if any sample falls in it, or close to its edge (margin, so
+  // the gaps between samples cannot hide a sliver of a face).
+  static const f32 along[] = {0.0f, 0.01f, 0.03f, 0.06f, 0.1f, 0.18f, 0.3f, 0.45f, 0.65f, 0.85f, 1.0f};
+  u32 mask = 0;
+  for (int iy = 0; iy <= 8; iy++) {
+    for (int ix = 0; ix <= 8; ix++) {
+      vec2 ndc(ix / 4.0f - 1.0f, iy / 4.0f - 1.0f);
+      vec4 a = invViewProj * vec4(ndc, 0.0f, 1.0f), b = invViewProj * vec4(ndc, 1.0f, 1.0f);
+      vec3 nearP = vec3(a) / a.w, farP = vec3(b) / b.w;
+      f32 len = glm::distance(nearP, farP);
+      if (len > maxDistance) farP = nearP + (farP - nearP) * (maxDistance / len);
+      for (f32 t : along) {
+        vec3 v = glm::mix(nearP, farP, t) - origin;
+        vec3 m = glm::abs(v);
+        int axis = m.x >= m.y && m.x >= m.z ? 0 : (m.y >= m.z ? 1 : 2);
+        if (m[axis] < 1e-6f) continue;
+        for (int k = 0; k < 3; k++)
+          if (m[k] >= 0.85f * m[axis]) mask |= 1u << (k * 2 + (v[k] >= 0.0f ? 0 : 1)); // faces: +X -X +Y -Y +Z -Z
+      }
+    }
+  }
+  (void)cameraPosition;
+  return mask;
 }
 
 TexelSplatter::TexelSplatter(Renderer& renderer) : r_(renderer) {
@@ -114,9 +142,9 @@ void TexelSplatter::ensureProbes(u32 n) {
   }
 }
 
-// shortcut: both probes are re-captured every frame (12 small scene renders) and
-// all six faces are captured even though at most three can be seen. Cache the
-// grid probe while nothing moves, and skip hidden faces, if it shows up in a profile.
+// shortcut: probes are re-captured every frame (only the faces the camera can
+// see, typically 2-3 per probe). Cache the grid probe while nothing in view
+// changes if capture shows up in a profile.
 void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj, const mat4& cameraWorld,
                            u32 width, u32 height) {
   const RenderSettings& s = scene.settings;
@@ -144,10 +172,15 @@ void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const
   vec3 origins[3] = {gridOrigin_, cameraPos, previousOrigin_};
   mat4 faceProj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, kNear, kFar);
 
-  // 1. capture
+  // 1. capture, only the cube faces that can contribute to this view
+  mat4 invViewProj = glm::inverse(proj * view);
+  u32 masks[3];
+  for (int pi = 0; pi < probeCount; pi++) masks[pi] = visibleFaces(origins[pi], invViewProj, cameraPos, kFar);
   std::vector<RasterView> views;
   for (int pi = 0; pi < probeCount; pi++) {
+    bool first = true;
     for (int f = 0; f < 6; f++) {
+      if (!(masks[pi] & (1u << f))) continue;
       Face fc = face(f);
       RasterView v;
       v.view = glm::lookAt(origins[pi], origins[pi] + fc.forward, fc.up);
@@ -156,7 +189,8 @@ void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const
       v.normalDepth = probes_[pi].normalDepth;
       v.depth = probes_[pi].depth;
       v.viewport = vec4((f32)(f * n), 0.0f, (f32)n, (f32)n);
-      v.clear = f == 0;
+      v.clear = first; // faces not captured this frame keep stale data, but are not drawn either
+      first = false;
       v.capture = true;
       v.sprites = false; // sprites are pixel art already: drawn directly below, not re-sampled by the probe
       views.push_back(v);
@@ -213,9 +247,13 @@ void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const
     // new grid probe keeps texels whose dither value is below the fade, the old one the rest.
     d.camera = vec4(cameraPos, 0.0f);
     d.params = vec4(1.02f, pi == 1 ? 0.01f : (pi == 2 ? 0.003f : 0.0f), fade_, !fading ? 0.0f : (pi == 0 ? 1.0f : (pi == 2 ? -1.0f : 0.0f)));
-    u32 offset = r_.pushUniform(&d, sizeof(d));
-    cmd.setBindGroup(0, probes_[pi].splatGroup, {&offset, 1});
-    cmd.draw(36 * n * n); // 6 faces x n x n texels x 6 vertices; empty texels collapse
+    for (int f = 0; f < 6; f++) {
+      if (!(masks[pi] & (1u << f))) continue;
+      d.face = vec4((f32)f, 0, 0, 0);
+      u32 offset = r_.pushUniform(&d, sizeof(d));
+      cmd.setBindGroup(0, probes_[pi].splatGroup, {&offset, 1});
+      cmd.draw(6 * n * n); // n x n texels x 6 vertices; empty texels collapse
+    }
   }
   cmd.endRenderPass();
 

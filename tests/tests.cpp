@@ -252,6 +252,20 @@ static void testTexelSplatGeometry() {
     CHECK(glm::distance(rebuilt, p) < 1e-3f);
   }
   CHECK(TexelSplatter::snapOrigin({1.9f, -0.1f, 6.1f}, 4.0f) == vec3(0, 0, 8));
+
+  // Face selection: a camera at the origin looking down -Z (32 degree fov, 16:9)
+  // sees only the -Z face of a probe at its own position...
+  mat4 camProj = glm::perspectiveRH_ZO(glm::radians(32.0f), 16.0f / 9.0f, 0.1f, 200.0f);
+  mat4 camView = glm::lookAt(vec3(0), vec3(0, 0, -1), vec3(0, 1, 0));
+  CHECK(TexelSplatter::visibleFaces(vec3(0), glm::inverse(camProj * camView), vec3(0), 400.0f) == (1u << 5));
+  // ...turned 45 degrees it straddles -Z and +X (both needed)...
+  camView = glm::lookAt(vec3(0), vec3(1, 0, -1), vec3(0, 1, 0));
+  u32 diagonal = TexelSplatter::visibleFaces(vec3(0), glm::inverse(camProj * camView), vec3(0), 400.0f);
+  CHECK((diagonal & (1u << 5)) && (diagonal & (1u << 0)) && !(diagonal & (1u << 1)) && !(diagonal & (1u << 4)));
+  // ...and a probe 3 units behind it still needs only faces covering the view.
+  camView = glm::lookAt(vec3(0), vec3(0, 0, -1), vec3(0, 1, 0));
+  u32 behind = TexelSplatter::visibleFaces(vec3(0, 0, 3), glm::inverse(camProj * camView), vec3(0), 400.0f);
+  CHECK((behind & (1u << 5)) && !(behind & (1u << 4)));
   CHECK(TexelSplatter::snapOrigin({2.1f, 0, 0}, 4.0f) == vec3(4, 0, 0));
 }
 

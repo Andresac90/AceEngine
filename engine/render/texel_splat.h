@@ -27,6 +27,9 @@ public:
   };
   static Face face(int index);
   static vec3 snapOrigin(vec3 position, f32 cell); // grid probe position for a camera position
+  // Bit f set = cube face f (seen from `origin`) covers part of what the camera
+  // sees, within maxDistance of the camera. Conservative near face boundaries.
+  static u32 visibleFaces(vec3 origin, const mat4& invViewProj, vec3 cameraPosition, f32 maxDistance);
 
 private:
   struct Probe {

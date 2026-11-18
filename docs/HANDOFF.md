@@ -126,8 +126,11 @@ looking at screenshots produced with `--screenshot`:
   (`ace_player ... --fixed-dt 0.0166667 --frames 60 --frames-to out/`), the share
   of pixels that change between frames after the best shift is 19% (ground) and
   10% (wall), versus 34% and 14% with screen pixels, with no spikes when the grid
-  probe moves. Cost at 2560x1440 on an M1 Pro: about 11-12 ms per frame,
-  versus about 3 ms for screen pixels.
+  probe moves. Only the cube faces the camera can see are captured and drawn
+  (`TexelSplatter::visibleFaces`, unit-tested; images identical to drawing all
+  six). Cost at 2560x1440 on an M1 Pro, 300-frame runs including ~1 s startup:
+  10.0 ms/frame on Metal, 13.3 ms on Vulkan (MoltenVK; per-pass overhead there,
+  e.g. a framebuffer object per render pass), versus about 5 ms for screen pixels.
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
@@ -337,9 +340,8 @@ otherwise; ask the owner before installing anything.
 2. ~~Raster shadows~~ done (one 2048 map over the whole scene, sprites cast
    theirs; see the `shortcut:` in `Renderer::fitShadowFrustum` for big levels).
 2a. **World pixels, next steps.** Show the owner and tune `probeResolution` /
-   `probeCell` / palette with them. Then: capture only the (at most 3) visible
-   faces and cache the grid probe while nothing moves (today: 12-18 scene
-   renders per frame); crossfade the eye probe's disocclusion fill (it can
+   `probeCell` / palette with them. Then: cache the grid probe while nothing in
+   view changes (visible-face culling is done); Vulkan framebuffer caching; crossfade the eye probe's disocclusion fill (it can
    shimmer at silhouettes); outlines across cube-face seams (post pass stops at
    face edges); sprites with the same pixel size as the world; path-traced
    capture (shade probe texels with the path tracer instead of raster); a

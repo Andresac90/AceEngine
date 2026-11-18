@@ -1,5 +1,5 @@
-// Draws every texel of a probe atlas as a small square in the world. No vertex
-// buffer: vertex v belongs to texel v / 6, corner v % 6.
+// Draws the texels of one probe cube face as small squares in the world (one
+// draw per visible face). No vertex buffer: vertex v belongs to texel v / 6, corner v % 6.
 //
 // A texel covers a little cone of directions from the probe origin. Its square
 // is where that cone meets the captured surface: the four corner rays are
@@ -18,6 +18,7 @@ struct SplatData {
   float4 up[6];
   float4 camera; // xyz: camera position
   float4 params; // x: quad half-size scale, y: push away from the camera (fraction of the distance), z: dither threshold, w: +1 keep below / -1 keep above / 0 keep all
+  float4 face;   // x: the cube face this draw covers
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<SplatData> data;
@@ -37,9 +38,8 @@ struct FsOut {
 VsOut vsMain(uint vid : SV_VertexID) {
   static const float2 corners[6] = {float2(-1, -1), float2(1, -1), float2(1, 1), float2(-1, -1), float2(1, 1), float2(-1, 1)};
   uint n = uint(data.origin.w);
-  uint texel = vid / 6u;
-  uint faceIndex = texel / (n * n);
-  uint local = texel - faceIndex * n * n;
+  uint local = vid / 6u;
+  uint faceIndex = uint(data.face.x);
   uint x = local % n, y = local / n;
   int2 at = int2(int(faceIndex * n + x), int(y));
   float4 nd = normalDepthAtlas.Load(int3(at, 0));
