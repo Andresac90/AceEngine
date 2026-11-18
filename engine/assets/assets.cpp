@@ -134,6 +134,21 @@ void Assets::reload() {
 
 std::string Assets::resolve(const std::string& path) const { return root_ + path; }
 
+bool Assets::setTexturePixels(const std::string& path, u32 width, u32 height, const u8* rgba) {
+  Texture* t = const_cast<Texture*>(texture(path)); // loads it if needed
+  bool resized = t->width != width || t->height != height;
+  t->pixels.assign(rgba, rgba + (size_t)width * height * 4);
+  if (resized) {
+    device_.waitIdle();
+    device_.destroy(t->handle);
+    t->width = width;
+    t->height = height;
+    t->handle = device_.createTexture({width, height, rhi::Format::RGBA8_SRGB, rhi::TextureUsage_Sampled, "texture"});
+  }
+  device_.writeTexture(t->handle, t->pixels.data());
+  return resized;
+}
+
 Mesh* Assets::upload(Mesh&& mesh) {
   auto m = std::make_unique<Mesh>(std::move(mesh));
   for (const Vertex& v : m->vertices) m->bounds.grow(v.position);

@@ -81,7 +81,8 @@ looking at screenshots produced with `--screenshot`:
   disk, play/stop restoring the scene, Build mode place and Shift-erase,
   prefab save/place/undo, Shift+click multi-select, copy/paste through the
   system clipboard (the test saves and restores the user's clipboard), delete
-  of a multi-selection, and a group gizmo drag.
+  of a multi-selection, a group gizmo drag, and the Palette panel (create,
+  edit with a live GPU update including a resize, save, read back from disk).
   When you add an editor feature, add steps to `Editor::autotestStep`.
 - Raster sun shadows, direct sampling of emissive triangles in the path tracer,
   a hand-made glTF model (`assets/pine.gltf`), and the pixel-art feature set
@@ -327,6 +328,11 @@ Pitfalls already hit:
   (fraction of the camera distance), not clip space: perspective depth is
   nearly 1.0 beyond a few metres, so a clip-space push sends splats to the far
   plane and they vanish. Orthographic cameras use screen pixels instead.
+- A new editor panel will float off-screen for anyone whose `imgui.ini` predates
+  it; dock it on first use (see `drawPalette`, `SetNextWindowDockID`).
+- After `Assets::reload()` or a texture changes size, call
+  `Renderer::clearTextureCaches()`: bind groups are cached by texture id and ids
+  are reused.
 - The editor captures keys through ImGui, which maps Cmd to "Ctrl" on macOS;
   injected test input must send `ImGuiMod_Super` there.
 
@@ -352,8 +358,8 @@ otherwise; ask the owner before installing anything.
 2b. **Pixel-art look** (the owner's main interest). Done: texel-space lighting,
    world-space texel density, palette snap + dithering, palette-ramp shading
    in both render modes, integer scaling, sprite sheets/animation, sprite
-   shadows, 4/8-direction sprites. Next: get the owner's verdict on
-   `village.scene.json` against their references; a palette editor panel;
+   shadows, 4/8-direction sprites, a Palette editor panel. Next: get the
+   owner's verdict on `village.scene.json` against their references;
    water and foliage (wind-swayed sprite cards); colored light in ramp mode
    (path-traced ramp shading uses light *amount*, so the lantern's warm tint
    is lost); point/spot lights in the raster path.

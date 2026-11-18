@@ -195,6 +195,15 @@ mat4 uprightCard(const mat4& world, vec3 right) {
   return mat4(vec4(right * scale.x, 0), vec4(0, scale.y, 0, 0), vec4(glm::cross(right, vec3(0, 1, 0)), 0), world[3]);
 }
 
+void Renderer::clearTextureCaches() {
+  device_.waitIdle();
+  for (auto& [id, g] : materialGroups_) device_.destroy(g);
+  for (auto& [id, g] : frameGroups_) device_.destroy(g);
+  materialGroups_.clear();
+  frameGroups_.clear();
+  pathTracer_->invalidate();
+}
+
 BindGroupHandle Renderer::frameGroup(const Texture* palette) {
   BindGroupHandle& group = frameGroups_[palette->handle.id];
   if (!group) {

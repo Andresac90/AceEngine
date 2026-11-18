@@ -4,6 +4,7 @@
 //   ace_editor --new <dir>              create an empty project there and open it
 //   options: --backend metal|vulkan|d3d12, --validation,
 //            --export macos|ios-simulator|ios-device   run File > Export, exit when done
+//            --focus <panel>   bring a panel (e.g. Palette) to the front
 //            --autotest   scripted interaction test; exits non-zero on failure (use a project copy)
 //            --screenshot out.png [--frames N] [--select <entity>] [--play]   (automated UI capture)
 #include "editor.h"
@@ -40,7 +41,7 @@ static bool createProject(const std::string& dir) {
 int main(int argc, char** argv) {
   std::string projectDir = "projects/pixel_demo", screenshot, select;
   bool play = false, autotest = false;
-  std::string exportTarget;
+  std::string exportTarget, focusName;
   int frames = 0;
   AppDesc desc;
   desc.title = "AceEngine Editor";
@@ -68,6 +69,7 @@ int main(int argc, char** argv) {
     else if (a == "--play") play = true;
     else if (a == "--autotest") autotest = true;
     else if (a == "--export") exportTarget = next();
+    else if (a == "--focus") focusName = next();
     else if (a[0] != '-') projectDir = a;
     else {
       ACE_ERROR("unknown option %s", a.c_str());
@@ -93,6 +95,7 @@ int main(int argc, char** argv) {
     if (!select.empty()) editor.select(select);
     if (play) editor.play();
     editor.autotest = autotest;
+    editor.focusWindow = focusName;
     if (!exportTarget.empty() && !editor.exportTarget(exportTarget)) {
       ACE_ERROR("unknown export target '%s' (macos, ios-simulator, ios-device)", exportTarget.c_str());
       return 2;

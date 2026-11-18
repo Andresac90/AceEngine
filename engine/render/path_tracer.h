@@ -24,6 +24,11 @@ public:
   };
   // Builds a BVH in place (reorders `tris`). Exposed for tests.
   static void buildBvh(std::vector<Triangle>& tris, std::vector<Node>& nodes);
+  // Forget cached texture data (atlas, palette binding): rebuilt on the next render.
+  void invalidate() {
+    sceneHash_ = 0;
+    paletteId_ = 0;
+  }
 
 private:
   void rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 cameraPosition);

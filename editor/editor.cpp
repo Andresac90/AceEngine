@@ -386,6 +386,7 @@ void Editor::buildUi() {
       ImGui::DockBuilderDockWindow("Hierarchy", left);
       ImGui::DockBuilderDockWindow("Inspector", right);
       ImGui::DockBuilderDockWindow("Render Settings", right);
+      ImGui::DockBuilderDockWindow("Palette", right);
       ImGui::DockBuilderDockWindow("Assets", bottom);
       ImGui::DockBuilderDockWindow("Console", bottom);
       ImGui::DockBuilderDockWindow("Viewport", center);
@@ -404,6 +405,7 @@ void Editor::buildUi() {
   drawHierarchy();
   drawInspector();
   drawSettings();
+  drawPalette();
   drawAssets();
   drawConsole();
   drawViewport();
@@ -416,6 +418,8 @@ void Editor::buildUi() {
     g_duplicateRequest = false;
     duplicateSelection();
   }
+
+  if (!focusWindow.empty() && ImGui::GetFrameCount() < 5) ImGui::SetWindowFocus(focusWindow.c_str());
 
   if (playing_) {
     scripts_->update(app_.dt);
@@ -500,7 +504,12 @@ void Editor::drawMenu() {
         project_.startScene = scenePath_;
         project_.save();
       }
-      if (ImGui::MenuItem("Reload Assets")) assets_.reload();
+      if (ImGui::MenuItem("Reload Assets")) {
+        assets_.reload();
+        renderer_.clearTextureCaches();
+        paletteRows_.clear(); // re-read from the file
+        palettePath_.clear();
+      }
       if (ImGui::BeginMenu("Export", !exporting_)) {
         if (ImGui::MenuItem("macOS app")) exportTarget("macos");
         if (ImGui::MenuItem("iOS Simulator app")) exportTarget("ios-simulator");
@@ -766,6 +775,134 @@ void Editor::drawSettings() {
   ImGui::Begin("Render Settings");
   ImGui::TextDisabled("Saved with the scene.");
   if (editFields(&scene_.settings, renderSettingsFields()) && !playing_) commit();
+  ImGui::End();
+}
+
+// ------------------------------------------------------------- palette
+
+// The palette image as rows of colors (each row is a ramp, darkest first).
+// Edits apply to the GPU texture at once; Save writes the PNG.
+void Editor::loadPalette() {
+  palettePath_ = scene_.settings.palette;
+  paletteRows_.clear();
+  paletteDirty_ = false;
+  if (palettePath_.empty()) return;
+  const Texture* t = assets_.texture(palettePath_);
+  for (u32 y = 0; y < t->height; y++) {
+    std::vector<vec4> row;
+    for (u32 x = 0; x < t->width; x++) {
+      const u8* p = &t->pixels[((size_t)y * t->width + x) * 4];
+      if (p[3] < 128) break; // a transparent texel ends the ramp
+      row.push_back(vec4(p[0], p[1], p[2], 255) / 255.0f);
+    }
+    paletteRows_.push_back(row);
+  }
+}
+
+void Editor::applyPalette() {
+  u32 width = 1;
+  for (const auto& row : paletteRows_) width = std::max(width, (u32)row.size());
+  u32 height = std::max<u32>(1, (u32)paletteRows_.size());
+  std::vector<u8> pixels((size_t)width * height * 4, 0);
+  for (u32 y = 0; y < paletteRows_.size(); y++)
+    for (u32 x = 0; x < paletteRows_[y].size(); x++)
+      for (int c = 0; c < 4; c++) pixels[((size_t)y * width + x) * 4 + c] = (u8)(glm::clamp(paletteRows_[y][x][c], 0.0f, 1.0f) * 255.0f + 0.5f);
+  if (assets_.setTexturePixels(palettePath_, width, height, pixels.data())) renderer_.clearTextureCaches();
+  paletteDirty_ = true;
+}
+
+bool Editor::savePalette() {
+  const Texture* t = assets_.texture(palettePath_);
+  if (!savePng(project_.path(palettePath_), t->width, t->height, t->pixels.data())) {
+    ACE_ERROR("could not write %s", palettePath_.c_str());
+    return false;
+  }
+  paletteDirty_ = false;
+  ACE_INFO("saved %s", palettePath_.c_str());
+  return true;
+}
+
+void Editor::createPalette() {
+  // A new file (never overwrite an existing image), with four starter ramps.
+  std::string path = "assets/palette.png";
+  for (int n = 2; std::filesystem::exists(project_.path(path)); n++) path = "assets/palette_" + std::to_string(n) + ".png";
+  std::error_code ec;
+  std::filesystem::create_directories(std::filesystem::path(project_.path(path)).parent_path(), ec);
+  static const u8 ramps[4][5][3] = {
+      {{31, 59, 58}, {44, 90, 63}, {63, 125, 67}, {98, 160, 74}, {156, 195, 90}},     // green
+      {{58, 42, 51}, {90, 61, 58}, {125, 90, 68}, {166, 125, 85}, {207, 167, 111}},   // earth
+      {{43, 42, 61}, {71, 74, 94}, {107, 112, 131}, {149, 154, 166}, {196, 200, 200}}, // stone
+      {{61, 90, 156}, {91, 132, 196}, {134, 176, 223}, {184, 214, 238}, {230, 242, 247}}, // sky
+  };
+  std::vector<u8> pixels;
+  for (auto& ramp : ramps)
+    for (auto& c : ramp) pixels.insert(pixels.end(), {c[0], c[1], c[2], 255});
+  if (!savePng(project_.path(path), 5, 4, pixels.data())) {
+    ACE_ERROR("could not write %s", path.c_str());
+    return;
+  }
+  scene_.settings.palette = path;
+  commit();
+  loadPalette();
+  assetsRefreshed_ = -10.0;
+}
+
+void Editor::drawPalette() {
+  // A saved layout (imgui.ini) from before this panel existed has no place for
+  // it; put it with the Inspector the first time instead of floating.
+  if (ImGuiWindow* inspector = ImGui::FindWindowByName("Inspector"); inspector && inspector->DockId)
+    ImGui::SetNextWindowDockID(inspector->DockId, ImGuiCond_FirstUseEver);
+  ImGui::Begin("Palette");
+  if (scene_.settings.palette != palettePath_) loadPalette();
+  if (palettePath_.empty()) {
+    ImGui::TextWrapped("This scene has no palette. With one, every color on screen snaps to it, and "
+                       "ramp shading steps along its rows.");
+    if (ImGui::Button("Create palette")) createPalette();
+    ImGui::End();
+    return;
+  }
+  ImGui::Text("%s%s", palettePath_.c_str(), paletteDirty_ ? " (unsaved)" : "");
+  ImGui::TextDisabled("Each row is a ramp, darkest on the left. Click a swatch to edit it.");
+  bool changed = false;
+  int removeRow = -1;
+  for (int r = 0; r < (int)paletteRows_.size(); r++) {
+    ImGui::PushID(r);
+    auto& row = paletteRows_[r];
+    for (int c = 0; c < (int)row.size(); c++) {
+      ImGui::PushID(c);
+      if (c > 0) ImGui::SameLine(0.0f, 2.0f);
+      changed |= ImGui::ColorEdit3("##c", &row[c].x, ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_NoLabel);
+      ImGui::PopID();
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("+")) {
+      row.push_back(row.empty() ? vec4(0.5f, 0.5f, 0.5f, 1.0f) : row.back());
+      changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("-") && !row.empty()) {
+      row.pop_back();
+      changed = true;
+      if (row.empty()) removeRow = r;
+    }
+    ImGui::PopID();
+  }
+  if (removeRow >= 0) paletteRows_.erase(paletteRows_.begin() + removeRow);
+  if (ImGui::Button("Add ramp")) {
+    paletteRows_.push_back({vec4(0.2f, 0.2f, 0.25f, 1), vec4(0.45f, 0.45f, 0.5f, 1), vec4(0.75f, 0.75f, 0.78f, 1)});
+    changed = true;
+  }
+  ImGui::SameLine();
+  ImGui::BeginDisabled(!paletteDirty_ && !changed);
+  if (ImGui::Button("Save")) savePalette();
+  ImGui::SameLine();
+  if (ImGui::Button("Revert")) {
+    assets_.reload(); // re-read every file, including the palette
+    renderer_.clearTextureCaches();
+    loadPalette();
+  }
+  ImGui::EndDisabled();
+  if (changed) applyPalette();
   ImGui::End();
 }
 
@@ -1305,6 +1442,25 @@ void Editor::autotestStep() {
     case 38: {
       vec3 movedA = positionOf("Player") - before, movedB = positionOf("Rock") - groupBefore_;
       expect(movedA.x > 0.2f && glm::distance(movedA, movedB) < 1e-3f, "a gizmo drag moves every selected entity by the same amount");
+      // --- palette: create one, edit a color (GPU texture updates live), save to disk
+      {
+        expect(scene_.settings.palette.empty(), "the test scene starts without a palette");
+        createPalette();
+        expect(!scene_.settings.palette.empty() && paletteRows_.size() == 4 && paletteRows_[0].size() == 5, "Create palette makes 4 ramps of 5");
+        paletteRows_[2][1] = vec4(1.0f, 0.0f, 0.0f, 1.0f);
+        paletteRows_[3].push_back(vec4(0.0f, 0.0f, 1.0f, 1.0f)); // makes the image 6 wide: new GPU texture
+        applyPalette();
+        const Texture* t = assets_.texture(scene_.settings.palette);
+        expect(t->width == 6 && t->pixels[(2 * 6 + 1) * 4] == 255 && t->pixels[(2 * 6 + 1) * 4 + 1] == 0, "edits reach the texture");
+        expect(t->pixels[(0 * 6 + 5) * 4 + 3] == 0, "shorter ramps are padded with transparent texels");
+        expect(savePalette(), "Save writes the palette");
+        std::string path = scene_.settings.palette;
+        assets_.reload();
+        renderer_.clearTextureCaches();
+        loadPalette();
+        expect(paletteRows_.size() == 4 && paletteRows_[3].size() == 6 && paletteRows_[2][1].r > 0.99f, "the saved file reads back with the edits");
+        std::filesystem::remove(project_.path(path));
+      }
       if (autotestResult_ == 0) {
         ACE_INFO("autotest passed");
         autotestResult_ = 1;

@@ -67,6 +67,10 @@ public:
   // Width in font pixels of `text` at scale 1 (longest line).
   static int textWidth(std::string_view text);
 
+  // Drop GPU bindings that point at textures; call after Assets::reload() or a
+  // texture changed size (Assets::setTexturePixels), or they may reference freed ones.
+  void clearTextureCaches();
+
   // First entity with a Camera component. Returns false if the scene has none.
   static bool findCamera(Scene& scene, CameraView& out);
 

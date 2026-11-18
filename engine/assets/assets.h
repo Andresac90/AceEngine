@@ -39,6 +39,10 @@ public:
   std::string resolve(const std::string& path) const;
   const std::string& projectDir() const { return root_; }
   void reload(); // drop file-backed assets so they are re-read (editor hot reload)
+  // Replaces a texture's pixels in memory (the file is untouched), e.g. for live
+  // editing. Returns true if its GPU handle changed (different size): call
+  // Renderer::clearTextureCaches() then.
+  bool setTexturePixels(const std::string& path, u32 width, u32 height, const u8* rgba);
 
 private:
   Mesh* upload(Mesh&& mesh);

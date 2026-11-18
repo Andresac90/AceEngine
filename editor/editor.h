@@ -38,6 +38,7 @@ public:
   // checks the editor reacted. Returns 0 while running, 1 on pass, -1 on failure.
   int autotestResult() const { return autotestResult_; }
   bool autotest = false;
+  std::string focusWindow; // panel brought to the front on startup (--focus), e.g. for screenshots
   // Same as the File > Export menu ("macos", "ios-simulator", "ios-device"); for scripted use.
   bool exportTarget(const std::string& target);
   bool exportRunning() const { return exporting_; }
@@ -51,6 +52,11 @@ private:
   void drawHierarchyNode(Entity e);
   void drawInspector();
   void drawSettings();
+  void drawPalette();
+  void loadPalette();   // palette image -> paletteRows_
+  void applyPalette();  // paletteRows_ -> GPU texture (live preview)
+  bool savePalette();   // -> PNG file
+  void createPalette(); // new palette file for a scene without one
   void drawAssets();
   void drawConsole();
   void drawViewport();
@@ -119,6 +125,9 @@ private:
   f64 assetsRefreshed_ = -10.0;
   std::vector<std::pair<LogLevel, std::string>> console_;
   bool firstFrame_ = true;
+  std::string palettePath_;
+  std::vector<std::vector<vec4>> paletteRows_;
+  bool paletteDirty_ = false;
 
   std::thread exportThread_;
   std::atomic<bool> exporting_{false};
