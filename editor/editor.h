@@ -24,7 +24,9 @@ struct EditorCamera {
 
 class Editor {
 public:
-  Editor(App& app, Project project);
+  // automated: screenshot/test/export runs. They use the default panel layout and
+  // never save it, and never ask questions.
+  Editor(App& app, Project project, bool automated = false);
   ~Editor();
   // Builds the UI and renders one frame into `target` (the backbuffer, or an
   // offscreen texture when taking automated screenshots).
@@ -38,6 +40,11 @@ public:
   // checks the editor reacted. Returns 0 while running, 1 on pass, -1 on failure.
   int autotestResult() const { return autotestResult_; }
   bool autotest = false;
+  // Set by File > Open Project: the main loop then reopens the editor on it.
+  std::string requestedProject;
+  // Before quitting or switching projects: offers to save unsaved changes.
+  // Returns false if the user chose Cancel.
+  bool confirmLeave();
   std::string focusWindow; // panel brought to the front on startup (--focus), e.g. for screenshots
   // Same as the File > Export menu ("macos", "ios-simulator", "ios-device"); for scripted use.
   bool exportTarget(const std::string& target);
@@ -125,6 +132,8 @@ private:
   f64 assetsRefreshed_ = -10.0;
   std::vector<std::pair<LogLevel, std::string>> console_;
   bool firstFrame_ = true;
+  bool automated_ = false;
+  std::string iniPath_; // panel layout, in the user's settings folder
   std::string palettePath_;
   std::vector<std::vector<vec4>> paletteRows_;
   bool paletteDirty_ = false;

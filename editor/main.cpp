@@ -1,50 +1,26 @@
-// Level editor entry point.
+// Level editor entry point (also the executable inside AceEngine.app).
 //
-//   ace_editor [project_dir]            open a project (default: projects/pixel_demo)
-//   ace_editor --new <dir>              create an empty project there and open it
+//   ace_editor                          reopen the last project, or ask for one (folder picker)
+//   ace_editor [project_dir]            open that project
+//   ace_editor --new <dir>              create a starter project there and open it
 //   options: --backend metal|vulkan|d3d12, --validation,
 //            --export macos|ios-simulator|ios-device   run File > Export, exit when done
 //            --focus <panel>   bring a panel (e.g. Palette) to the front
 //            --autotest   scripted interaction test; exits non-zero on failure (use a project copy)
 //            --screenshot out.png [--frames N] [--select <entity>] [--play]   (automated UI capture)
 #include "editor.h"
+#include "projects.h"
 #include <SDL3/SDL_main.h>
-#include <filesystem>
 #include <imgui_impl_sdl3.h>
 
 using namespace ace;
 
-static bool createProject(const std::string& dir) {
-  std::error_code ec;
-  std::filesystem::create_directories(dir + "/scenes", ec);
-  std::filesystem::create_directories(dir + "/scripts", ec);
-  std::filesystem::create_directories(dir + "/assets", ec);
-  if (ec) return false;
-  Project p;
-  p.dir = dir + "/";
-  p.name = std::filesystem::path(dir).filename().string();
-  if (std::filesystem::exists(p.dir + "project.json")) return true; // never overwrite an existing project
-  Scene scene;
-  Entity cam = scene.create("Camera");
-  scene.reg.emplace<Camera>(cam);
-  scene.reg.get<Transform>(cam).position = {10, 10, 10};
-  scene.reg.get<Transform>(cam).rotation = quat(glm::radians(vec3(-35.264f, 45.0f, 0.0f)));
-  Entity sun = scene.create("Sun");
-  scene.reg.emplace<Light>(sun);
-  scene.reg.get<Transform>(sun).rotation = quat(glm::radians(vec3(-50.0f, 30.0f, 0.0f)));
-  Entity ground = scene.create("Ground");
-  scene.reg.emplace<MeshRenderer>(ground).mesh = "builtin:plane";
-  scene.reg.get<Transform>(ground).scale = {10, 1, 10};
-  return p.save() && scene.save(p.path(p.startScene));
-}
-
 int main(int argc, char** argv) {
-  std::string projectDir = "projects/pixel_demo", screenshot, select;
+  std::string projectDir, screenshot, select, exportTarget, focusName;
   bool play = false, autotest = false;
-  std::string exportTarget, focusName;
   int frames = 0;
   AppDesc desc;
-  desc.title = "AceEngine Editor";
+  desc.title = "AceEngine";
   desc.width = 1600;
   desc.height = 900;
   for (int i = 1; i < argc; i++) {
@@ -70,6 +46,7 @@ int main(int argc, char** argv) {
     else if (a == "--autotest") autotest = true;
     else if (a == "--export") exportTarget = next();
     else if (a == "--focus") focusName = next();
+    else if (a.rfind("-psn_", 0) == 0) continue; // macOS may pass a process serial number to apps opened from Finder
     else if (a[0] != '-') projectDir = a;
     else {
       ACE_ERROR("unknown option %s", a.c_str());
@@ -78,20 +55,35 @@ int main(int argc, char** argv) {
   }
   if (!screenshot.empty() && frames <= 0) frames = 10;
   // Automated runs render offscreen into a hidden window: no window flashes up,
-  // and they keep working while the display is asleep.
-  bool offscreen = !screenshot.empty() || autotest || !exportTarget.empty();
-  desc.hidden = offscreen;
-
-  Project project;
-  if (!project.load(projectDir)) {
-    ACE_ERROR("open a project folder, or create one with: ace_editor --new <dir>");
-    return 1;
+  // and they keep working while the display is asleep. They never ask questions
+  // and never touch the remembered project or saved layout.
+  bool automated = !screenshot.empty() || autotest || !exportTarget.empty();
+  desc.hidden = automated;
+  if (automated && projectDir.empty()) projectDir = lastProject(); // read-only: automated runs never change it
+  if (automated && projectDir.empty()) {
+    ACE_ERROR("automated runs need a project folder argument (no project is remembered)");
+    return 2;
   }
+
   App app;
   if (!app.init(desc)) return 1;
   rhi::Device& device = *app.device;
-  {
-    Editor editor(app, project);
+
+  if (projectDir.empty()) projectDir = lastProject();
+  if (projectDir.empty()) projectDir = chooseProject(app.window);
+  while (!projectDir.empty()) {
+    Project project;
+    if (!project.load(projectDir)) {
+      if (automated) return 1;
+      SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Could not open the project", ("Could not read\n" + projectDir + "/project.json").c_str(),
+                               app.window);
+      projectDir = chooseProject(app.window);
+      continue;
+    }
+    if (!automated) rememberProject(projectDir);
+    projectDir.clear();
+
+    Editor editor(app, project, automated);
     if (!select.empty()) editor.select(select);
     if (play) editor.play();
     editor.autotest = autotest;
@@ -104,14 +96,23 @@ int main(int argc, char** argv) {
     rhi::TextureHandle shot;
     u32 shotW = 0, shotH = 0;
     int frame = 0;
-    while (app.pump([&](const SDL_Event& e) { editor.onEvent(e); })) {
+    for (;;) {
+      if (!app.pump([&](const SDL_Event& e) { editor.onEvent(e); })) {
+        if (editor.confirmLeave()) break; // quit (Cmd+Q, window close)
+        continue;
+      }
       editor.buildUi();
-      rhi::CommandList* cmd = device.beginFrame(!offscreen);
+      if (!editor.requestedProject.empty()) { // File > Open Project
+        ImGui::EndFrame();
+        projectDir = editor.requestedProject;
+        break;
+      }
+      rhi::CommandList* cmd = device.beginFrame(!automated);
       if (!cmd) {
         ImGui::EndFrame();
         continue;
       }
-      if (offscreen) {
+      if (automated) {
         if (!shot) {
           shotW = device.backbufferWidth();
           shotH = device.backbufferHeight();
@@ -140,6 +141,7 @@ int main(int argc, char** argv) {
         ACE_INFO("wrote %s", screenshot.c_str());
       }
     }
+    if (shot) device.destroy(shot);
   }
   return 0;
 }

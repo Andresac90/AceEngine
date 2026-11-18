@@ -23,6 +23,13 @@ compiler into `build/` (Slang is reused from `~/.cache/ace/slang` if present).
 
 ## Run
 
+**As a Mac app:** `tools/make_editor_app.sh` builds `build-export/AceEngine.app`.
+Double-click it (or drag it to Applications). It reopens your last project; the
+first time, or from **File > Open Project...**, pick a project folder, or an
+empty folder to start a new project. It asks before closing with unsaved changes.
+
+**From a terminal:**
+
 ```sh
 build/bin/ace_editor projects/pixel_demo     # level editor
 build/bin/ace_player projects/pixel_demo     # the game alone

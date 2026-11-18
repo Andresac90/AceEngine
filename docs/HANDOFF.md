@@ -140,6 +140,14 @@ looking at screenshots produced with `--screenshot`:
   raster/world-pixel modes only): lantern light in `house.scene.json`; a night
   copy of the village renders dark with the lantern lighting the path, Metal and
   Vulkan identical. Ramp shading treats a white intensity-3 light as fully lit.
+- `tools/make_editor_app.sh` -> `build-export/AceEngine.app` (Metal only, SDL
+  static, ad-hoc signed, icon from `tools/make_app_icon.py`): no non-system
+  libraries (`otool -L`); started from `/` it reopened the remembered project
+  and rendered. Not checked by hand: the folder picker, File > Open Project,
+  and the unsaved-changes dialog (native dialogs cannot be driven by the
+  autotest). The editor keeps `imgui.ini` and `last_project.txt` in
+  `~/Library/Application Support/AceEngine/Editor/`; automated runs read but never
+  write them.
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.

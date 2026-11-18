@@ -1,4 +1,5 @@
 #include "editor.h"
+#include "projects.h"
 
 #include <ImGuizmo.h>
 #include <algorithm>
@@ -44,7 +45,7 @@ CameraView EditorCamera::view() const {
   return v;
 }
 
-Editor::Editor(App& app, Project project)
+Editor::Editor(App& app, Project project, bool automated)
     : app_(app), project_(std::move(project)), renderer_(*app.device), assets_(*app.device, project_.dir) {
   setLogSink([this](LogLevel level, const std::string& line) {
     console_.emplace_back(level, line);
@@ -55,6 +56,11 @@ Editor::Editor(App& app, Project project)
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
   io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_NavEnableKeyboard;
+  // The layout lives in the user's settings folder: an app opened from Finder
+  // starts in "/", which is not writable. Automated runs use the default layout.
+  automated_ = automated;
+  iniPath_ = editorSettingsDir() + "imgui.ini";
+  io.IniFilename = automated ? nullptr : iniPath_.c_str();
   io.ConfigWindowsMoveFromTitleBarOnly = true;
   ImGui::StyleColorsDark();
   ImGuiStyle& style = ImGui::GetStyle();
@@ -233,6 +239,29 @@ void Editor::startExport(const char* script, const char* extraArg) {
     exporting_ = false;
   });
 #endif
+}
+
+bool Editor::confirmLeave() {
+  if (automated_ || (!dirty_ && !paletteDirty_)) return true;
+  if (playing_) setPlaying(false); // play-mode changes are temporary anyway
+  if (!dirty_ && !paletteDirty_) return true;
+  std::string what = dirty_ && paletteDirty_ ? scenePath_ + " and the palette" : (dirty_ ? scenePath_ : std::string("the palette"));
+  std::string text = "Save changes to " + what + "?";
+  const SDL_MessageBoxButtonData buttons[] = {
+      {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Cancel"},
+      {0, 1, "Don't Save"},
+      {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 2, "Save"},
+  };
+  SDL_MessageBoxData box{SDL_MESSAGEBOX_WARNING, app_.window, "Unsaved changes", text.c_str(), 3, buttons, nullptr};
+  int choice = 0;
+  if (!SDL_ShowMessageBox(&box, &choice)) return true; // no dialog available: do not trap the user
+  if (choice == 0) return false;
+  if (choice == 2) {
+    if (dirty_) saveScene();
+    if (paletteDirty_) savePalette();
+    return !dirty_ && !paletteDirty_; // a failed save keeps the editor open
+  }
+  return true;
 }
 
 bool Editor::isSelected(Entity e) const {
@@ -488,6 +517,15 @@ void Editor::drawMenu() {
   bool openSaveAs = false;
   if (ImGui::BeginMainMenuBar()) {
     if (ImGui::BeginMenu("File")) {
+      if (ImGui::MenuItem("Open Project...")) {
+        // An empty folder starts a new project.
+        if (confirmLeave()) {
+          std::string dir = chooseProject(app_.window);
+          if (!dir.empty()) requestedProject = dir;
+        }
+      }
+      if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick a project folder, or an empty folder for a new project");
+      ImGui::Separator();
       if (ImGui::MenuItem("New Scene")) newScene();
       if (ImGui::BeginMenu("Open Scene")) {
         for (const std::string& f : assetFiles_)
