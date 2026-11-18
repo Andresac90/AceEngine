@@ -129,8 +129,11 @@ looking at screenshots produced with `--screenshot`:
   probe moves. Only the cube faces the camera can see are captured and drawn
   (`TexelSplatter::visibleFaces`, unit-tested; images identical to drawing all
   six). Cost at 2560x1440 on an M1 Pro, 300-frame runs including ~1 s startup:
-  10.0 ms/frame on Metal, 13.3 ms on Vulkan (MoltenVK; per-pass overhead there,
-  e.g. a framebuffer object per render pass), versus about 5 ms for screen pixels.
+  10.0 ms/frame on Metal, 13.3 ms on Vulkan, versus about 5 ms for screen
+  pixels. Vulkan framebuffers are now cached (zero validation messages); a
+  re-measurement under heavy machine load (load average 10) showed Vulkan 12%
+  slower than Metal instead of 33%, but absolute times were not trustworthy:
+  re-time on an idle machine.
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
@@ -341,7 +344,7 @@ otherwise; ask the owner before installing anything.
    theirs; see the `shortcut:` in `Renderer::fitShadowFrustum` for big levels).
 2a. **World pixels, next steps.** Show the owner and tune `probeResolution` /
    `probeCell` / palette with them. Then: cache the grid probe while nothing in
-   view changes (visible-face culling is done); Vulkan framebuffer caching; crossfade the eye probe's disocclusion fill (it can
+   view changes (visible-face culling and Vulkan framebuffer caching are done); crossfade the eye probe's disocclusion fill (it can
    shimmer at silhouettes); outlines across cube-face seams (post pass stops at
    face edges); sprites with the same pixel size as the world; path-traced
    capture (shade probe texels with the path tracer instead of raster); a

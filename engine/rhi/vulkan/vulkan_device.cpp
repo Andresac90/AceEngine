@@ -170,6 +170,7 @@ public:
       vkDestroyImage(device_, t.image, nullptr);
       vkFreeMemory(device_, t.memory, nullptr);
     });
+    for (auto& [key, fb] : framebuffers_) vkDestroyFramebuffer(device_, fb, nullptr);
     for (auto& [key, pass] : passes_) vkDestroyRenderPass(device_, pass, nullptr);
     vkDestroyDescriptorSetLayout(device_, emptyLayout_, nullptr);
     vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
@@ -436,6 +437,7 @@ public:
     Texture t = textures_.get(h.id);
     textures_.remove(h.id);
     deletions_.push_back([this, t] {
+      forgetFramebuffers(t.view); // runs once the GPU is done with them
       vkDestroyImageView(device_, t.view, nullptr);
       vkDestroyImage(device_, t.image, nullptr);
       vkFreeMemory(device_, t.memory, nullptr);
@@ -872,6 +874,7 @@ private:
   }
 
   void destroySwapchain() {
+    for (VkImageView v : swapViews_) forgetFramebuffers(v);
     for (VkImageView v : swapViews_) vkDestroyImageView(device_, v, nullptr);
     for (VkSemaphore sem : rendered_) vkDestroySemaphore(device_, sem, nullptr);
     rendered_.clear();
@@ -963,6 +966,51 @@ private:
   std::vector<VkImage> swapImages_;
   std::vector<VkImageView> swapViews_;
   std::map<PassKey, VkRenderPass> passes_;
+
+  // Framebuffers are cached by render pass + attachments + size; an entry is
+  // dropped when one of its image views is destroyed.
+  struct FramebufferKey {
+    VkRenderPass pass = VK_NULL_HANDLE;
+    VkImageView views[kMaxColorTargets + 1] = {};
+    u32 count = 0, width = 0, height = 0;
+    bool operator<(const FramebufferKey& o) const { return memcmp(this, &o, sizeof(FramebufferKey)) < 0; }
+  };
+  std::map<FramebufferKey, VkFramebuffer> framebuffers_;
+
+public:
+  VkFramebuffer framebuffer(VkRenderPass pass, const VkImageView* views, u32 count, u32 width, u32 height) {
+    FramebufferKey key;
+    key.pass = pass;
+    memcpy(key.views, views, sizeof(VkImageView) * count);
+    key.count = count;
+    key.width = width;
+    key.height = height;
+    auto it = framebuffers_.find(key);
+    if (it != framebuffers_.end()) return it->second;
+    VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
+    fb.renderPass = pass;
+    fb.attachmentCount = count;
+    fb.pAttachments = views;
+    fb.width = width;
+    fb.height = height;
+    fb.layers = 1;
+    VkFramebuffer result;
+    VK_CHECK(vkCreateFramebuffer(device_, &fb, nullptr, &result));
+    return framebuffers_[key] = result;
+  }
+  void forgetFramebuffers(VkImageView view) {
+    for (auto it = framebuffers_.begin(); it != framebuffers_.end();) {
+      bool uses = std::find(it->first.views, it->first.views + it->first.count, view) != it->first.views + it->first.count;
+      if (uses) {
+        vkDestroyFramebuffer(device_, it->second, nullptr);
+        it = framebuffers_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+private:
   Format backbufferFormat_ = Format::BGRA8_SRGB;
   u32 width_ = 0, height_ = 0, imageIndex_ = 0;
   bool inFrame_ = false;
@@ -999,19 +1047,7 @@ void VulkanCommandList::beginRenderPass(const RenderPassDesc& desc) {
   }
   VkRenderPass pass = dev_.renderPass(key);
 
-  // shortcut: a framebuffer object per pass per frame; cache by attachment set if
-  // it ever shows up in a profile.
-  VkFramebufferCreateInfo fb{VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO};
-  fb.renderPass = pass;
-  fb.attachmentCount = n;
-  fb.pAttachments = views;
-  fb.width = passWidth_;
-  fb.height = passHeight_;
-  fb.layers = 1;
-  VkFramebuffer framebuffer;
-  VK_CHECK(vkCreateFramebuffer(dev_.device_, &fb, nullptr, &framebuffer));
-  VkDevice device = dev_.device_;
-  dev_.deletions_.push_back([device, framebuffer] { vkDestroyFramebuffer(device, framebuffer, nullptr); });
+  VkFramebuffer framebuffer = dev_.framebuffer(pass, views, n, passWidth_, passHeight_);
 
   VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
   begin.renderPass = pass;
