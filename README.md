@@ -74,6 +74,8 @@ The demo's `scenes/village.scene.json` is the reference. Two ways to get pixels:
   default; lower = chunkier), `probeCell` how far you walk before the pixel grid
   re-centres (with a quick dissolve). This is the technique of Dylan Ebert's
   [Texel Splatting](https://dylanebert.com/texel-splatting/) paper.
+  Works with `pathTraced` too: the cube maps are path traced and settle to a
+  clean image within about a second while the camera is still.
 - **Screen pixels** (`pixelArt` + `pixelHeight`): a low-resolution image scaled
   up. Rock steady with an orthographic camera (`pixelSnap`); with a perspective
   camera the pixels slide over surfaces as you move.

@@ -18,7 +18,7 @@ struct SplatData {
   float4 up[6];
   float4 camera; // xyz: camera position
   float4 params; // x: quad half-size scale, y: push away from the camera (fraction of the distance), z: dither threshold, w: +1 keep below / -1 keep above / 0 keep all
-  float4 face;   // x: the cube face this draw covers
+  float4 face;   // x: the cube face this draw covers, y: 1 = corners stay on their rays (eye probe)
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<SplatData> data;
@@ -75,8 +75,16 @@ VsOut vsMain(uint vid : SV_VertexID) {
     // far away and the square becomes a long spike. Keep the corner on the
     // surface but no further than 3x a plain texel; the eye probe fills the rest.
     if (dot(normal, rayCorner) * dot(normal, rayCentre) > 0.0) {
-      float limit = 3.0 * length(world - p), reach = length(onSurface - p);
-      world = reach <= limit ? onSurface : p + (onSurface - p) * (limit / reach);
+      if (data.face.y > 0.5) {
+        // Eye probe: it sits at the camera, so corners anywhere on their own
+        // rays tile the screen exactly. Keep them on the rays (no gaps), just
+        // not absurdly far along them.
+        float tp = dot(normal, p - origin) / denom;
+        world = origin + rayCorner * clamp(tp, d * 0.5, d * 2.0);
+      } else {
+        float limit = 3.0 * length(world - p), reach = length(onSurface - p);
+        world = reach <= limit ? onSurface : p + (onSurface - p) * (limit / reach);
+      }
     }
   }
 

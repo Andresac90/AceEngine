@@ -1,4 +1,5 @@
 #include "render/texel_splat.h"
+#include "render/path_tracer.h"
 #include <SDL3/SDL.h>
 
 namespace ace {
@@ -22,7 +23,7 @@ struct SplatData {
   vec4 forward[6], right[6], up[6];
   vec4 camera;
   vec4 params; // x: quad half-size scale, y: push away from the camera (fraction of the distance), z: dither threshold, w: 1 = keep texels below it, -1 = keep texels above it, 0 = keep all
-  vec4 face;   // x: which cube face this draw covers
+  vec4 face;   // x: which cube face this draw covers, y: 1 = corners stay on their rays (eye probe)
 };
 } // namespace
 
@@ -177,6 +178,7 @@ void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const
   u32 masks[3];
   for (int pi = 0; pi < probeCount; pi++) masks[pi] = visibleFaces(origins[pi], invViewProj, cameraPos, kFar);
   std::vector<RasterView> views;
+  std::vector<u32> viewSlots;
   for (int pi = 0; pi < probeCount; pi++) {
     bool first = true;
     for (int f = 0; f < 6; f++) {
@@ -192,11 +194,31 @@ void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const
       v.clear = first; // faces not captured this frame keep stale data, but are not drawn either
       first = false;
       v.capture = true;
+      viewSlots.push_back(1u + (u32)(pi * 6 + f)); // path tracer history: one per probe face
       v.sprites = false; // sprites are pixel art already: drawn directly below, not re-sampled by the probe
       views.push_back(v);
     }
   }
-  r_.drawRaster(cmd, scene, assets, views, cameraWorld);
+  if (s.pathTraced) {
+    // Path-traced capture: every captured face keeps its own running average, so
+    // the grid probe (which stays put until the camera changes cell) converges.
+    for (size_t i = 0; i < views.size(); i++) {
+      const RasterView& v = views[i];
+      PathTracer::Target t;
+      t.color = v.color;
+      t.normalDepth = v.normalDepth;
+      t.viewport = v.viewport;
+      t.capture = true;
+      t.skipSprites = true;
+      t.spriteCamera = cameraWorld;
+      t.slot = viewSlots[i];
+      t.samples = 1;         // one ray per texel per frame: the running average does the rest
+      t.settleFrames = 64;   // then a still view stops costing anything
+      r_.pathTracer_->render(cmd, scene, assets, v.view, v.proj, t);
+    }
+  } else {
+    r_.drawRaster(cmd, scene, assets, views, cameraWorld);
+  }
 
   // 2. per-texel post: outlines, tone, palette (dither anchored to texels)
   PostData post{};
@@ -249,7 +271,7 @@ void TexelSplatter::render(CommandList& cmd, Scene& scene, Assets& assets, const
     d.params = vec4(1.02f, pi == 1 ? 0.01f : (pi == 2 ? 0.003f : 0.0f), fade_, !fading ? 0.0f : (pi == 0 ? 1.0f : (pi == 2 ? -1.0f : 0.0f)));
     for (int f = 0; f < 6; f++) {
       if (!(masks[pi] & (1u << f))) continue;
-      d.face = vec4((f32)f, 0, 0, 0);
+      d.face = vec4((f32)f, pi == 1 ? 1.0f : 0.0f, 0, 0);
       u32 offset = r_.pushUniform(&d, sizeof(d));
       cmd.setBindGroup(0, probes_[pi].splatGroup, {&offset, 1});
       cmd.draw(6 * n * n); // n x n texels x 6 vertices; empty texels collapse

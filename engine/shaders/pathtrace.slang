@@ -17,7 +17,7 @@ struct TraceData {
   float4 skyTop;
   float4 skyBottom;
   float4 params;    // x: accumulated frames, y: samples per pixel, z: bounces, w: toon bands
-  float4 lightInfo; // x: number of emissive triangles, y: texels per world unit, z: texel-space lighting on
+  float4 lightInfo; // x: number of emissive triangles, y: texels per world unit, z: texel-space lighting on, w: primary rays skip sprites
   float4 ramp;      // x: ramp shading on, y: shadow steps, z: luminance of a fully lit white surface
 };
 struct BvhNode {
@@ -100,8 +100,9 @@ bool hitBox(float3 origin, float3 invDir, float3 bmin, float3 bmax, float tMax) 
   return tNear <= tFar;
 }
 
-// Closest hit, or any hit when `anyHit` is set (shadow rays).
-bool trace(float3 origin, float3 dir, float tMax, bool anyHit, out Hit hit) {
+// Closest hit, or any hit when `anyHit` is set (shadow rays). `skipSprites`
+// ignores sprite cards (probe captures: sprites are drawn separately).
+bool trace(float3 origin, float3 dir, float tMax, bool anyHit, out Hit hit, bool skipSprites = false) {
   hit.t = tMax;
   hit.tri = 0;
   hit.u = 0;
@@ -138,6 +139,7 @@ bool trace(float3 origin, float3 dir, float tMax, bool anyHit, out Hit hit) {
       if (v < 0.0 || u + v > 1.0) continue;
       float t = dot(tri.e2.xyz, q) * inv;
       if (t <= 1e-4 || t >= hit.t) continue;
+      if (skipSprites && (flagsOf(tri) & 2) != 0) continue;
       // Sprites: transparent texels let the ray through.
       if ((flagsOf(tri) & 2) != 0 && texelColor(tri, texelAt(tri, origin + dir * t, u, v)).a < 0.5) continue;
       hit.t = t;
@@ -210,7 +212,7 @@ FsOut fsMain(VsOut i) {
   o.normalDepth = float4(0, 1, 0, 10000.0);
 
   Hit primary;
-  if (!trace(origin, dir, 1e30, false, primary)) return o; // sky: filled in by the present pass
+  if (!trace(origin, dir, 1e30, false, primary, data.lightInfo.w > 0.5)) return o; // sky: filled in by the present pass
   Triangle ptri = triangles[primary.tri];
   float3 pn = shadingNormal(ptri, primary, dir);
   float3 ppos = origin + dir * primary.t;

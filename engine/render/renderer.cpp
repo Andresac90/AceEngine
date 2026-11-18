@@ -548,7 +548,7 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
 
   // Orthographic views keep screen pixels: grid snapping is already stable for
   // them, and the eye probe needs a single eye point, which they do not have.
-  bool worldPixels = s.worldPixels && !s.pathTraced && !cv.camera.orthographic;
+  bool worldPixels = s.worldPixels && !cv.camera.orthographic;
   if (worldPixels) {
     // Pixels live in the world (texel splatting), so the image is drawn at the
     // output resolution; pixelHeight only sets the size of UI text.
@@ -558,7 +558,12 @@ void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const Came
     mat4 fullProj = cv.camera.projection(aspect);
     splatter_->render(cmd, scene, assets, glm::inverse(cv.world), fullProj, cv.world, width, height);
   } else if (s.pathTraced) {
-    pathTracer_->render(cmd, scene, assets, view, proj, cam, color_, normalDepth_, lowWidth_, lowHeight_);
+    PathTracer::Target t;
+    t.color = color_;
+    t.normalDepth = normalDepth_;
+    t.viewport = vec4(0, 0, (f32)lowWidth_, (f32)lowHeight_);
+    t.spriteCamera = glm::inverse(view);
+    pathTracer_->render(cmd, scene, assets, view, proj, t);
   } else {
     RasterView rv{view, proj, color_, normalDepth_, depth_, vec4(0, 0, (f32)lowWidth_, (f32)lowHeight_), true, false};
     drawRaster(cmd, scene, assets, {&rv, 1}, glm::inverse(view));

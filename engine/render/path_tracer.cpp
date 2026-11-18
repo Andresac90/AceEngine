@@ -38,13 +38,20 @@ PathTracer::PathTracer(Renderer& renderer) : r_(renderer) {
   p.vertexShader = r_.loadShader("pathtrace", ShaderStage::Vertex);
   p.fragmentShader = r_.loadShader("pathtrace", ShaderStage::Fragment);
   p.bindGroupLayouts[0] = layout_;
-  p.colorFormats[0] = p.colorFormats[1] = Format::RGBA16F;
   p.colorCount = 2;
-  p.blend[0] = BlendMode::Alpha; // running average across frames
   p.cull = CullMode::None;
+  p.colorFormats[0] = Format::RGBA16F;
+  for (int capture = 0; capture < 2; capture++) {
+    for (int first = 0; first < 2; first++) {
+      p.colorFormats[1] = capture ? Format::RGBA32F : Format::RGBA16F;
+      // Later frames blend into the running average; the first one overwrites,
+      // so whatever was there (even NaN) cannot leak in.
+      p.blend[0] = first ? BlendMode::Opaque : BlendMode::Alpha;
+      pipelines_[capture][first] = dev.createPipeline(p);
+      ACE_ASSERT(pipelines_[capture][first], "failed to create path tracing pipeline");
+    }
+  }
   atlas_ = dev.createTexture({kAtlasSize, kAtlasSize, Format::RGBA8_SRGB, TextureUsage_Sampled, "path tracer atlas"});
-  pipeline_ = dev.createPipeline(p);
-  ACE_ASSERT(pipeline_, "failed to create path tracing pipeline");
 }
 
 PathTracer::~PathTracer() = default;
@@ -197,11 +204,10 @@ void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 ca
   }
 }
 
-void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj, const Camera&,
-                        TextureHandle color, TextureHandle normalDepth, u32 width, u32 height) {
+void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const mat4& view, const mat4& proj, const Target& target) {
   // Anything that changes the geometry or its materials forces a BVH rebuild.
-  vec3 cameraRight = vec3(glm::inverse(view)[0]);
-  vec3 cameraPosition = vec3(glm::inverse(view)[3]);
+  vec3 cameraRight = vec3(target.spriteCamera[0]);
+  vec3 cameraPosition = vec3(target.spriteCamera[3]);
   u64 sh = 14695981039346656037ull;
   for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each()) {
     sh = hashBytes(sh, &t.world, sizeof(mat4));
@@ -221,14 +227,13 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     sh = hashBytes(sh, &uvRect, sizeof(vec4));
     if (s.billboard) sh = hashBytes(sh, &cameraRight, sizeof(vec3)); // billboards turn with the camera
   }
-  bool reset = false;
   if (sh != sceneHash_ || !nodeBuffer_) {
     sceneHash_ = sh;
     rebuild(scene, assets, cameraRight, cameraPosition);
     // Moving objects: keep a short history instead of restarting, trading a
     // little ghosting for far less noise.
     // shortcut: replace with motion-vector reprojection + a spatial denoiser.
-    frame_ = std::min(frame_, kMovingHistoryFrames);
+    for (auto& [slot, h] : history_) h.frame = std::min(h.frame, kMovingHistoryFrames);
   }
   const Texture* palette = assets.texture(scene.settings.palette); // white 1x1 when unset
   if (!group_ || palette->handle.id != paletteId_) {
@@ -260,9 +265,10 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   }
   d.skyTop = vec4(toLinear(scene.settings.skyTop), 0);
   d.skyBottom = vec4(toLinear(scene.settings.skyBottom), 0);
-  d.params = vec4(0, (f32)scene.settings.ptSamples, (f32)scene.settings.ptBounces, (f32)scene.settings.toonBands);
+  d.params = vec4(0, (f32)(target.samples > 0 ? target.samples : scene.settings.ptSamples), (f32)scene.settings.ptBounces, (f32)scene.settings.toonBands);
 
-  d.lightInfo = vec4((f32)lightCount_, (f32)std::max(scene.settings.texelsPerUnit, 1), scene.settings.texelLighting ? 1.0f : 0.0f, 0);
+  d.lightInfo = vec4((f32)lightCount_, (f32)std::max(scene.settings.texelsPerUnit, 1), scene.settings.texelLighting ? 1.0f : 0.0f,
+                     target.skipSprites ? 1.0f : 0.0f);
   // Ramp shading needs to know what "fully lit" is: a white surface facing the
   // sun, plus roughly what the sky adds.
   auto luminance = [](vec3 c) { return glm::dot(c, vec3(0.2126f, 0.7152f, 0.0722f)); };
@@ -272,33 +278,38 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
 
   // Anything else that changes the image restarts the running average.
   u64 vh = hashBytes(14695981039346656037ull, &d, sizeof(d));
-  u32 key[4] = {width, height, color.id, normalDepth.id};
+  u32 key[3] = {target.color.id, target.normalDepth.id, target.capture ? 1u : 0u};
   vh = hashBytes(vh, key, sizeof(key));
-  if (vh != viewHash_) reset = true;
-  // The running average lives in the renderer's scene targets. If we did not
-  // draw the previous frame, another mode drew there, or the targets were
-  // recreated (possibly with the same handle ids): the history is not ours.
-  if (r_.frameIndex() != lastRenderedFrame_ + 1) reset = true;
-  lastRenderedFrame_ = r_.frameIndex();
-  viewHash_ = vh;
-  if (reset) frame_ = 0;
-  bool first = frame_ == 0;
-  d.params.x = (f32)frame_;
-  if (frame_ < kMaxAccumulatedFrames) frame_++;
+  vh = hashBytes(vh, &target.viewport, sizeof(vec4));
+  History& h = history_[target.slot];
+  // The running average lives in shared targets. If this slot was not traced
+  // the previous frame, another mode drew there, or the targets were recreated
+  // (possibly with the same handle ids): the history is not ours.
+  if (vh != h.viewHash || r_.frameIndex() != h.lastFrame + 1) h.frame = 0;
+  h.viewHash = vh;
+  h.lastFrame = r_.frameIndex();
+  // Settled: nothing changed for settleFrames frames, so the image is as good as
+  // it gets for this target; leave it in place (probe atlases are never cleared
+  // in path-traced mode).
+  if (target.settleFrames > 0 && h.frame >= target.settleFrames) return;
+  bool first = h.frame == 0;
+  d.params.x = (f32)h.frame;
+  if (h.frame < kMaxAccumulatedFrames) h.frame++;
   u32 offset = r_.pushUniform(&d, sizeof(d));
 
   RenderPassDesc pass;
   pass.name = "pathtrace";
   pass.colorCount = 2;
-  pass.color[0].texture = color;
-  // Blend with the history, except on the first frame: the old contents may be
-  // undefined (even NaN), and NaN survives a multiply by zero.
-  pass.color[0].load = first ? LoadOp::Clear : LoadOp::Load;
-  pass.color[1].texture = normalDepth;
+  pass.color[0].texture = target.color;
+  pass.color[1].texture = target.normalDepth;
+  // Load, never clear: a clear would wipe the whole texture, and probe atlases
+  // hold six faces with separate histories. The first frame overwrites instead.
+  pass.color[0].load = pass.color[1].load = LoadOp::Load;
   cmd.beginRenderPass(pass);
-  cmd.setViewport(0, 0, (f32)width, (f32)height);
-  cmd.setScissor(0, 0, width, height);
-  cmd.setPipeline(pipeline_);
+  const vec4& v = target.viewport;
+  cmd.setViewport(v.x, v.y, v.z, v.w);
+  cmd.setScissor((i32)v.x, (i32)v.y, (u32)v.z, (u32)v.w);
+  cmd.setPipeline(pipelines_[target.capture ? 1 : 0][first ? 1 : 0]);
   cmd.setBindGroup(0, group_, {&offset, 1});
   cmd.draw(3);
   cmd.endRenderPass();

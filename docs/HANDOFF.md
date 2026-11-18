@@ -148,6 +148,12 @@ looking at screenshots produced with `--screenshot`:
   autotest). The editor keeps `imgui.ini` and `last_project.txt` in
   `~/Library/Application Support/AceEngine/Editor/`; automated runs read but never
   write them.
+- Path-traced world pixels (`pathTraced` + `worldPixels`): probe faces are
+  captured by the path tracer (1 ray per texel per frame, a running average per
+  face, tracing stops once a face has 64 unchanged frames), sprites skipped by
+  primary rays but casting shadows. Metal = Vulkan pixel for pixel. Still
+  camera on the village: 16.5 ms/frame vs 11.4 ms raster world pixels (machine
+  under load, load average ~14).
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
@@ -369,8 +375,7 @@ otherwise; ask the owner before installing anything.
    `probeCell` / palette with them. Then: cache the grid probe while nothing in
    view changes (visible-face culling and Vulkan framebuffer caching are done); crossfade the eye probe's disocclusion fill (it can
    shimmer at silhouettes); outlines across cube-face seams (post pass stops at
-   face edges); sprites with the same pixel size as the world; path-traced
-   capture (shade probe texels with the path tracer instead of raster); a
+   face edges); sprites with the same pixel size as the world; a
    mobile budget (384 per face is heavy for phones; try 256).
 2b. **Pixel-art look** (the owner's main interest). Done: texel-space lighting,
    world-space texel density, palette snap + dithering, palette-ramp shading
