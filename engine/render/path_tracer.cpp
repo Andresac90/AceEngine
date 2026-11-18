@@ -275,6 +275,11 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   u32 key[4] = {width, height, color.id, normalDepth.id};
   vh = hashBytes(vh, key, sizeof(key));
   if (vh != viewHash_) reset = true;
+  // The running average lives in the renderer's scene targets. If we did not
+  // draw the previous frame, another mode drew there, or the targets were
+  // recreated (possibly with the same handle ids): the history is not ours.
+  if (r_.frameIndex() != lastRenderedFrame_ + 1) reset = true;
+  lastRenderedFrame_ = r_.frameIndex();
   viewHash_ = vh;
   if (reset) frame_ = 0;
   bool first = frame_ == 0;

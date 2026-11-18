@@ -43,6 +43,7 @@ private:
   rhi::TextureHandle atlas_; // every texture used by the scene, packed side by side
   u64 sceneHash_ = 0, viewHash_ = 0;
   u32 frame_ = 0;
+  u64 lastRenderedFrame_ = 0; // Renderer::frameIndex() of our last render
 };
 
 } // namespace ace

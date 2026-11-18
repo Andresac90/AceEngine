@@ -60,6 +60,7 @@ public:
   // probe crossfades; pass the game clock so fixed-timestep runs are reproducible.
   void beginFrame(f64 seconds);
   f64 time() const { return time_; }
+  u64 frameIndex() const { return frameIndex_; } // +1 per beginFrame
   void render(rhi::CommandList& cmd, Scene& scene, Assets& assets, const CameraView& view, rhi::TextureHandle target,
               rhi::Format targetFormat, u32 width, u32 height, std::span<const TextDraw> texts = {});
   // Size in game pixels of the image produced by the last render() (for UI layout).
@@ -123,6 +124,7 @@ private:
   u64 uiCapacity_ = 0;
   vec2 gameSize_{0.0f};
   f64 time_ = 0.0;
+  u64 frameIndex_ = 0;
 };
 
 } // namespace ace

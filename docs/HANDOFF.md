@@ -326,6 +326,10 @@ Pitfalls already hit:
 - ImGui colors are sRGB; `imgui.slang` linearizes them because targets are sRGB.
 - EnTT is pinned to 3.13.2 and ImGui to `v1.91.9b-docking`; newer majors
   change APIs used here (ImGui 1.92 changed the texture backend contract).
+- Anything that accumulates over frames in the renderer's scene targets (the
+  path tracer) must restart when it did not draw the previous frame: other
+  modes draw into the same targets, and recreated targets can reuse handle ids,
+  so comparing ids/sizes is not enough (`PathTracer::render`, autotest step 44).
 - Textures are sRGB-typed, so shader `Load`s return *linear* values. Compare
   palette colors after `linearToSrgb` (exactly, not `pow(1/2.2)`), or close
   colors swap ramps.

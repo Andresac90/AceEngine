@@ -1578,11 +1578,32 @@ void Editor::autotestStep() {
       break;
     case 41:
       expect(selected_ == scene_.find("Sun"), "clicking a light's icon in the viewport selects it");
+      // --- path tracing: switching it off and on again must restart the image
+      // (regression: it kept averaging onto whatever the other mode drew).
+      selected_ = kNoEntity;
+      scene_.settings.pathTraced = true;
+      break;
+    case 42: // four path-traced frames have been drawn since the switch
+      app_.device->waitIdle();
+      expect(app_.device->readTexture(viewportTexture_, pathTraceFirst_), "can read the viewport back");
+      scene_.settings.pathTraced = false;
+      break;
+    case 43: scene_.settings.pathTraced = true; break;
+    case 44: {
+      std::vector<u8> again;
+      app_.device->waitIdle();
+      expect(app_.device->readTexture(viewportTexture_, again), "can read the viewport back");
+      size_t differing = 0;
+      for (size_t k = 0; k < again.size() && k < pathTraceFirst_.size(); k++) differing += again[k] != pathTraceFirst_[k];
+      expect(again.size() == pathTraceFirst_.size() && differing == 0,
+             "re-enabling path tracing gives the same image as the first time (the accumulation restarted)");
+      scene_.settings.pathTraced = false;
       if (autotestResult_ == 0) {
         ACE_INFO("autotest passed");
         autotestResult_ = 1;
       }
       break;
+    }
     default: break;
   }
 }

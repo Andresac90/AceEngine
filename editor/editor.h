@@ -150,6 +150,7 @@ private:
   std::string savedClipboard_;
   size_t entityCountBefore_ = 0;
   vec3 groupBefore_{0.0f};
+  std::vector<u8> pathTraceFirst_;
 };
 
 } // namespace ace

@@ -148,6 +148,7 @@ ShaderHandle Renderer::loadShader(const char* name, ShaderStage stage) {
 
 void Renderer::beginFrame(f64 seconds) {
   uniformOffset_ = 0;
+  frameIndex_++;
   time_ = seconds;
 }
 
