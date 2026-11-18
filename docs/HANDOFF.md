@@ -1,7 +1,7 @@
 # AceEngine handoff manual
 
 For the next engineer (human or model) continuing this work. Read this whole
-file before changing anything. Last updated 2026-11-17, branch `engine-v2`.
+file before changing anything. Last updated 2026-11-18, branch `main`.
 
 ## 1. What the owner asked for
 
@@ -47,7 +47,7 @@ Decisions the owner made explicitly (do not revisit without asking):
 | Languages | Engine in C++20; gameplay in **Lua** |
 | Shaders | **Slang** as the single source language |
 | Old OpenGL exercises | Removed (they are in git history before `5bbfab7`) |
-| Git | Commit locally on a branch; **the owner does every push** |
+| Git | Commit locally on `main` (since 2026-11-18; `engine-v2` was merged and retired); **the owner does every push**; no AI co-author lines in commit messages |
 | Installing tools | Ask first. Approved so far: cmake, ninja, the four Vulkan brew packages, the Slang release in `~/.cache/ace/slang` |
 
 SDL3 is used for window/input/files only (never for rendering). That choice
