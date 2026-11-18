@@ -151,9 +151,14 @@ PathTracer::Buffers& PathTracer::buffers(const Target& target, bool denoise, Tex
   return b;
 }
 
-// Median split on the longest axis of the centroid bounds.
-// shortcut: no SAH and a full rebuild whenever anything moves; upgrade to a
-// two-level BVH (per-mesh BLAS + refit TLAS) when scenes outgrow ~100k triangles.
+// Binned surface-area heuristic: split where (area x triangles) of the two
+// halves is cheapest, trying 16 positions on each axis.
+// shortcut: a full rebuild whenever anything moves; upgrade to a two-level BVH
+// (per-mesh BLAS + refit TLAS) when moving objects in big scenes matter.
+static f32 area(const Aabb& b) {
+  vec3 e = b.max - b.min;
+  return e.x * e.y + e.y * e.z + e.z * e.x;
+}
 void PathTracer::buildBvh(std::vector<Triangle>& tris, std::vector<Node>& nodes) {
   nodes.clear();
   nodes.reserve(tris.size() * 2 + 1);
@@ -178,15 +183,62 @@ void PathTracer::buildBvh(std::vector<Triangle>& tris, std::vector<Node>& nodes)
     nodes[r.node].min = box.min;
     nodes[r.node].max = box.max;
     vec3 extent = cbox.max - cbox.min;
-    int axis = extent.x > extent.y ? (extent.x > extent.z ? 0 : 2) : (extent.y > extent.z ? 1 : 2);
-    if (r.count <= 4 || extent[axis] <= 0.0f) {
+    constexpr int kBins = 16;
+    int bestAxis = -1, bestBin = 0;
+    f32 bestCost = area(box) * (f32)r.count; // cost of staying a leaf
+    for (int axis = 0; axis < 3 && r.count > 2; axis++) {
+      if (extent[axis] <= 0.0f) continue;
+      Aabb bins[kBins];
+      u32 counts[kBins] = {};
+      f32 scale = (f32)kBins / extent[axis];
+      for (u32 i = r.first; i < r.first + r.count; i++) {
+        const Triangle& t = tris[i];
+        int b = std::min(kBins - 1, (int)((centroid(t)[axis] - cbox.min[axis]) * scale));
+        counts[b]++;
+        bins[b].grow(vec3(t.v0));
+        bins[b].grow(vec3(t.v0 + t.e1));
+        bins[b].grow(vec3(t.v0 + t.e2));
+      }
+      f32 rightCost[kBins] = {};
+      Aabb acc;
+      u32 n = 0;
+      for (int b = kBins - 1; b > 0; b--) { // right side: bins b..end
+        n += counts[b];
+        if (counts[b]) acc.grow(bins[b].min), acc.grow(bins[b].max);
+        rightCost[b] = n ? area(acc) * (f32)n : 0.0f;
+      }
+      acc = Aabb();
+      n = 0;
+      for (int b = 1; b < kBins; b++) { // split between bin b-1 and b
+        n += counts[b - 1];
+        if (counts[b - 1]) acc.grow(bins[b - 1].min), acc.grow(bins[b - 1].max);
+        f32 cost = (n ? area(acc) * (f32)n : 0.0f) + rightCost[b] + area(box) * 0.5f; // + traversal cost
+        if (n > 0 && n < r.count && cost < bestCost) {
+          bestCost = cost;
+          bestAxis = axis;
+          bestBin = b;
+        }
+      }
+    }
+    if (bestAxis < 0 && r.count <= 4) { // a leaf is cheapest
       nodes[r.node].leftFirst = r.first;
       nodes[r.node].count = r.count;
       continue;
     }
-    u32 mid = r.count / 2;
-    std::nth_element(tris.begin() + r.first, tris.begin() + r.first + mid, tris.begin() + r.first + r.count,
-                     [&](const Triangle& a, const Triangle& b) { return centroid(a)[axis] < centroid(b)[axis]; });
+    u32 mid;
+    if (bestAxis >= 0) {
+      // Same bin formula as above, so both sides are non-empty.
+      f32 scale = (f32)kBins / extent[bestAxis];
+      auto it = std::partition(tris.begin() + r.first, tris.begin() + r.first + r.count, [&](const Triangle& t) {
+        return std::min(kBins - 1, (int)((centroid(t)[bestAxis] - cbox.min[bestAxis]) * scale)) < bestBin;
+      });
+      mid = (u32)(it - (tris.begin() + r.first));
+    } else { // many triangles with the same centroid range: split in half anyway
+      int axis = extent.x > extent.y ? (extent.x > extent.z ? 0 : 2) : (extent.y > extent.z ? 1 : 2);
+      mid = r.count / 2;
+      std::nth_element(tris.begin() + r.first, tris.begin() + r.first + mid, tris.begin() + r.first + r.count,
+                       [&](const Triangle& a, const Triangle& b) { return centroid(a)[axis] < centroid(b)[axis]; });
+    }
     u32 left = (u32)nodes.size();
     nodes.push_back({});
     nodes.push_back({});

@@ -99,13 +99,14 @@ struct Hit {
   float u, v;
 };
 
-bool hitBox(float3 origin, float3 invDir, float3 bmin, float3 bmax, float tMax) {
+// Entry distance into the box, or a huge number on a miss.
+float boxEntry(float3 origin, float3 invDir, float3 bmin, float3 bmax, float tMax) {
   float3 t0 = (bmin - origin) * invDir;
   float3 t1 = (bmax - origin) * invDir;
   float3 lo = min(t0, t1), hi = max(t0, t1);
   float tNear = max(max(lo.x, lo.y), max(lo.z, 0.0));
   float tFar = min(min(hi.x, hi.y), min(hi.z, tMax));
-  return tNear <= tFar;
+  return tNear <= tFar ? tNear : 1e30;
 }
 
 // Closest hit, or any hit when `anyHit` is set (shadow rays). `skipSprites`
@@ -117,19 +118,33 @@ bool trace(float3 origin, float3 dir, float tMax, bool anyHit, out Hit hit, bool
   hit.v = 0;
   bool found = false;
   float3 invDir = 1.0 / dir;
-  uint stack[32];
+  // Front to back: the nearer child first, so closest hits shrink hit.t early
+  // and whole subtrees behind them are skipped. Stack entries carry the entry
+  // distance, re-checked when popped.
+  uint stack[48];
+  float stackT[48];
   int sp = 0;
-  stack[sp++] = 0;
+  BvhNode root = nodes[0];
+  if (boxEntry(origin, invDir, root.minLeft.xyz, root.maxCount.xyz, hit.t) > 1e29) return false;
+  stack[sp] = 0;
+  stackT[sp++] = 0.0;
   while (sp > 0) {
-    BvhNode node = nodes[stack[--sp]];
-    if (!hitBox(origin, invDir, node.minLeft.xyz, node.maxCount.xyz, hit.t)) continue;
+    sp--;
+    if (stackT[sp] > hit.t) continue;
+    BvhNode node = nodes[stack[sp]];
     uint first = asuint(node.minLeft.w);
     uint count = asuint(node.maxCount.w);
     if (count == 0) {
-      if (sp < 30) {
-        stack[sp++] = first;
-        stack[sp++] = first + 1;
+      BvhNode a = nodes[first], b = nodes[first + 1];
+      float ta = boxEntry(origin, invDir, a.minLeft.xyz, a.maxCount.xyz, hit.t);
+      float tb = boxEntry(origin, invDir, b.minLeft.xyz, b.maxCount.xyz, hit.t);
+      uint na = first, nb = first + 1;
+      if (tb < ta) { // a = nearer
+        float tt = ta; ta = tb; tb = tt;
+        na = first + 1; nb = first;
       }
+      if (tb < 1e29 && sp < 47) { stack[sp] = nb; stackT[sp++] = tb; }
+      if (ta < 1e29 && sp < 47) { stack[sp] = na; stackT[sp++] = ta; }
       continue;
     }
     for (uint i = first; i < first + count; i++) {

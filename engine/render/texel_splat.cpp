@@ -9,7 +9,7 @@ using namespace rhi;
 namespace {
 constexpr Format kAtlasColor = Format::RGBA16F;
 constexpr Format kAtlasNormalDepth = Format::RGBA32F; // splats are placed from this depth: keep full precision
-constexpr f32 kNear = 0.05f, kFar = 400.0f;
+constexpr f32 kNear = 0.05f, kFar = 800.0f; // far enough for open-world vistas
 constexpr f32 kFadeSeconds = 0.35f; // grid probe crossfade after crossing a cell
 
 struct PostData {
