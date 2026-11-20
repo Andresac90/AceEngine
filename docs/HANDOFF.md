@@ -198,9 +198,11 @@ looking at screenshots produced with `--screenshot`:
 
 **Not written at all:**
 
-- **D3D12 backend.** `engine/CMakeLists.txt` references
-  `rhi/d3d12/d3d12_device.cpp`, which does not exist, so a Windows configure
-  fails today. `cmake/Shaders.cmake` has an untested DXIL rule.
+- **D3D12 backend: written, never run.** `engine/rhi/d3d12/d3d12_device.cpp`
+  (header comment explains the mapping). It was only compile-checked on macOS
+  against MinGW's Windows headers (warning-free, all imports resolve; command
+  in section 4); no Windows machine has built or run it, and
+  `cmake/Shaders.cmake`'s DXIL rule (slangc + dxcompiler) is untested.
 - Windows and Linux builds have never been attempted (the GCC-only
   `format` attribute in `core/base.h` is already guarded for MSVC; expect other
   MSVC errors). The editor's Export menu uses `popen` and is disabled on Windows.
@@ -316,6 +318,10 @@ build/bin/ace_player projects/pixel_demo --scene scenes/pathtraced.scene.json --
 build/bin/ace_editor projects/pixel_demo --select Tower --screenshot /tmp/c.png   # add --play to capture play mode
 build/bin/ace_player projects/pixel_demo --hold W --frames 420 --screenshot /tmp/e.png   # scripted gameplay
 tools/autotest.sh                     # editor interaction test, Metal then Vulkan
+# D3D12 compile check on macOS (no run; needs `brew install mingw-w64`, must print nothing):
+x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only -Wall -Wextra -Wno-unused-parameter \
+  -Wno-missing-field-initializers -DACE_RHI_D3D12=1 -DACE_RHI_METAL=0 -DACE_RHI_VULKAN=0 \
+  -Iengine -I/opt/homebrew/opt/sdl3/include engine/rhi/d3d12/d3d12_device.cpp
 # Vulkan with validation (must print nothing containing "VUID"):
 VK_LAYER_PATH=/opt/homebrew/opt/vulkan-validationlayers/share/vulkan/explicit_layer.d \
   build/bin/ace_player projects/pixel_demo --backend vulkan --validation --screenshot /tmp/d.png
@@ -424,14 +430,20 @@ otherwise; ask the owner before installing anything.
    BLAS built once + TLAS rebuilt per frame) so moving objects are cheap; then
    a denoiser. Hardware ray tracing (Metal/Vulkan/DXR ray queries) is a later
    optimization behind the same interface, not a prerequisite.
-4. **D3D12 backend** `engine/rhi/d3d12/d3d12_device.cpp`, implementing
-   `createD3D12Device`. Mirror `vulkan_device.cpp` structure. Bind groups map
-   to descriptor tables (CBVs as root descriptors so dynamic offsets are just
-   a GPU address + offset). Decide register assignment first: either add
-   explicit `register(xN, spaceG)` to every shader resource beside the
-   `vk::binding`, or read Slang's `-reflection-json`. Fix the MSVC issues in
-   `core/base.h`. Needs a Windows machine; nothing here can compile it. Done:
-   the four verify commands produce the same images with `--backend d3d12`.
+4. **D3D12 backend: bring-up on Windows.** The backend is written
+   (`engine/rhi/d3d12/d3d12_device.cpp`): uniform buffers are root CBVs and
+   storage buffers root SRVs (dynamic offsets = address + offset), textures
+   and samplers are one descriptor-table block per bind group, one root
+   signature per pipeline, bind groups applied lazily at draw, and every
+   texture rests in one state between passes. Shaders carry explicit
+   `register(b|t|s<binding>, space<group>)` beside each `vk::binding` and
+   vertex inputs are `ATTRIB<location>` (the SPIR-V output is byte-identical
+   to before). Next, on a Windows PC: configure with Visual Studio + Ninja,
+   fix compile errors in the rest of the engine (MSVC flags are set in the top
+   CMakeLists; nothing besides this file was ever built on Windows), check
+   the DXIL rule in `cmake/Shaders.cmake`, then run with `--validation`
+   until it prints nothing. Done: the four verify commands produce the same
+   images with `--backend d3d12` as with Metal.
 5. **Windows export** (zip of `ace_player.exe`, `ace_data`, `project/`), then
    **iOS** (simulator export works; remaining: device signing, testing touch
    with a finger, an app icon and launch screen), **Android** (Gradle project using SDL3's `android-project` template;
