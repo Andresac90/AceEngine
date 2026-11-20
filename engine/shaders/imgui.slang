@@ -2,14 +2,14 @@
 struct UiData {
   float4 scaleTranslate; // clip = position * xy + zw
 };
-[[vk::binding(0, 0)]] ConstantBuffer<UiData> ui;
-[[vk::binding(0, 1)]] Texture2D uiTexture;
-[[vk::binding(1, 1)]] SamplerState uiSampler;
+[[vk::binding(0, 0)]] ConstantBuffer<UiData> ui : register(b0, space0);
+[[vk::binding(0, 1)]] Texture2D uiTexture : register(t0, space1);
+[[vk::binding(1, 1)]] SamplerState uiSampler : register(s1, space1);
 
 struct VsIn {
-  [[vk::location(0)]] float2 position : POSITION;
-  [[vk::location(1)]] float2 uv : TEXCOORD0;
-  [[vk::location(2)]] float4 color : COLOR0;
+  [[vk::location(0)]] float2 position : ATTRIB0;
+  [[vk::location(1)]] float2 uv : ATTRIB1;
+  [[vk::location(2)]] float4 color : ATTRIB2;
 };
 struct VsOut {
   float4 position : SV_Position;

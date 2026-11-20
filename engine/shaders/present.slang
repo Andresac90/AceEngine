@@ -18,9 +18,9 @@ struct PresentData {
   Atmosphere atmosphere;
 };
 
-[[vk::binding(0, 0)]] ConstantBuffer<PresentData> data;
-[[vk::binding(1, 0)]] Texture2D colorTexture;
-[[vk::binding(2, 0)]] Texture2D normalDepthTexture;
+[[vk::binding(0, 0)]] ConstantBuffer<PresentData> data : register(b0, space0);
+[[vk::binding(1, 0)]] Texture2D colorTexture : register(t1, space0);
+[[vk::binding(2, 0)]] Texture2D normalDepthTexture : register(t2, space0);
 
 struct VsOut {
   float4 position : SV_Position;

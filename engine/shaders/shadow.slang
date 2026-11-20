@@ -3,14 +3,14 @@
 // Texture alpha cuts holes, so sprites cast the shadow of their drawing.
 #include "common.slangh"
 
-[[vk::binding(0, 0)]] ConstantBuffer<FrameData> frame;
-[[vk::binding(0, 1)]] ConstantBuffer<DrawData> draw;
-[[vk::binding(0, 2)]] Texture2D albedoTexture;
-[[vk::binding(1, 2)]] SamplerState albedoSampler;
+[[vk::binding(0, 0)]] ConstantBuffer<FrameData> frame : register(b0, space0);
+[[vk::binding(0, 1)]] ConstantBuffer<DrawData> draw : register(b0, space1);
+[[vk::binding(0, 2)]] Texture2D albedoTexture : register(t0, space2);
+[[vk::binding(1, 2)]] SamplerState albedoSampler : register(s1, space2);
 
 struct VsIn {
-  [[vk::location(0)]] float3 position : POSITION;
-  [[vk::location(2)]] float2 uv : TEXCOORD0;
+  [[vk::location(0)]] float3 position : ATTRIB0;
+  [[vk::location(2)]] float2 uv : ATTRIB2;
 };
 struct VsOut {
   float4 position : SV_Position;

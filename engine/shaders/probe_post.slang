@@ -11,9 +11,9 @@ struct PostData {
   Atmosphere atmosphere;
 };
 
-[[vk::binding(0, 0)]] ConstantBuffer<PostData> data;
-[[vk::binding(1, 0)]] Texture2D colorAtlas;
-[[vk::binding(2, 0)]] Texture2D normalDepthAtlas;
+[[vk::binding(0, 0)]] ConstantBuffer<PostData> data : register(b0, space0);
+[[vk::binding(1, 0)]] Texture2D colorAtlas : register(t1, space0);
+[[vk::binding(2, 0)]] Texture2D normalDepthAtlas : register(t2, space0);
 
 struct VsOut {
   float4 position : SV_Position;

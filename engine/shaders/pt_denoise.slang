@@ -10,9 +10,9 @@ struct DenoiseData {
   float4 params; // x: tap spacing in pixels, y: brightness tolerance (smaller = sharper)
 };
 
-[[vk::binding(0, 0)]] ConstantBuffer<DenoiseData> data;
-[[vk::binding(1, 0)]] Texture2D lightIn;
-[[vk::binding(2, 0)]] Texture2D normalDepth;
+[[vk::binding(0, 0)]] ConstantBuffer<DenoiseData> data : register(b0, space0);
+[[vk::binding(1, 0)]] Texture2D lightIn : register(t1, space0);
+[[vk::binding(2, 0)]] Texture2D normalDepth : register(t2, space0);
 
 struct VsOut {
   float4 position : SV_Position;

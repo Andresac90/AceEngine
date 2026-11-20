@@ -7,7 +7,10 @@
 //    pipeline declares up to kMaxBindGroups layouts, draws bind matching groups.
 //  - Every uniform-buffer binding takes a dynamic offset, so per-draw constants
 //    come from one big per-frame buffer instead of thousands of small ones.
-//  - Shaders are authored in Slang with explicit [[vk::binding(binding, group)]].
+//  - Shaders are authored in Slang with explicit [[vk::binding(binding, group)]]
+//    plus the matching D3D register: `: register(b|t|s<binding>, space<group>)`
+//    (b = ConstantBuffer, t = Texture2D / StructuredBuffer, s = SamplerState).
+//    Vertex inputs use [[vk::location(n)]] and the semantic ATTRIB<n>.
 #pragma once
 #include "core/base.h"
 #include <memory>

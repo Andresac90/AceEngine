@@ -37,12 +37,12 @@ struct Triangle {
   float4 atlas;    // xy: first texel of this texture in the atlas, zw: its size in texels
 };
 
-[[vk::binding(0, 0)]] ConstantBuffer<TraceData> data;
-[[vk::binding(1, 0)]] StructuredBuffer<BvhNode> nodes;
-[[vk::binding(2, 0)]] StructuredBuffer<Triangle> triangles;
-[[vk::binding(3, 0)]] StructuredBuffer<float4> lights; // per emissive triangle: x (bits) = triangle index, y = area
-[[vk::binding(4, 0)]] Texture2D atlasTexture;
-[[vk::binding(5, 0)]] Texture2D paletteTexture; // ramp shading
+[[vk::binding(0, 0)]] ConstantBuffer<TraceData> data : register(b0, space0);
+[[vk::binding(1, 0)]] StructuredBuffer<BvhNode> nodes : register(t1, space0);
+[[vk::binding(2, 0)]] StructuredBuffer<Triangle> triangles : register(t2, space0);
+[[vk::binding(3, 0)]] StructuredBuffer<float4> lights : register(t3, space0); // per emissive triangle: x (bits) = triangle index, y = area
+[[vk::binding(4, 0)]] Texture2D atlasTexture : register(t4, space0);
+[[vk::binding(5, 0)]] Texture2D paletteTexture : register(t5, space0); // ramp shading
 
 struct VsOut {
   float4 position : SV_Position;

@@ -21,9 +21,9 @@ struct SplatData {
   float4 face;   // x: the cube face this draw covers, y: 1 = corners stay on their rays (eye probe)
 };
 
-[[vk::binding(0, 0)]] ConstantBuffer<SplatData> data;
-[[vk::binding(1, 0)]] Texture2D normalDepthAtlas; // xyz: world normal, w: distance along the face axis
-[[vk::binding(2, 0)]] Texture2D finalAtlas;
+[[vk::binding(0, 0)]] ConstantBuffer<SplatData> data : register(b0, space0);
+[[vk::binding(1, 0)]] Texture2D normalDepthAtlas : register(t1, space0); // xyz: world normal, w: distance along the face axis
+[[vk::binding(2, 0)]] Texture2D finalAtlas : register(t2, space0);
 
 struct VsOut {
   float4 position : SV_Position;
