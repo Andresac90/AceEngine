@@ -1,11 +1,21 @@
 # AceEngine
 
 A small cross-platform game engine for stylized 2D and 3D games, with a level
-editor. First target look: 3D pixel art (low-resolution render, toon shading,
-outlines, optional path tracing).
+editor. First target look: 3D pixel art whose pixels belong to the world, not
+the screen (texel splatting), with palette-ramp shading, outlines and optional
+path tracing. Sample projects: a village (`projects/pixel_demo`) and a
+first-person open-world forest with a castle (`projects/forest`).
 
-Status: early but usable on macOS and Windows. See [docs/HANDOFF.md](docs/HANDOFF.md) for
-exactly what works, what is untested and what is missing.
+Status: early but usable on macOS and Windows (Metal, Vulkan, D3D12).
+
+Documentation:
+
+| Document | For |
+| --- | --- |
+| This README | building, running, using the editor and making pixel art |
+| [docs/RENDERING.md](docs/RENDERING.md) | how the renderer works: RHI and backends, world pixels, path tracer, measurements, limits |
+| [docs/SCRIPTING.md](docs/SCRIPTING.md) | the Lua gameplay API |
+| [docs/HANDOFF.md](docs/HANDOFF.md) | project state: decisions, what is verified, working rules, pitfalls, roadmap |
 
 ## Build (macOS)
 

@@ -3,6 +3,10 @@
 For the next engineer (human or model) continuing this work. Read this whole
 file before changing anything. Last updated 2026-11-21, branch `main`.
 
+Contents: 1. What the owner asked for · 2. State of the build (verified vs
+not) · 3. Architecture · 4. Build, run, verify · 5. Working rules and
+pitfalls · 6. Roadmap. How the renderer works is in [RENDERING.md](RENDERING.md).
+
 ## 1. What the owner asked for
 
 A flexible engine for 2D and 3D games that renders through DX12, Metal and
@@ -67,16 +71,74 @@ Backend status at a glance (2026-11-21):
 | Metal | macOS, M1 Pro; iOS simulator | yes | yes | n/a | reference |
 | Vulkan | macOS via MoltenVK | yes | yes | 0 messages | identical to Metal (`main`, `village`, `pathtraced`); `forest` 0.005% (distant ground, not sky) |
 | Vulkan | Windows 11, RTX 5070 Ti, NVIDIA driver | yes | yes | 0 messages | reference for D3D12 |
-| D3D12 | Windows 11, RTX 5070 Ti | yes (MSVC 14.50) | yes | 0 messages (debug layer) | within 0.001-0.02% of Vulkan (path traced: at most 1/255), see below |
+| D3D12 | Windows 11, RTX 5070 Ti | yes (MSVC 14.50) | yes | 0 messages (debug layer) | within 0.001-0.004% of Vulkan on the verify scenes, editor 0.02% (RENDERING.md section 11) |
 
+### Backends and platforms
 
 - Metal backend: player (raster and path traced) and editor.
 - Vulkan backend through MoltenVK with validation layers on: player (raster
   and path traced) and editor, zero validation messages.
+- A from-scratch `cmake -S . -B <dir> -G Ninja` + build with default options.
+- **iOS simulator**: `tools/export_ios.sh projects/pixel_demo simulator`, then
+  `xcrun simctl boot <device>; simctl install <device> <app>; simctl launch
+  <device> com.aceengine.pixeldemo`. The village scene renders full screen on
+  an iPhone 17 Pro simulator (Metal). If the screen is black, shut the
+  simulator down and use a fresh device; the first attempt hit stale state.
+- Offscreen frames (`Device::beginFrame(false)`): `--screenshot`, `--autotest`
+  and `--export` runs use a hidden window and never touch the swapchain, so they
+  work while the display is asleep. Before this, such runs could stall forever
+  at night: macOS stops handing out drawables for an invisible window, so every
+  frame was skipped. (A real game skipping frames while hidden is correct.)
+- **Windows (2026-11-21, Windows 11, RTX 5070 Ti Laptop + Intel iGPU, MSVC
+  14.50 from VS 2026 Build Tools, Vulkan SDK 1.4.363).** The whole engine
+  builds warning-free with MSVC; `ace_tests` passes; the DXIL rule in
+  `cmake/Shaders.cmake` works. **D3D12 and Vulkan** both run section 4's
+  verify commands plus `village` (world pixels) and `projects/forest`
+  (path-traced world pixels) with **zero validation messages** (D3D12 debug
+  layer, `VK_LAYER_KHRONOS_validation`), and `tools/autotest.sh d3d12 vulkan`
+  passes in Git Bash. Images look right. D3D12 picks the high-performance GPU
+  (`EnumAdapterByGpuPreference`; the Intel iGPU is listed first) and filters
+  the "no optimized clear value" hint (clear colors are per pass).
+- **D3D12 vs Vulkan images**: within 0.001-0.004% of each other on every
+  verify scene (path traced: at most 1/255), after three fixes for
+  compiler-dependent rounding (splat depth tie-break, stars, clouds). Numbers,
+  causes and fixes: RENDERING.md section 11.
+- Not checked on Windows: playing or editing by hand, AMD GPUs, the Intel
+  iGPU (D3D12 or Vulkan), Windows export.
+- **Mac re-check after the Windows changes (2026-11-21):** Metal = Vulkan
+  still pixel-identical on `main`, `village`, `pathtraced`; `forest` 0.005%;
+  zero validation messages; tests and autotest pass on both.
+
+### Rendering
+
+- Raster sun shadows, direct sampling of emissive triangles in the path tracer,
+  a hand-made glTF model (`assets/pine.gltf`), and the pixel-art feature set
+  (world-space texel mapping, texel-space lighting, dithering, palette, billboard
+  sprites) in `scenes/village.scene.json`: Metal and Vulkan images are identical.
+- Sprite sheets/animation, sprite shadows, `Collider` + `Scene::moveAndSlide`
+  (unit-tested).
+- The path tracer with textures, world texel mapping, cutout sprites, palette
+  and per-texel light gathering: `village` with `pathTraced` on, both backends.
+- **World pixels** (`worldPixels`): capture/splat geometry and visible-face
+  culling unit-tested; Metal = Vulkan pixel-identical; shimmer and cost
+  measured (RENDERING.md sections 7 and 12). The shimmer numbers predate the
+  splat depth tie-break and were not re-measured.
+- Point lights (`Light.point`, up to 8 nearest the camera, banded; shadows
+  only when path traced): lantern light in `house.scene.json`; a night copy
+  of the village renders dark with the lantern lighting the path, in every
+  mode including path traced, Metal and Vulkan identical. Ramp shading treats
+  a white intensity-3 light as fully lit.
+- Path-traced world pixels and the denoiser: Metal = Vulkan pixel-identical;
+  convergence measured (RENDERING.md section 8).
+- Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
+  screenshots, every row and column edge falls on a multiple of the scale (7 in
+  `village`, 8 in `main`). The sky gradient is computed per game pixel.
+
+### Editor and tools
+
 - Editor: default dock layout, hierarchy with children, inspector, transform
   gizmo drawn on a selected entity, asset list, play mode running Lua scripts
   from the scene camera.
-- Lua scripts (`spin.lua` visibly moves the Orb in play mode).
 - `tools/export_macos.sh`: produces a self-contained `.app` (system libraries
   only) that runs from another working directory.
 - Unit tests (`build/bin/ace_tests`, also `ctest --test-dir build`): scene
@@ -88,8 +150,6 @@ Backend status at a glance (2026-11-21):
 - `ace_editor --new <dir>`, then in that project on both backends: a textured
   cube, a `SpriteRenderer`, a perspective camera, the missing-mesh fallback
   (warns, draws a cube) and `pixelArt = false`. Images matched across backends.
-- A from-scratch `cmake -S . -B <dir> -G Ninja` + build with default options.
-
 - Editor interactions, by `tools/autotest.sh` on Metal and Vulkan (it injects
   real mouse/keyboard input): orbit, wheel zoom, viewport click-select, gizmo
   X-axis drag, one undo step per drag, undo/redo, duplicate, delete, save to
@@ -100,11 +160,28 @@ Backend status at a glance (2026-11-21):
   edit with a live GPU update including a resize, save, read back from disk),
   and selecting a light by clicking its viewport icon.
   When you add an editor feature, add steps to `Editor::autotestStep`.
-- Raster sun shadows, direct sampling of emissive triangles in the path tracer,
-  a hand-made glTF model (`assets/pine.gltf`), and the pixel-art feature set
-  (world-space texel mapping, texel-space lighting, dithering, palette, billboard
-  sprites) in `scenes/village.scene.json`: Metal and Vulkan images are identical.
+- `tools/make_editor_app.sh` -> `build-export/AceEngine.app` (Metal only, SDL
+  static, ad-hoc signed, icon from `tools/make_app_icon.py`): no non-system
+  libraries (`otool -L`); started from `/` it reopened the remembered project
+  and rendered. Not checked by hand: the folder picker, File > Open Project,
+  and the unsaved-changes dialog (native dialogs cannot be driven by the
+  autotest). The editor keeps `imgui.ini` and `last_project.txt` in
+  `~/Library/Application Support/AceEngine/Editor/`; automated runs read but never
+  write them.
+- **Windows editor program**: `tools/make_editor_windows.ps1` (Release,
+  `ACE_EDITOR_WINDOWED=ON` = no console, icon from `editor/resources/editor.rc`
+  + `AppIcon.ico`, both from `tools/make_app_icon.py`) -> `build-export\AceEngine\`
+  and a Start menu shortcut. Started from another folder it found its shaders
+  and rendered. Release runtime only (`MSVCP140.dll`, from the VC++
+  redistributable); `vulkan-1.dll` is delay-loaded so PCs without a Vulkan
+  driver still start on D3D12. Settings live in `%APPDATA%\AceEngine\Editor\`.
+  Not checked by hand: the folder picker, Open script (now builds
+  `file:///C:/...` URLs), the unsaved-changes dialog, HiDPI (no
+  `SDL_WINDOW_HIGH_PIXEL_DENSITY`, so Windows may scale the window blurrily).
 
+### Gameplay, scripting and audio
+
+- Lua scripts (`spin.lua` visibly moves the Orb in play mode).
 - **Open-world forest** (`projects/forest`, generated by `tools/make_forest.py`;
   the owner's target is a first-person Skyrim-like game in the style of
   Project Shadowglass): 640x640 terrain, ~820 trees, rocks, logs, ferns, a
@@ -122,16 +199,6 @@ Backend status at a glance (2026-11-21):
   --screenshot x.png`: key input -> `hero.lua` -> `ace.move` -> the hero walks,
   animates from its sprite sheet, is stopped by the house's colliders, and the
   camera script follows. `--hold <key>` exists for exactly this kind of test.
-- Sprite sheets/animation, sprite shadows, `Collider` + `Scene::moveAndSlide`
-  (unit-tested).
-
-- **iOS simulator**: `tools/export_ios.sh projects/pixel_demo simulator`, then
-  `xcrun simctl boot <device>; simctl install <device> <app>; simctl launch
-  <device> com.aceengine.pixeldemo`. The village scene renders full screen on
-  an iPhone 17 Pro simulator (Metal). If the screen is black, shut the
-  simulator down and use a fresh device; the first attempt hit stale state.
-- The path tracer with textures, world texel mapping, cutout sprites, palette
-  and per-texel light gathering: `village` with `pathTraced` on, both backends.
 - Level switching end to end: `ace_player projects/pixel_demo --hold W
   --frames 420` walks the hero into the village door trigger (`door.lua`,
   `ace.overlaps`), `ace.load_scene` loads `house.scene.json`, and the HUD shows
@@ -145,143 +212,8 @@ Backend status at a glance (2026-11-21):
 - Directional sprites (`directions`): unit-tested direction choice; the demo
   hero shows back, side and front views when walking away, sideways and
   towards the camera (`--hold W/A/S` screenshots).
-- Offscreen frames (`Device::beginFrame(false)`): `--screenshot`, `--autotest`
-  and `--export` runs use a hidden window and never touch the swapchain, so they
-  work while the display is asleep. Before this, such runs could stall forever
-  at night: macOS stops handing out drawables for an invisible window, so every
-  frame was skipped. (A real game skipping frames while hidden is correct.)
-- **World pixels** (`worldPixels`, `engine/render/texel_splat.*`): a unit test
-  checks capture and splat agree on texel positions; Metal and Vulkan images are
-  pixel-identical. On a 60-frame camera orbit at a fixed timestep
-  (`ace_player ... --fixed-dt 0.0166667 --frames 60 --frames-to out/`), the share
-  of pixels that change between frames after the best shift is 19% (ground) and
-  10% (wall), versus 34% and 14% with screen pixels, with no spikes when the grid
-  probe moves. Only the cube faces the camera can see are captured and drawn
-  (`TexelSplatter::visibleFaces`, unit-tested; images identical to drawing all
-  six). Cost at 2560x1440 on an M1 Pro, 300-frame runs including ~1 s startup:
-  10.0 ms/frame on Metal, 13.3 ms on Vulkan, versus about 5 ms for screen
-  pixels. Vulkan framebuffers are now cached (zero validation messages); a
-  re-measurement under heavy machine load (load average 10) showed Vulkan 12%
-  slower than Metal instead of 33%, but absolute times were not trustworthy:
-  re-time on an idle machine.
-- Point lights (`Light.point`, up to 8 nearest the camera, banded; shadows only
-  when path traced; every mode, path-traced night checked on both backends): lantern light in `house.scene.json`; a night
-  copy of the village renders dark with the lantern lighting the path, Metal and
-  Vulkan identical. Ramp shading treats a white intensity-3 light as fully lit.
-- `tools/make_editor_app.sh` -> `build-export/AceEngine.app` (Metal only, SDL
-  static, ad-hoc signed, icon from `tools/make_app_icon.py`): no non-system
-  libraries (`otool -L`); started from `/` it reopened the remembered project
-  and rendered. Not checked by hand: the folder picker, File > Open Project,
-  and the unsaved-changes dialog (native dialogs cannot be driven by the
-  autotest). The editor keeps `imgui.ini` and `last_project.txt` in
-  `~/Library/Application Support/AceEngine/Editor/`; automated runs read but never
-  write them.
-- Path-traced world pixels (`pathTraced` + `worldPixels`): probe faces are
-  captured by the path tracer (1 ray per texel per frame, a running average per
-  face, tracing stops once a face has 64 unchanged frames), sprites skipped by
-  primary rays but casting shadows. Metal = Vulkan pixel for pixel. Still
-  camera on the village: 16.5 ms/frame vs 11.4 ms raster world pixels (machine
-  under load, load average ~14).
-- Path-tracing denoiser (`denoise`, default on): the path tracer writes light,
-  surface color and emission separately; three a-trous passes (pt_denoise.slang,
-  normal/depth/brightness edge-stopping, brightness tolerance 0.4 x full-light /
-  sqrt(frames)) smooth only the light, then pt_compose.slang applies color or
-  picks the palette-ramp color. Share of pixels differing from a converged image
-  (village, still camera): world pixels 13.7% -> 5.9% after 1 frame, 6.2% -> 0.6%
-  after 4, 3.1% -> 0.4% after 16; screen pixels 9.3% -> 5.4%, 3.1% -> 1.1%,
-  1.9% -> 0.8%. Measured with a throwaway script (render frames 1/4/16/300,
-  count pixels differing by >24 from frame 300).
-- Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
-  screenshots, every row and column edge falls on a multiple of the scale (7 in
-  `village`, 8 in `main`). The sky gradient is computed per game pixel.
 
-- **Windows (2026-11-21, Windows 11, RTX 5070 Ti Laptop + Intel iGPU, MSVC
-  14.50 from VS 2026 Build Tools, Vulkan SDK 1.4.363).** The whole engine
-  builds warning-free with MSVC; `ace_tests` passes; the DXIL rule in
-  `cmake/Shaders.cmake` works. **D3D12 and Vulkan** both run section 4's
-  verify commands plus `village` (world pixels) and `projects/forest`
-  (path-traced world pixels) with **zero validation messages** (D3D12 debug
-  layer, `VK_LAYER_KHRONOS_validation`), and `tools/autotest.sh d3d12 vulkan`
-  passes in Git Bash. Images look right. D3D12 picks the high-performance GPU
-  (`EnumAdapterByGpuPreference`; the Intel iGPU is listed first) and filters
-  the "no optimized clear value" hint (clear colors are per pass).
-- **D3D12 vs Vulkan images** (same GPU, `--fixed-dt 0.0166667`; time-based
-  scenes differ otherwise). Each backend is deterministic run to run. Share of
-  pixels that differ: `main` 0.003% (max 54/255), path traced at most 1/255,
-  `village` and the scripted walk 0.001%, editor 0.02%, `forest` 0.004%
-  (0.3% before the star and cloud fixes below).
-  Why they are not identical, when Metal and MoltenVK were: those two share
-  Apple's shader compiler; here DXC and NVIDIA's SPIR-V compiler round the
-  last bits differently, and any hard decision near a boundary can flip.
-  The big one was in world pixels (`village` was 0.4%; 0.000% with
-  `worldPixels` off): splat squares are 2% oversized and nearly coplanar, so
-  the depth test in the overlap was decided by rounding noise, i.e.
-  z-fighting. `texel_splat.slang` now pushes each texel of a 2x2 block back
-  by a different fixed amount (0.05% of the camera distance per step, along
-  the camera ray so the square does not move on screen); 0.4% -> 0.001%.
-  The forest's remaining 0.3% was in the sky: stars and cloud edges (see the
-  two fixes below; the first report blamed cloud-edge *dither*, which was wrong).
-- **Fix: stars that agree across GPUs (2026-11-21, Mac).**
-  *Symptom:* D3D12 and Vulkan showed some stars in different places
-  (part of the forest's 0.3%). *Cause:* two decisions used math whose
-  result differs between GPU compilers: the star's cell came from
-  `floor(atan2(...) * 220)` / `floor(asin(...) * 220)` (no API specifies
-  their precision), and "is there a star in this cell" came from a float
-  hash whose multiply-adds a compiler may fuse or not. A difference in the
-  last bit flips either decision. *Fix* (`skyRadiance` in `common.slangh`):
-  the cell is now found on a cube around the camera (largest axis, then one
-  division; 400x400 cells per face, about the old density), and the star
-  test is an integer PCG hash of the cell index, which is bit-exact
-  everywhere. A baked star texture was considered and rejected: it would
-  still be looked up at a coordinate computed from the view direction, so it
-  removes neither rounding source. *Evidence:* on the Mac the sky looks the
-  same (same density; stars moved because the cell layout changed), Metal
-  and Vulkan still match, zero validation messages. **Windows re-run:**
-  with stars off the forest's D3D12/Vulkan difference drops only from 0.280%
-  to 0.279%, so stars now account for ~0.001%; the rest was clouds (next
-  entry). *Open:* cell boundaries can still flip in rare pixels (division
-  is not exact either); accepted.
-- **Fix: clouds that agree across GPUs (2026-11-21, Windows).**
-  *Symptom:* after the star fix the forest still differed on 0.28% of pixels
-  between D3D12 and Vulkan, all at cloud edges. Bisected on Windows with
-  temporary scene copies: clouds off 0.004%, stars off 0.279%, dither off
-  0.307%, so neither stars nor dither. *Cause:* the cloud noise (`fbm` ->
-  `valueNoise` -> `hash12`) used the same float hash as the old stars; its
-  last bits differ between compilers, and the cloud `smoothstep` plus palette
-  snap turn that into a different color at edges. *Fix:* `hash12` now takes
-  the integer lattice point (exact, since `valueNoise` passes `floor(p)`),
-  hashes it with `pcgHash`, and keeps 24 bits (exact in a float).
-  *Evidence:* forest 0.28% -> 0.004% (D3D12 vs Vulkan, fixed timestep); all
-  other verify images unchanged; zero validation messages; editor autotest
-  passes on both. The cloud *layout* changed (new random pattern; same
-  coverage, scale and colors), so the forest's sky looks different: show the
-  owner. *Mac re-check (same day):* Metal vs Vulkan unchanged after the
-  fix: `main`, `village`, `pathtraced` identical, `forest` 0.005% (the
-  distant-ground band, not the sky), zero validation messages, unit tests and
-  editor autotest pass on both. *Open:* the owner's verdict on the new cloud
-  layout (the new pattern happens to cover the sun more at the start view).
-- **Windows editor program**: `tools/make_editor_windows.ps1` (Release,
-  `ACE_EDITOR_WINDOWED=ON` = no console, icon from `editor/resources/editor.rc`
-  + `AppIcon.ico`, both from `tools/make_app_icon.py`) -> `build-export\AceEngine\`
-  and a Start menu shortcut. Started from another folder it found its shaders
-  and rendered. Release runtime only (`MSVCP140.dll`, from the VC++
-  redistributable); `vulkan-1.dll` is delay-loaded so PCs without a Vulkan
-  driver still start on D3D12. Settings live in `%APPDATA%\AceEngine\Editor\`.
-  Not checked by hand: the folder picker, Open script (now builds
-  `file:///C:/...` URLs), the unsaved-changes dialog, HiDPI (no
-  `SDL_WINDOW_HIGH_PIXEL_DENSITY`, so Windows may scale the window blurrily).
-- Not checked on Windows: playing or editing by hand, AMD GPUs, the Intel
-  iGPU (D3D12 or Vulkan), Windows export.
-- **Mac re-check after the Windows changes (2026-11-21):** with the splat
-  tie-break, `main`, `village` and `pathtraced` are still pixel-identical
-  between Metal and Vulkan (`--fixed-dt 0.0166667 --frames 60`), zero
-  validation messages; `forest` differs on 0.005% of pixels (179 pixels in
-  one band of distant ground, at most 19/255: a value sitting on a palette /
-  dither threshold; the sky matched here); unit tests and
-  `tools/autotest.sh` pass on both. The world-pixel shimmer numbers above
-  were *not* re-measured; the tie-break should only lower them.
-
-**Not verified — treat as unknown until someone tries it:**
+### Not verified (treat as unknown until someone tries it)
 
 - Editor interactions the autotest does not cover: pan, drag-and-drop
   re-parenting and asset assignment, Save As, New Scene, the menus, text fields.
@@ -297,13 +229,13 @@ Backend status at a glance (2026-11-21):
 - Audio through real speakers (see the Sound item above).
 - Gamepad input (no controller was connected).
 
-**Not written at all:**
+### Not written yet
 
 - A Linux build has never been attempted. The editor's Export menu uses
   `popen` and is disabled on Windows.
 - Android build and packaging (the NDK and a JDK are not installed here).
-- Rigid-body physics, skeletal animation, tilemaps, particles, point/spot
-  lights in the raster renderer, OGG/MP3 audio, UI images/panels.
+- Rigid-body physics, skeletal animation, tilemaps, particles, spot lights,
+  raster shadows for point lights, OGG/MP3 audio, UI images/panels.
 
 ## 3. Architecture
 
@@ -320,122 +252,17 @@ engine/rhi                      Device + CommandList interface, backends
 engine/core                     types, log, math
 ```
 
-### RHI (`engine/rhi/rhi.h`) — read the header comment first
+### Rendering: RHI, backends, shaders, renderer
 
-- Integer handles, id 0 is null. Backends keep their structs in `Pool<T>`.
-- WebGPU-style bind groups. In shaders: `[[vk::binding(binding, group)]]`.
-  The index in `BindGroupLayoutDesc::bindings[]` *is* the binding number.
-- Every uniform-buffer binding takes a dynamic offset. Per-draw constants come
-  from one per-frame ring (`Renderer::pushUniform`, 256-byte aligned, 16 MB;
-  the forest's ~1000 objects x several probe views needed more than 4 MB).
-- Call `setPipeline` before `setBindGroup`: Metal and Vulkan resolve bindings
-  against the current pipeline's layout. (D3D12 would accept either order; it
-  applies groups at draw time.)
-- **One frame in flight.** `beginFrame` waits for the previous frame's GPU
-  work, which is why buffers can be rewritten every frame. If you add frames
-  in flight you must first give every per-frame buffer a ring of copies.
-- Destruction is deferred by the backend. `waitIdle()` is a no-op mid-frame.
-- Conventions, identical on every backend: right-handed, +Y up, camera looks
-  down -Z, depth 0..1 (`GLM_FORCE_DEPTH_ZERO_TO_ONE`), +Y up in clip space,
-  counter-clockwise front faces, texture row 0 at the top. Vulkan gets there
-  with a negative-height viewport; Metal and D3D12 need no flip.
-- Render targets and the backbuffer are sRGB or float; all shading is linear.
-  Scene/editor colors are sRGB and converted with `toLinear` on the CPU.
-
-### Backends (`engine/rhi/<api>/`)
-
-How each backend maps the RHI. All three share one frame in flight, deferred
-destruction and the conventions above.
-
-| RHI concept | Metal (`metal_device.mm`) | Vulkan (`vulkan_device.cpp`) | D3D12 (`d3d12_device.cpp`) |
-| --- | --- | --- | --- |
-| Shaders | SPIR-V -> MSL with SPIRV-Cross at pipeline creation | SPIR-V | DXIL (built by slangc + dxcompiler on Windows) |
-| Bind group | flat buffer/texture/sampler indices assigned per pipeline | descriptor set | uniform buffers = root CBVs, storage buffers = root SRVs, textures and samplers = one descriptor-table block each, written at bind-group creation |
-| Dynamic offset | buffer offset argument | dynamic UBO offset | GPU address + offset (asserted 256-byte aligned) |
-| Pipeline layout | implicit | pipeline layout from the group layouts | root signature per pipeline (version 1.0) |
-| Render pass | encoder per pass | classic render pass; framebuffers cached | `OMSetRenderTargets` + clears; full-target viewport/scissor set at pass start |
-| Resource states | tracked by Metal | layouts in render pass ops | every texture rests in one state between passes (shader resource; depth: depth write; swapchain: present); only pass begin/end, uploads and read-backs issue barriers |
-| Buffers | shared storage | host-visible memory | upload heap, persistently mapped |
-| Texture upload / read-back | `replaceRegion` / blit + wait | staging + wait | staging buffer on a separate list + fence wait |
-| GPU choice | system default | first suitable device | high-performance adapter (`EnumAdapterByGpuPreference`) |
-| Debug | Xcode | `--validation` = Khronos validation layer | `--validation` = debug layer; messages printed after each frame |
-
-D3D12 history: written on macOS on 2026-11-20 and compile-checked with
-MinGW's Windows headers (`-Wall -Wextra`, all imports resolve); the first
-Windows run (2026-11-21) needed only two changes (high-performance adapter
-choice, filtering the "no optimized clear value" hint) and the rest of the
-engine built warning-free under MSVC. Known limits, each marked `shortcut:` in
-the file: fixed descriptor heaps (65536 views, 2048 samplers), freed
-descriptor blocks reused only by blocks of the same size, every buffer in an
-upload heap (meshes and the BVH would read faster from a default heap on
-discrete GPUs), synchronous texture uploads.
-
-Vulkan's role on Windows: it runs on the same GPU as D3D12, so it is the
-reference for D3D12 images (Metal only exists on Apple hardware). The two use
-different shader compilers (DXC vs NVIDIA's SPIR-V compiler), so results can
-differ in the last bits; see section 2 for the numbers and causes.
-
-### Shaders (`engine/shaders/*.slang`, `cmake/Shaders.cmake`)
-
-`slangc` compiles each file twice (`vsMain`, `fsMain`) to
-`ace_data/shaders/<name>.vs.spv|.fs.spv` (and `.dxil` on Windows) next to the
-executables. Every resource declares both bindings, e.g.
-`[[vk::binding(1, 2)]] Texture2D albedo : register(t1, space2);` (binding ->
-register number, group -> space; `b` ConstantBuffer, `t` Texture2D /
-StructuredBuffer, `s` SamplerState), and vertex inputs use
-`[[vk::location(n)]] ... : ATTRIB<n>`. A new resource without its register
-compiles but binds the wrong slot on D3D12. Vulkan loads SPIR-V directly. Metal converts SPIR-V to MSL with SPIRV-Cross **when the
-pipeline is created**, because only then are the bind-group layouts known; it
-assigns flat Metal indices by walking groups and bindings in order (vertex
-buffer is slot 30). C++ structs mirrored in shaders are all `mat4`/`vec4` so
-layout rules cannot differ; keep it that way.
-
-### Renderer (`engine/render/renderer.cpp`)
-
-```
-scene pass   -> color RGBA16F (linear HDR) + normalDepth RGBA16F (world normal, view depth)
-                raster:      shadow.slang + mesh.slang (sun shadow map, texel-space
-                             lighting, toon bands or palette-ramp shading, dithering,
-                             world-space texel mapping, cutout sprites)
-                path traced: pathtrace.slang  (software BVH in the fragment shader;
-                             textures from a 1024 atlas, same texel/ramp rules)
-                path-traced denoise: pt_denoise.slang (3 a-trous passes on the
-                             light only) -> pt_compose.slang (albedo, emission,
-                             palette ramp)
-world pixels -> texel_splat.cpp: capture into 6-face atlases (raster, or the
-                path tracer with one running average per face), grid + eye
-                [+ previous grid while crossfading]; only faces the camera can
-                see -> probe_post.slang (per-texel haze, outlines, tone,
-                palette, dither) -> texel_splat.slang (one square per texel,
-                no vertex buffer, fixed 2x2 depth tie-break) -> sprites direct
-present pass -> present.slang: sky (Atmosphere: gradient, sun disc + glow, pixel
-                clouds, stars), distance haze (screen pixels), outlines (depth)
-                + convex-edge highlights (normals), tone map, palette snap,
-                hard-pixel upscale; then screen text (pixel font, imgui.slang)
-```
-
-- Shared shader code (frame/draw constants, `bayer4`, `linearToSrgb`,
-  `rampShade`, `Atmosphere` with `skyRadiance`/`applyFog`) lives in
-  `common.slangh`; C++ mirrors are in `renderer.h`/`renderer.cpp`. The sun is
-  the first `Light` without `point` (`findSun`); sky and haze settings are
-  Render Settings (`sunSize`, `sunGlow`, `fog*`, `cloud*`, `stars`).
-- `integerScale` (default on) picks a whole-number screen-pixels-per-game-pixel
-  factor and widens the camera slightly instead of stretching.
-
-- Depth > 9000 in `normalDepth.w` means sky.
-- Pixel-art mode renders at `pixelHeight` rows. With an orthographic camera
-  and `pixelSnap`, the view is snapped to whole texels, the image is rendered
-  one texel larger on every side, and the present pass scrolls by the
-  sub-texel remainder. This is what removes shimmer when the camera moves.
-- Path tracer: `PathTracer::rebuild` flattens all meshes to world-space
-  triangles and builds a binned-SAH BVH (16 bins per axis) whenever a hash of
-  transforms and materials changes; the shader walks it front to back (nearer
-  child first, skipping subtrees behind the closest hit). SAH + ordered
-  traversal took the forest walk from 269 to 109 ms per frame. Sprite cards in
-  probe captures only cast shadows, so they face the sun, not the camera:
-  turning the view never rebuilds the BVH. Accumulation is alpha blending into the color target
-  (`alpha = 1/(n+1)`), cleared on frame 0. A scene change keeps 6 frames of
-  history instead of restarting; a view change restarts.
+All of it is in [RENDERING.md](RENDERING.md): conventions, the RHI and how
+Metal, Vulkan and D3D12 map it, the shader binding convention, the frame
+structure, raster, world pixels, path tracer, atmosphere, present, the
+cross-backend results and fixes, performance and known limits. Read its
+sections 2-4 before touching `engine/rhi` or `engine/shaders`. The three
+rules people break most: call `setPipeline` before `setBindGroup`; every
+shader resource needs its D3D `register(...)` beside `vk::binding`; one
+frame in flight, so per-frame buffers need a ring of copies before adding
+more.
 
 ### Scene (`engine/scene/scene.h`)
 
@@ -478,9 +305,10 @@ VK_LAYER_PATH=/opt/homebrew/opt/vulkan-validationlayers/share/vulkan/explicit_la
 **Always look at the screenshot.** Compare backends pixel by pixel with
 `--fixed-dt 0.0166667` (time-based scenes differ otherwise): on a Mac, Metal
 and Vulkan must match exactly (they share Apple's shader compiler); on
-Windows, D3D12 and Vulkan may differ on well under 1% of pixels (section 2
-explains why), and anything above that is a bug. Run every renderer or RHI
-change on every backend you can reach before committing. Screenshot,
+Windows, D3D12 and Vulkan differ on at most a few thousandths of a percent
+(RENDERING.md section 11 explains why); anything clearly above that is a
+bug. Run every renderer or RHI change on every backend you can reach before
+committing. Screenshot,
 autotest and export runs use a hidden window and offscreen frames.
 
 ## 5. Working rules
@@ -489,11 +317,10 @@ The owner asked that code follow https://github.com/DietrichGebert/ponytail :
 
 - Write only what the task needs. Before adding code ask, in order: does this
   need to exist; is it already in the codebase; does the standard library or
-  the platform do it; does a dependency we already have do it.
+  the platform do it; does a dependency we already have do it. Never add a
+  dependency for a few lines.
 - Never cut validation at trust boundaries (files, scripts, user input), error
   handling, data-loss protection or security to save lines.
-- Use what the codebase already has, then the standard library or platform,
-  then an installed dependency; never add a dependency for a few lines.
 - No speculative abstraction, option or "for later" code; keep the existing
   layers and conventions. Finish every part the change needs (callers, tests,
   docs).
@@ -503,14 +330,14 @@ The owner asked that code follow https://github.com/DietrichGebert/ponytail :
 - Logic with branches, loops or parsers gets one small test in `tests/`.
 - Comments say only the *why* the code cannot show.
 - Every bug fix is recorded where the next person will look: the commit body
-  and, for anything about rendering or a platform, a short entry in this file
-  (symptom, cause, fix, evidence, what is still open), like the splat
-  tie-break and star entries in section 2. Pitfalls that apply beyond one
+  always (symptom, cause, fix, evidence, what is still open); rendering fixes
+  also as a row in RENDERING.md (section 11 for cross-backend issues),
+  platform or tooling fixes in section 2 here. Pitfalls that apply beyond one
   fix also go in the list below.
 - End each report with what was skipped or not checked.
 
-Also: comments explain *why*; public headers start with a comment a newcomer
-can read; no new dependency without a line in `cmake/Deps.cmake` pinned to a
+Also: public headers start with a comment a newcomer can read; no new
+dependency without a line in `cmake/Deps.cmake` pinned to a
 tag (or a full commit hash for projects without release tags, as `stb` and
 `ImGuizmo` are).
 
@@ -568,7 +395,8 @@ Pitfalls already hit:
 - D3D12 root CBVs need 256-byte aligned addresses; the ring is aligned, and
   the backend asserts it for any other uniform offset.
 - Every shader resource needs its D3D `register(...)` beside `vk::binding`
-  (see Shaders). Metal and Vulkan will not notice a missing one; D3D12 will.
+  (RENDERING.md section 4). Metal and Vulkan will not notice a missing one;
+  D3D12 will.
 
 ## 6. Roadmap, in order
 
@@ -583,9 +411,10 @@ otherwise; ask the owner before installing anything.
 2. ~~Raster shadows~~ done (one 2048 map over the whole scene, sprites cast
    theirs; see the `shortcut:` in `Renderer::fitShadowFrustum` for big levels).
 2a. **World pixels, next steps.** Show the owner and tune `probeResolution` /
-   `probeCell` / palette with them. Then: cache the grid probe while nothing in
-   view changes (visible-face culling and Vulkan framebuffer caching are done); crossfade the eye probe's disocclusion fill (it can
-   shimmer at silhouettes); outlines across cube-face seams (post pass stops at
+   `probeCell` / palette with them. Then: cache the grid probe while nothing
+   in view changes (visible-face culling and Vulkan framebuffer caching are
+   done); crossfade the eye probe's disocclusion fill (it can shimmer at
+   silhouettes); outlines across cube-face seams (post pass stops at
    face edges); sprites with the same pixel size as the world; a
    mobile budget (384 per face is heavy for phones; try 256).
 2b. **Pixel-art look** (the owner's main interest). Done: texel-space lighting,
@@ -597,28 +426,22 @@ otherwise; ask the owner before installing anything.
    (path-traced ramp shading uses light *amount*, so the lantern's warm tint
    is lost); raster shadows for point lights; a
    day/night setting that animates sun, ambient and sky together.
-3. **Path tracer quality**: ~~sample emissive triangles directly~~ done;
-   ~~denoiser~~ done (spatial only; a temporal pass with motion reprojection
-   would keep history while the camera moves, which is the next big win);
-   ~~textures (one 1024 atlas) and sprites~~ done; ~~SAH~~ done. **Forest
-   performance is the priority**: walking re-traces the eye probe and each new
-   grid probe from scratch. Ideas, cheapest first: reproject the previous
-   probe's converged light into the new one instead of starting at frame 0;
-   trace the eye probe at half resolution; LOD meshes for far trees (one
-   cone); cap the distance of secondary rays. Then a two-level BVH (per-mesh
-   BLAS built once + TLAS rebuilt per frame) so moving objects are cheap. Hardware ray tracing (Metal/Vulkan/DXR ray queries) is a later
-   optimization behind the same interface, not a prerequisite.
+3. **Path tracer**: done: emissive sampling, denoiser (spatial), textures and
+   sprites, SAH BVH with ordered traversal, bounce light from the real sky.
+   **Next, forest performance while walking** (the priority), then a
+   two-level BVH and a temporal denoiser; the ordered list of ideas is in
+   RENDERING.md section 13.
 4. ~~**D3D12 backend**~~ done 2026-11-21: written, then verified on Windows
-   with Vulkan as the reference (sections 2 and 3). Open: AMD and Intel GPUs,
-   and the `shortcut:` limits listed under Backends.
+   with Vulkan as the reference (section 2; design in RENDERING.md section 3).
+   Open: AMD and Intel GPUs, and the `shortcut:` limits listed there.
 5. **Windows export** (zip of `ace_player.exe`, `ace_data`, `project/`; link
    the C runtime statically or ship the VC++ redistributable; the editor's
    Export menu needs a replacement for `popen` + shell scripts, e.g.
    `SDL_CreateProcess` and a PowerShell script), then
    **iOS** (simulator export works; remaining: device signing, testing touch
-   with a finger, an app icon and launch screen), **Android** (Gradle project using SDL3's `android-project` template;
-   assets inside the APK are already readable because all file reads go through
-   `SDL_LoadFile`; honor `currentTransform`, see the shortcut in
+   with a finger, an app icon and launch screen), **Android** (Gradle
+   project using SDL3's `android-project` template; assets inside the APK
+   are already readable because all file reads go through `SDL_LoadFile`; honor `currentTransform`, see the shortcut in
    `createSwapchain`).
    The Android NDK and a JDK are not installed on this machine.
 6. **2D feature set**: done: sprite sheets/animation, screen text with a
@@ -630,19 +453,21 @@ otherwise; ask the owner before installing anything.
 7. **Gameplay basics**: physics. A kinematic layer exists (`Collider` boxes,
    `Scene::moveAndSlide`, triggers via `overlapping`, `raycast`); boxes are
    axis-aligned and there are no dynamics. Evaluate Jolt (3D) and Box2D (2D)
-   before writing rigid bodies. Done: sound (WAV), Lua hot reload, scene loading, trigger
-   overlaps, raycasts, gamepad, per-entity script params. Still to do:
+   before writing rigid bodies. Done: sound (WAV), Lua hot reload, scene
+   loading, trigger overlaps, raycasts, gamepad, per-entity script params. Still to do:
    skeletal animation from glTF, compressed audio (OGG; stb_vorbis). (Save
    files `ace.save_data`/`ace.load_data` and Lua globals surviving scene
    changes are done and were tested with a throwaway project.)
 8. **Editor power features** (done: gizmo snapping, asset pickers, collider
-   outline, Build mode, light/camera icons and lamp range, File > Export, verified with `ace_editor <project>
-   --export macos` on a path containing a space; prefabs, which are
+   outline, Build mode, light/camera icons and lamp range, File > Export,
+   verified with `ace_editor <project> --export macos` on a path containing a
+   space; prefabs, which are
    independent copies with no live link to the file; multi-select; copy/paste).
-   Next: box (marquee) selection, a file dialog (`SDL_ShowOpenFileDialog`), crisp fonts on HiDPI displays, a
-   game-resolution preview, asset thumbnails.
+   Next: box (marquee) selection, a file dialog (`SDL_ShowOpenFileDialog`),
+   crisp fonts on HiDPI displays, a game-resolution preview, asset
+   thumbnails.
 9. **Engine scale**: replace `Scene::children`' linear scans with cached child
-   lists, GPU sub-allocation in Vulkan (VMA) and D3D12 (placed resources /
-   D3D12MA), static buffers in GPU-local memory on all backends, frames in flight, a render graph
-   once there are more than ~6 passes, an asset cooking step for release
+   lists, GPU sub-allocation in Vulkan (VMA) and D3D12 (placed resources or
+   D3D12MA), static buffers in GPU-local memory on all backends, frames in
+   flight, a render graph once there are more than ~6 passes, an asset cooking step for release
    builds (precompiled Metal libraries instead of load-time SPIRV-Cross).
