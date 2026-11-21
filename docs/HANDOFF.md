@@ -47,16 +47,27 @@ Decisions the owner made explicitly (do not revisit without asking):
 | Languages | Engine in C++20; gameplay in **Lua** |
 | Shaders | **Slang** as the single source language |
 | Old OpenGL exercises | Removed (they are in git history before `5bbfab7`) |
-| Git | Commit locally on `main` (since 2026-11-18; `engine-v2` was merged and retired); **the owner does every push**; no AI co-author lines in commit messages |
-| Installing tools | Ask first. Approved so far: cmake, ninja, the four Vulkan brew packages, the Slang release in `~/.cache/ace/slang`; on Windows the LunarG Vulkan SDK (winget `KhronosGroup.VulkanSDK`) |
+| Git | Commit locally on `main` (since 2026-11-18; `engine-v2` was merged and retired); **the owner does every push**; no AI co-author lines in commit messages; commit titles under 72 characters (GitHub Desktop cuts longer ones), details in the body |
+| Installing tools | Ask first. Approved so far: cmake, ninja, the four Vulkan brew packages, the Slang release in `~/.cache/ace/slang`, `mingw-w64` (D3D12 compile check on macOS); on Windows the LunarG Vulkan SDK (winget `KhronosGroup.VulkanSDK`) |
 
 SDL3 is used for window/input/files only (never for rendering). That choice
 was mine, not the owner's; it keeps five platforms' windowing out of scope.
 
 ## 2. State of the build: verified vs not
 
-Verified on this machine (Apple M1 Pro, macOS 27.2) by building, running and
-looking at screenshots produced with `--screenshot`:
+Verified by building, running and looking at screenshots produced with
+`--screenshot`. Everything is on macOS 27.2 / Apple M1 Pro unless marked
+**Windows**.
+
+Backend status at a glance (2026-11-21):
+
+| Backend | Platform tested | Builds | Runs player + editor | Validation | Image match |
+| --- | --- | --- | --- | --- | --- |
+| Metal | macOS, M1 Pro; iOS simulator | yes | yes | n/a | reference |
+| Vulkan | macOS via MoltenVK | yes | yes | 0 messages | identical to Metal (`main`, `village`, `pathtraced`); `forest` 0.005% |
+| Vulkan | Windows 11, RTX 5070 Ti, NVIDIA driver | yes | yes | 0 messages | reference for D3D12 |
+| D3D12 | Windows 11, RTX 5070 Ti | yes (MSVC 14.50) | yes | 0 messages (debug layer) | within 0.003-0.3% of Vulkan, see below |
+
 
 - Metal backend: player (raster and path traced) and editor.
 - Vulkan backend through MoltenVK with validation layers on: player (raster
@@ -67,9 +78,12 @@ looking at screenshots produced with `--screenshot`:
 - Lua scripts (`spin.lua` visibly moves the Orb in play mode).
 - `tools/export_macos.sh`: produces a self-contained `.app` (system libraries
   only) that runs from another working directory.
-- Unit tests (`build/bin/ace_tests`): scene round trip, tolerant loading,
-  hierarchy, BVH build, move-and-slide, raycasts/overlaps, script params,
-  prefabs (including a damaged file with a parent cycle), sprite directions.
+- Unit tests (`build/bin/ace_tests`, also `ctest --test-dir build`): scene
+  round trip, tolerant loading, hierarchy, BVH build, move-and-slide,
+  raycasts/overlaps, script params, prefabs (including a damaged file with a
+  parent cycle), sprite directions, copy/paste, texel-splat geometry and
+  visible-face culling, mesh raycasts (`raycastMesh`, used by `ace.ground`).
+  Passes on macOS and Windows.
 - `ace_editor --new <dir>`, then in that project on both backends: a textured
   cube, a `SpriteRenderer`, a perspective camera, the missing-mesh fallback
   (warns, draws a cube) and `pixelArt = false`. Images matched across backends.
@@ -207,7 +221,10 @@ looking at screenshots produced with `--screenshot`:
   cells (precision is unspecified on every API) and dither dots at cloud
   edges where smooth noise sits on a palette/dither threshold. Side by side
   they look the same; making them exact would need exact cross-GPU math, so
-  this is accepted.
+  this is accepted. If exact star placement ever matters (e.g. image tests
+  without a tolerance), bake the star field into a small texture: a texture
+  lookup is exact on every GPU, `atan2`/`asin` are not. Cloud-edge dither
+  would still differ.
 - **Windows editor program**: `tools/make_editor_windows.ps1` (Release,
   `ACE_EDITOR_WINDOWED=ON` = no console, icon from `editor/resources/editor.rc`
   + `AppIcon.ico`, both from `tools/make_app_icon.py`) -> `build-export\AceEngine\`
@@ -219,9 +236,15 @@ looking at screenshots produced with `--screenshot`:
   `file:///C:/...` URLs), the unsaved-changes dialog, HiDPI (no
   `SDL_WINDOW_HIGH_PIXEL_DENSITY`, so Windows may scale the window blurrily).
 - Not checked on Windows: playing or editing by hand, AMD GPUs, the Intel
-  iGPU under Vulkan, Windows export. **For the Mac:** re-check Metal = Vulkan
-  on `village` after the splat tie-break and re-measure the world-pixel
-  shimmer numbers above (the tie-break should lower them; not measured).
+  iGPU (D3D12 or Vulkan), Windows export.
+- **Mac re-check after the Windows changes (2026-11-21):** with the splat
+  tie-break, `main`, `village` and `pathtraced` are still pixel-identical
+  between Metal and Vulkan (`--fixed-dt 0.0166667 --frames 60`), zero
+  validation messages; `forest` differs on 0.005% of pixels (179 pixels in
+  one band of distant ground, at most 19/255: a value sitting on a palette /
+  dither threshold; the sky matched here); unit tests and
+  `tools/autotest.sh` pass on both. The world-pixel shimmer numbers above
+  were *not* re-measured; the tie-break should only lower them.
 
 **Not verified — treat as unknown until someone tries it:**
 
@@ -268,8 +291,11 @@ engine/core                     types, log, math
 - WebGPU-style bind groups. In shaders: `[[vk::binding(binding, group)]]`.
   The index in `BindGroupLayoutDesc::bindings[]` *is* the binding number.
 - Every uniform-buffer binding takes a dynamic offset. Per-draw constants come
-  from one per-frame ring (`Renderer::pushUniform`, 256-byte aligned, 4 MB).
-- `setPipeline` must precede `setBindGroup` (both backends need the layout).
+  from one per-frame ring (`Renderer::pushUniform`, 256-byte aligned, 16 MB;
+  the forest's ~1000 objects x several probe views needed more than 4 MB).
+- Call `setPipeline` before `setBindGroup`: Metal and Vulkan resolve bindings
+  against the current pipeline's layout. (D3D12 would accept either order; it
+  applies groups at draw time.)
 - **One frame in flight.** `beginFrame` waits for the previous frame's GPU
   work, which is why buffers can be rewritten every frame. If you add frames
   in flight you must first give every per-frame buffer a ring of copies.
@@ -277,15 +303,53 @@ engine/core                     types, log, math
 - Conventions, identical on every backend: right-handed, +Y up, camera looks
   down -Z, depth 0..1 (`GLM_FORCE_DEPTH_ZERO_TO_ONE`), +Y up in clip space,
   counter-clockwise front faces, texture row 0 at the top. Vulkan gets there
-  with a negative-height viewport. A D3D12 backend needs no flip.
+  with a negative-height viewport; Metal and D3D12 need no flip.
 - Render targets and the backbuffer are sRGB or float; all shading is linear.
   Scene/editor colors are sRGB and converted with `toLinear` on the CPU.
+
+### Backends (`engine/rhi/<api>/`)
+
+How each backend maps the RHI. All three share one frame in flight, deferred
+destruction and the conventions above.
+
+| RHI concept | Metal (`metal_device.mm`) | Vulkan (`vulkan_device.cpp`) | D3D12 (`d3d12_device.cpp`) |
+| --- | --- | --- | --- |
+| Shaders | SPIR-V -> MSL with SPIRV-Cross at pipeline creation | SPIR-V | DXIL (built by slangc + dxcompiler on Windows) |
+| Bind group | flat buffer/texture/sampler indices assigned per pipeline | descriptor set | uniform buffers = root CBVs, storage buffers = root SRVs, textures and samplers = one descriptor-table block each, written at bind-group creation |
+| Dynamic offset | buffer offset argument | dynamic UBO offset | GPU address + offset (asserted 256-byte aligned) |
+| Pipeline layout | implicit | pipeline layout from the group layouts | root signature per pipeline (version 1.0) |
+| Render pass | encoder per pass | classic render pass; framebuffers cached | `OMSetRenderTargets` + clears; full-target viewport/scissor set at pass start |
+| Resource states | tracked by Metal | layouts in render pass ops | every texture rests in one state between passes (shader resource; depth: depth write; swapchain: present); only pass begin/end, uploads and read-backs issue barriers |
+| Buffers | shared storage | host-visible memory | upload heap, persistently mapped |
+| Texture upload / read-back | `replaceRegion` / blit + wait | staging + wait | staging buffer on a separate list + fence wait |
+| GPU choice | system default | first suitable device | high-performance adapter (`EnumAdapterByGpuPreference`) |
+| Debug | Xcode | `--validation` = Khronos validation layer | `--validation` = debug layer; messages printed after each frame |
+
+D3D12 history: written on macOS on 2026-11-20 and compile-checked with
+MinGW's Windows headers (`-Wall -Wextra`, all imports resolve); the first
+Windows run (2026-11-21) needed only two changes (high-performance adapter
+choice, filtering the "no optimized clear value" hint) and the rest of the
+engine built warning-free under MSVC. Known limits, each marked `shortcut:` in
+the file: fixed descriptor heaps (65536 views, 2048 samplers), freed
+descriptor blocks reused only by blocks of the same size, every buffer in an
+upload heap (meshes and the BVH would read faster from a default heap on
+discrete GPUs), synchronous texture uploads.
+
+Vulkan's role on Windows: it runs on the same GPU as D3D12, so it is the
+reference for D3D12 images (Metal only exists on Apple hardware). The two use
+different shader compilers (DXC vs NVIDIA's SPIR-V compiler), so results can
+differ in the last bits; see section 2 for the numbers and causes.
 
 ### Shaders (`engine/shaders/*.slang`, `cmake/Shaders.cmake`)
 
 `slangc` compiles each file twice (`vsMain`, `fsMain`) to
-`ace_data/shaders/<name>.vs.spv|.fs.spv` next to the executables. Vulkan loads
-SPIR-V directly. Metal converts SPIR-V to MSL with SPIRV-Cross **when the
+`ace_data/shaders/<name>.vs.spv|.fs.spv` (and `.dxil` on Windows) next to the
+executables. Every resource declares both bindings, e.g.
+`[[vk::binding(1, 2)]] Texture2D albedo : register(t1, space2);` (binding ->
+register number, group -> space; `b` ConstantBuffer, `t` Texture2D /
+StructuredBuffer, `s` SamplerState), and vertex inputs use
+`[[vk::location(n)]] ... : ATTRIB<n>`. A new resource without its register
+compiles but binds the wrong slot on D3D12. Vulkan loads SPIR-V directly. Metal converts SPIR-V to MSL with SPIRV-Cross **when the
 pipeline is created**, because only then are the bind-group layouts known; it
 assigns flat Metal indices by walking groups and bindings in order (vertex
 buffer is slot 30). C++ structs mirrored in shaders are all `mat4`/`vec4` so
@@ -300,17 +364,26 @@ scene pass   -> color RGBA16F (linear HDR) + normalDepth RGBA16F (world normal, 
                              world-space texel mapping, cutout sprites)
                 path traced: pathtrace.slang  (software BVH in the fragment shader;
                              textures from a 1024 atlas, same texel/ramp rules)
-world pixels -> texel_splat.cpp: capture (drawRaster into 6-face atlases, grid +
-                eye [+ previous grid while crossfading]) -> probe_post.slang
-                (per-texel outlines, tone, palette, dither) -> texel_splat.slang
-                (one square per texel, no vertex buffer) -> sprites drawn direct
-present pass -> present.slang: sky, outlines (depth) + convex-edge highlights
-                (normals), tone map, palette snap, hard-pixel upscale; then
-                screen text (pixel font, imgui.slang) in the same pass
+                path-traced denoise: pt_denoise.slang (3 a-trous passes on the
+                             light only) -> pt_compose.slang (albedo, emission,
+                             palette ramp)
+world pixels -> texel_splat.cpp: capture into 6-face atlases (raster, or the
+                path tracer with one running average per face), grid + eye
+                [+ previous grid while crossfading]; only faces the camera can
+                see -> probe_post.slang (per-texel haze, outlines, tone,
+                palette, dither) -> texel_splat.slang (one square per texel,
+                no vertex buffer, fixed 2x2 depth tie-break) -> sprites direct
+present pass -> present.slang: sky (Atmosphere: gradient, sun disc + glow, pixel
+                clouds, stars), distance haze (screen pixels), outlines (depth)
+                + convex-edge highlights (normals), tone map, palette snap,
+                hard-pixel upscale; then screen text (pixel font, imgui.slang)
 ```
 
 - Shared shader code (frame/draw constants, `bayer4`, `linearToSrgb`,
-  `rampShade`) lives in `common.slangh`; C++ mirrors are in `renderer.cpp`.
+  `rampShade`, `Atmosphere` with `skyRadiance`/`applyFog`) lives in
+  `common.slangh`; C++ mirrors are in `renderer.h`/`renderer.cpp`. The sun is
+  the first `Light` without `point` (`findSun`); sky and haze settings are
+  Render Settings (`sunSize`, `sunGlow`, `fog*`, `cloud*`, `stars`).
 - `integerScale` (default on) picks a whole-number screen-pixels-per-game-pixel
   factor and widens the camera slightly instead of stretching.
 
@@ -367,9 +440,12 @@ VK_LAYER_PATH=/opt/homebrew/opt/vulkan-validationlayers/share/vulkan/explicit_la
   build/bin/ace_player projects/pixel_demo --backend vulkan --validation --screenshot /tmp/d.png
 ```
 
-**Always look at the screenshot.** Both backends must produce the same image
-(compare them pixel by pixel; they have matched exactly so far). Run every
-renderer or RHI change on both backends before committing. Screenshot,
+**Always look at the screenshot.** Compare backends pixel by pixel with
+`--fixed-dt 0.0166667` (time-based scenes differ otherwise): on a Mac, Metal
+and Vulkan must match exactly (they share Apple's shader compiler); on
+Windows, D3D12 and Vulkan may differ on well under 1% of pixels (section 2
+explains why), and anything above that is a bug. Run every renderer or RHI
+change on every backend you can reach before committing. Screenshot,
 autotest and export runs use a hidden window and offscreen frames.
 
 ## 5. Working rules
@@ -381,9 +457,16 @@ The owner asked that code follow https://github.com/DietrichGebert/ponytail :
   the platform do it; does a dependency we already have do it.
 - Never cut validation at trust boundaries (files, scripts, user input), error
   handling, data-loss protection or security to save lines.
-- A deliberate simplification gets a `// shortcut: <what>; <when to revisit>`
-  comment. `grep -rn "shortcut:" engine editor` lists the current debt.
+- Use what the codebase already has, then the standard library or platform,
+  then an installed dependency; never add a dependency for a few lines.
+- No speculative abstraction, option or "for later" code; keep the existing
+  layers and conventions. Finish every part the change needs (callers, tests,
+  docs).
+- Bug fixes: find every caller first and fix the root cause once.
+- A deliberate simplification gets a `// shortcut: <the limit>, <when to
+  upgrade>` comment. `grep -rn "shortcut:" engine editor` lists the current debt.
 - Logic with branches, loops or parsers gets one small test in `tests/`.
+- Comments say only the *why* the code cannot show.
 - End each report with what was skipped or not checked.
 
 Also: comments explain *why*; public headers start with a comment a newcomer
@@ -440,6 +523,10 @@ Pitfalls already hit:
   across backends matters.
 - The editor captures keys through ImGui, which maps Cmd to "Ctrl" on macOS;
   injected test input must send `ImGuiMod_Super` there.
+- D3D12 root CBVs need 256-byte aligned addresses; the ring is aligned, and
+  the backend asserts it for any other uniform offset.
+- Every shader resource needs its D3D `register(...)` beside `vk::binding`
+  (see Shaders). Metal and Vulkan will not notice a missing one; D3D12 will.
 
 ## 6. Roadmap, in order
 
@@ -477,23 +564,11 @@ otherwise; ask the owner before installing anything.
    probe's converged light into the new one instead of starting at frame 0;
    trace the eye probe at half resolution; LOD meshes for far trees (one
    cone); cap the distance of secondary rays. Then a two-level BVH (per-mesh
-   BLAS built once + TLAS rebuilt per frame) so moving objects are cheap; then
-   a denoiser. Hardware ray tracing (Metal/Vulkan/DXR ray queries) is a later
+   BLAS built once + TLAS rebuilt per frame) so moving objects are cheap. Hardware ray tracing (Metal/Vulkan/DXR ray queries) is a later
    optimization behind the same interface, not a prerequisite.
-4. ~~**D3D12 backend: bring-up on Windows.**~~ Done 2026-11-21 (see section 2). The backend is written
-   (`engine/rhi/d3d12/d3d12_device.cpp`): uniform buffers are root CBVs and
-   storage buffers root SRVs (dynamic offsets = address + offset), textures
-   and samplers are one descriptor-table block per bind group, one root
-   signature per pipeline, bind groups applied lazily at draw, and every
-   texture rests in one state between passes. Shaders carry explicit
-   `register(b|t|s<binding>, space<group>)` beside each `vk::binding` and
-   vertex inputs are `ATTRIB<location>` (the SPIR-V output is byte-identical
-   to before). Next, on a Windows PC: configure with Visual Studio + Ninja,
-   fix compile errors in the rest of the engine (MSVC flags are set in the top
-   CMakeLists; nothing besides this file was ever built on Windows), check
-   the DXIL rule in `cmake/Shaders.cmake`, then run with `--validation`
-   until it prints nothing. Done: the four verify commands produce the same
-   images with `--backend d3d12` as with Metal.
+4. ~~**D3D12 backend**~~ done 2026-11-21: written, then verified on Windows
+   with Vulkan as the reference (sections 2 and 3). Open: AMD and Intel GPUs,
+   and the `shortcut:` limits listed under Backends.
 5. **Windows export** (zip of `ace_player.exe`, `ace_data`, `project/`; link
    the C runtime statically or ship the VC++ redistributable; the editor's
    Export menu needs a replacement for `popen` + shell scripts, e.g.
@@ -525,6 +600,7 @@ otherwise; ask the owner before installing anything.
    Next: box (marquee) selection, a file dialog (`SDL_ShowOpenFileDialog`), crisp fonts on HiDPI displays, a
    game-resolution preview, asset thumbnails.
 9. **Engine scale**: replace `Scene::children`' linear scans with cached child
-   lists, GPU sub-allocation in Vulkan (VMA), frames in flight, a render graph
+   lists, GPU sub-allocation in Vulkan (VMA) and D3D12 (placed resources /
+   D3D12MA), static buffers in GPU-local memory on all backends, frames in flight, a render graph
    once there are more than ~6 passes, an asset cooking step for release
    builds (precompiled Metal libraries instead of load-time SPIRV-Cross).

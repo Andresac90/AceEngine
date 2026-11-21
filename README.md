@@ -72,7 +72,7 @@ is Metal on Apple platforms and D3D12 on Windows.
 | Move / rotate / scale | W / E / R, then drag the gizmo |
 | Snap the gizmo to a grid | Snap checkbox + step in the toolbar |
 | Build levels from blocks | tick **Build**, pick a texture and block size, click any surface to add a block there; Shift+click removes a block |
-| Torches, lanterns, lamps | a **Light** with `point` ticked: lights everything within `range`, in toon steps like the sun (up to 8 nearest the camera, no shadows). The first light without `point` is the sun; a dim sun + point lights makes night |
+| Torches, lanterns, lamps | a **Light** with `point` ticked: lights everything within `range`, in toon steps like the sun (up to 8 nearest the camera; shadows only when path traced). The first light without `point` is the sun; a dim sun + point lights makes night |
 | Edit the palette | **Palette** tab: one row per color ramp (darkest left); click a swatch to change it, `+`/`-` to grow or shrink a ramp, **Add ramp**. The scene updates as you edit; **Save** writes the PNG. A scene without a palette gets a **Create palette** button |
 | Write gameplay | add a **Script** component, then **New script** (a commented starter file named after the entity) or **Open script**: opens in VS Code if installed, else your default app. Saving while the game runs reloads it |
 | Reuse an object (prefab) | right-click it in the Hierarchy > **Save as Prefab**; double-click the `.prefab.json` in Assets to place a copy. Scripts use `ace.spawn_prefab` |
@@ -83,6 +83,8 @@ is Metal on Apple platforms and D3D12 on Windows.
 | Assign assets | drag a file from Assets onto a mesh / texture / script field |
 | Play / stop | F5 (changes made while playing are discarded on stop) |
 | Undo / redo, save, duplicate, delete | Cmd+Z / Cmd+Shift+Z, Cmd+S, Cmd+D, Delete |
+
+On Windows, use Ctrl wherever the table says Cmd.
 
 The look of a level is in the **Render Settings** tab and is saved with the scene.
 
@@ -115,6 +117,7 @@ Then, for both:
 | Every on-screen color taken from one palette | Render Settings `palette` (an image; up to 64 distinct colors) |
 | Shading by hand-picked color ramps instead of darkening | Render Settings `rampShading`, `rampShadowSteps`: each palette **row** is a ramp, darkest on the left; lit surfaces step one color right, shadowed ones step left |
 | Characters and props as sprites in the 3D world | SpriteRenderer with `billboard` |
+| Sky, sun, clouds, stars and distance haze | Render Settings `skyTop`, `skyBottom`, `sunSize`, `sunGlow`, `cloudCoverage`, `cloudScale`, `cloudSpeed`, `stars`, `fogColor`, `fogDensity`. The sun is the first Light without `point` |
 | Characters seen from front, side and back | SpriteRenderer `directions` = 4 or 8: one sheet row per view (front, left, back, right; 8 adds the diagonals), animation frames across. Turn the entity to face where it goes; the engine picks the row from the camera |
 
 Draw textures and sprites from the same palette image, using each ramp's
@@ -143,10 +146,20 @@ device app); progress appears in the Console. Or from a terminal:
 ```sh
 tools/export_macos.sh projects/pixel_demo    # -> build-export/macos/<Name>.app
 tools/export_ios.sh projects/pixel_demo      # iOS simulator .app (add "device" for an unsigned device build)
-tools/autotest.sh                            # scripted editor interaction test on each backend
 ```
 
 Windows and Android export are not done yet; the plan is in docs/HANDOFF.md.
+
+## Tests
+
+```sh
+build/bin/ace_tests                 # CPU-side unit tests (or ctest --test-dir build)
+tools/autotest.sh                   # scripted editor interaction test: metal + vulkan on macOS,
+                                    # tools/autotest.sh d3d12 vulkan on Windows (Git Bash)
+```
+
+Rendering changes are checked by taking `--screenshot` images on every backend
+and comparing them; docs/HANDOFF.md section 4 has the commands.
 
 ## Layout
 
