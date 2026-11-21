@@ -48,6 +48,7 @@ Decisions the owner made explicitly (do not revisit without asking):
 | Shaders | **Slang** as the single source language |
 | Old OpenGL exercises | Removed (they are in git history before `5bbfab7`) |
 | Git | Commit locally on `main` (since 2026-11-18; `engine-v2` was merged and retired); **the owner does every push**; no AI co-author lines in commit messages; commit titles under 72 characters (GitHub Desktop cuts longer ones), details in the body |
+| `docs/notes/` | The owner's OpenGL study notes (Phong checklist, Blender UV guide). Not engine docs; keep them |
 | Installing tools | Ask first. Approved so far: cmake, ninja, the four Vulkan brew packages, the Slang release in `~/.cache/ace/slang`, `mingw-w64` (D3D12 compile check on macOS); on Windows the LunarG Vulkan SDK (winget `KhronosGroup.VulkanSDK`) |
 
 SDL3 is used for window/input/files only (never for rendering). That choice
@@ -217,14 +218,27 @@ Backend status at a glance (2026-11-21):
   z-fighting. `texel_splat.slang` now pushes each texel of a 2x2 block back
   by a different fixed amount (0.05% of the camera distance per step, along
   the camera ray so the square does not move on screen); 0.4% -> 0.001%.
-  The forest's remaining 0.3% is in the sky: stars placed by `atan2`/`asin`
-  cells (precision is unspecified on every API) and dither dots at cloud
-  edges where smooth noise sits on a palette/dither threshold. Side by side
-  they look the same; making them exact would need exact cross-GPU math, so
-  this is accepted. If exact star placement ever matters (e.g. image tests
-  without a tolerance), bake the star field into a small texture: a texture
-  lookup is exact on every GPU, `atan2`/`asin` are not. Cloud-edge dither
-  would still differ.
+  The forest's remaining 0.3% was in the sky: stars and dither dots at cloud
+  edges where smooth noise sits on a palette/dither threshold.
+- **Fix: stars that agree across GPUs (2026-11-21, Mac).**
+  *Symptom:* D3D12 and Vulkan showed some stars in different places
+  (part of the forest's 0.3%). *Cause:* two decisions used math whose
+  result differs between GPU compilers: the star's cell came from
+  `floor(atan2(...) * 220)` / `floor(asin(...) * 220)` (no API specifies
+  their precision), and "is there a star in this cell" came from a float
+  hash whose multiply-adds a compiler may fuse or not. A difference in the
+  last bit flips either decision. *Fix* (`skyRadiance` in `common.slangh`):
+  the cell is now found on a cube around the camera (largest axis, then one
+  division; 400x400 cells per face, about the old density), and the star
+  test is an integer PCG hash of the cell index, which is bit-exact
+  everywhere. A baked star texture was considered and rejected: it would
+  still be looked up at a coordinate computed from the view direction, so it
+  removes neither rounding source. *Evidence:* on the Mac the sky looks the
+  same (same density; stars moved because the cell layout changed), Metal
+  and Vulkan still match, zero validation messages. *Open:* re-run the
+  D3D12-vs-Vulkan forest comparison on Windows and record the new number
+  here. Cell boundaries can still flip in rare pixels (division is not
+  exact either), and cloud-edge dither is unchanged: both are accepted.
 - **Windows editor program**: `tools/make_editor_windows.ps1` (Release,
   `ACE_EDITOR_WINDOWED=ON` = no console, icon from `editor/resources/editor.rc`
   + `AppIcon.ico`, both from `tools/make_app_icon.py`) -> `build-export\AceEngine\`
@@ -467,6 +481,11 @@ The owner asked that code follow https://github.com/DietrichGebert/ponytail :
   upgrade>` comment. `grep -rn "shortcut:" engine editor` lists the current debt.
 - Logic with branches, loops or parsers gets one small test in `tests/`.
 - Comments say only the *why* the code cannot show.
+- Every bug fix is recorded where the next person will look: the commit body
+  and, for anything about rendering or a platform, a short entry in this file
+  (symptom, cause, fix, evidence, what is still open), like the splat
+  tie-break and star entries in section 2. Pitfalls that apply beyond one
+  fix also go in the list below.
 - End each report with what was skipped or not checked.
 
 Also: comments explain *why*; public headers start with a comment a newcomer
@@ -520,7 +539,8 @@ Pitfalls already hit:
   tie-break, or the winner depends on the GPU compiler and flickers.
 - Shader transcendentals (`atan2`, `asin`, `pow`, `sin`) differ between GPU
   compilers; do not feed them into `floor`/`step` where exact repeatability
-  across backends matters.
+  across backends matters. For random-looking discrete choices use an
+  integer hash (`pcgHash` in `common.slangh`), not a float one.
 - The editor captures keys through ImGui, which maps Cmd to "Ctrl" on macOS;
   injected test input must send `ImGuiMod_Super` there.
 - D3D12 root CBVs need 256-byte aligned addresses; the ring is aligned, and

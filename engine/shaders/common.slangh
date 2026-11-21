@@ -80,6 +80,14 @@ struct Atmosphere {
   float4 clouds;      // x: coverage 0..1, y: scale, z: drift, w: stars 0..1
 };
 
+// PCG integer hash: bit-exact on every GPU (float hashes are not, because
+// compilers may fuse their multiply-adds differently).
+uint pcgHash(uint v) {
+  uint state = v * 747796405u + 2891336453u;
+  uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+  return (word >> 22u) ^ word;
+}
+
 float hash12(float2 p) {
   float3 q = frac(float3(p.xyx) * 0.1031);
   q += dot(q, q.yzx + 33.33);
@@ -110,8 +118,15 @@ float3 skyRadiance(Atmosphere a, float3 dir) {
   float3 sunTint = a.sunColor.rgb / max(max(a.sunColor.r, max(a.sunColor.g, a.sunColor.b)), 1e-3);
   // Stars where the sky is dark, fixed to directions so they turn with the sky.
   if (a.clouds.w > 0.0 && h > 0.0) {
-    float2 cell = floor(float2(atan2(dir.z, dir.x) * 220.0, asin(saturate(h)) * 220.0));
-    float star = step(0.9975, hash12(cell)) * a.clouds.w * saturate(1.0 - dot(sky, float3(0.3, 0.6, 0.1)) * 6.0);
+    // Cells on a cube around the camera (400 x 400 per face, about the old
+    // density): one division instead of atan2/asin, whose precision differs
+    // between GPU compilers and moved stars between cells across backends.
+    float3 ad = abs(dir);
+    uint face = ad.x >= ad.y && ad.x >= ad.z ? (dir.x > 0.0 ? 0u : 1u) : (ad.y >= ad.z ? (dir.y > 0.0 ? 2u : 3u) : (dir.z > 0.0 ? 4u : 5u));
+    float2 uv = face < 2u ? dir.zy / ad.x : (face < 4u ? dir.xz / ad.y : dir.xy / ad.z);
+    uint2 cell = uint2(clamp((uv * 0.5 + 0.5) * 400.0, 0.0, 399.0));
+    bool lit = (pcgHash(cell.x + cell.y * 400u + face * 160000u) & 0xFFFFu) < 164u; // 0.25% of cells
+    float star = (lit ? 1.0 : 0.0) * a.clouds.w * saturate(1.0 - dot(sky, float3(0.3, 0.6, 0.1)) * 6.0);
     sky += star * float3(0.9, 0.9, 1.0);
   }
   // Sun: a disc and a soft glow around it.
