@@ -8,6 +8,7 @@
 #include "runtime/project.h"
 #include "script/script.h"
 #include <atomic>
+#include <map>
 #include <mutex>
 #include <thread>
 
@@ -150,11 +151,18 @@ private:
   std::vector<std::string> exportLines_; // produced by the export thread, logged on the main thread
 
   void autotestStep();
+  // Autotest only: screen rectangle of the last ImGui item, under a readable key
+  // ("node:Rock", "item:Cube"), so the test can click and drag real widgets.
+  void testRect(const std::string& id);
+  struct TestRect {
+    ImVec2 min, max;
+  };
+  std::map<std::string, TestRect> testRects_;
   ImVec2 viewPos_{0, 0}, viewSize_{0, 0}; // viewport image rectangle, ImGui coordinates
   int autotestFrame_ = 0, autotestResult_ = 0;
   std::string savedClipboard_;
   size_t entityCountBefore_ = 0;
-  vec3 groupBefore_{0.0f};
+  vec3 groupBefore_{0.0f}, panTargetBefore_{0.0f};
   std::vector<u8> pathTraceFirst_;
 };
 

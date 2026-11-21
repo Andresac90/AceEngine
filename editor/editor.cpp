@@ -605,7 +605,9 @@ void Editor::drawMenu() {
   static std::string saveAsPath;
   bool openSaveAs = false;
   if (ImGui::BeginMainMenuBar()) {
-    if (ImGui::BeginMenu("File")) {
+    bool fileMenu = ImGui::BeginMenu("File");
+    testRect("menu:File");
+    if (fileMenu) {
       if (ImGui::MenuItem("Open Project...")) {
         // An empty folder starts a new project.
         if (confirmLeave()) {
@@ -616,6 +618,7 @@ void Editor::drawMenu() {
       if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pick a project folder, or an empty folder for a new project");
       ImGui::Separator();
       if (ImGui::MenuItem("New Scene")) newScene();
+      testRect("item:New Scene");
       if (ImGui::BeginMenu("Open Scene")) {
         for (const std::string& f : assetFiles_)
           if (endsWith(f, ".scene.json") && ImGui::MenuItem(f.c_str(), nullptr, f == scenePath_)) openScene(f);
@@ -626,6 +629,7 @@ void Editor::drawMenu() {
         saveAsPath = scenePath_;
         openSaveAs = true;
       }
+      testRect("item:Save Scene As...");
       ImGui::Separator();
       if (ImGui::MenuItem("Use As Start Scene", nullptr, project_.startScene == scenePath_)) {
         project_.startScene = scenePath_;
@@ -662,7 +666,9 @@ void Editor::drawMenu() {
       if (ImGui::MenuItem("Delete", "Del", false, selected_ != kNoEntity)) g_deleteRequest = true;
       ImGui::EndMenu();
     }
-    if (ImGui::BeginMenu("Entity")) {
+    bool entityMenu = ImGui::BeginMenu("Entity");
+    testRect("menu:Entity");
+    if (entityMenu) {
       if (ImGui::MenuItem("Empty")) createEntity("Entity", nullptr);
       if (ImGui::MenuItem("Block (textured, solid)")) { // level-building brick: world-mapped texture + collider
         Entity e = createEntity("Block", "builtin:cube");
@@ -670,6 +676,7 @@ void Editor::drawMenu() {
         scene_.reg.emplace<Collider>(e);
       }
       if (ImGui::MenuItem("Cube")) createEntity("Cube", "builtin:cube");
+      testRect("item:Cube");
       if (ImGui::MenuItem("Sphere")) createEntity("Sphere", "builtin:sphere");
       if (ImGui::MenuItem("Plane")) createEntity("Plane", "builtin:plane");
       if (ImGui::MenuItem("Sprite")) scene_.reg.emplace<SpriteRenderer>(createEntity("Sprite", nullptr));
@@ -684,10 +691,13 @@ void Editor::drawMenu() {
     ImGui::TextUnformatted("Path inside the project:");
     ImGui::SetNextItemWidth(360);
     ImGui::InputText("##path", &saveAsPath);
+    testRect("saveas:path");
     // Keep saves inside the project folder.
     bool valid = !saveAsPath.empty() && saveAsPath[0] != '/' && saveAsPath.find("..") == std::string::npos;
     ImGui::BeginDisabled(!valid);
-    if (ImGui::Button("Save")) {
+    bool save = ImGui::Button("Save");
+    testRect("saveas:save");
+    if (save) {
       if (!endsWith(saveAsPath, ".scene.json")) saveAsPath += ".scene.json";
       scenePath_ = saveAsPath;
       saveScene();
@@ -707,6 +717,7 @@ void Editor::drawHierarchyNode(Entity e) {
   if (isSelected(e)) flags |= ImGuiTreeNodeFlags_Selected;
   ImGui::PushID((int)(u32)e);
   bool open = ImGui::TreeNodeEx("##node", flags, "%s", scene_.reg.get<Name>(e).value.c_str());
+  testRect("node:" + scene_.reg.get<Name>(e).value);
   if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
     ImGuiIO& io = ImGui::GetIO();
     if (io.KeyCtrl || io.KeyShift) toggleSelected(e); // Cmd-click on macOS arrives as Ctrl
@@ -761,6 +772,7 @@ void Editor::drawHierarchy() {
   // Empty space: click to deselect, drop to un-parent.
   ImVec2 rest = ImGui::GetContentRegionAvail();
   ImGui::InvisibleButton("##blank", ImVec2(std::max(rest.x, 1.0f), std::max(rest.y, 40.0f)));
+  testRect("hierarchy:blank");
   if (ImGui::IsItemClicked()) selected_ = kNoEntity;
   if (ImGui::BeginDragDropTarget()) {
     if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("ACE_ENTITY")) {
@@ -801,6 +813,7 @@ bool Editor::editFields(void* object, const std::vector<Field>& fields) {
           ImGui::SameLine(0.0f, 2.0f);
         }
         changed |= ImGui::InputText(f.name, (std::string*)p);
+        testRect(std::string("field:") + f.name);
         if (f.type == FieldType::Asset && ImGui::BeginDragDropTarget()) {
           if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ACE_ASSET")) {
             *(std::string*)p = (const char*)payload->Data;
@@ -866,6 +879,7 @@ void Editor::drawInspector() {
   if (!extraSelection_.empty())
     ImGui::TextDisabled("%zu more selected: the gizmo, delete, duplicate and copy apply to all", extraSelection_.size());
   ImGui::InputText("Name", &scene_.reg.get<Name>(selected_).value);
+  testRect("field:Name");
   finished |= ImGui::IsItemDeactivatedAfterEdit();
   for (const ComponentType& type : componentTypes()) {
     void* component = type.get(scene_.reg, selected_);
@@ -1138,6 +1152,7 @@ void Editor::drawAssets() {
   for (const std::string& f : assetFiles_) {
     if (!filter.empty() && f.find(filter) == std::string::npos) continue;
     ImGui::Selectable(f.c_str(), f == scenePath_);
+    testRect("asset:" + f);
     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
       if (endsWith(f, ".scene.json")) openScene(f);
       else if (endsWith(f, ".prefab.json") && !playing_) placePrefab(f);
@@ -1479,6 +1494,10 @@ void Editor::drawViewport() {
 // Drives the editor like a user would (--autotest). Each step runs a few frames
 // after the previous one so ImGui has processed the input. Run it on a copy of
 // the demo project: it saves the scene.
+void Editor::testRect(const std::string& id) {
+  if (autotest) testRects_[id] = {ImGui::GetItemRectMin(), ImGui::GetItemRectMax()};
+}
+
 void Editor::autotestStep() {
   static const int kFramesPerStep = 4;
   static vec3 before;
@@ -1525,6 +1544,11 @@ void Editor::autotestStep() {
     return e == kNoEntity ? vec3(1e9f) : scene_.reg.get<Transform>(e).position;
   };
   Entity player = scene_.find("Player");
+  auto rectCenter = [&](const char* id) { // a widget recorded by testRect
+    auto it = testRects_.find(id);
+    expect(it != testRects_.end(), id);
+    return it == testRects_.end() ? ImVec2(0, 0) : ImVec2((it->second.min.x + it->second.max.x) * 0.5f, (it->second.min.y + it->second.max.y) * 0.5f);
+  };
 
   switch (step) {
     // --- camera: orbit with a right-drag, zoom with the wheel
@@ -1793,6 +1817,108 @@ void Editor::autotestStep() {
       expect(again.size() == pathTraceFirst_.size() && differing == 0,
              "re-enabling path tracing gives the same image as the first time (the accumulation restarted)");
       scene_.settings.pathTraced = false;
+      // --- pan: middle-drag moves the orbit target, not the angles
+      panTargetBefore_ = camera_.target;
+      yawBefore = camera_.yaw;
+      moveTo(center().x, center().y);
+      break;
+    }
+    case 45: io.AddMouseButtonEvent(ImGuiMouseButton_Middle, true); break;
+    case 46: moveTo(center().x + 80, center().y + 40); break;
+    case 47: moveTo(center().x + 160, center().y + 80); break;
+    case 48: io.AddMouseButtonEvent(ImGuiMouseButton_Middle, false); break;
+    case 49:
+      expect(glm::distance(camera_.target, panTargetBefore_) > 0.1f, "middle-drag should pan the camera");
+      expect(camera_.yaw == yawBefore, "panning must not orbit");
+      camera_.target = panTargetBefore_;
+      // --- hierarchy drag and drop: Rock onto Tower makes it a child...
+      moveTo(rectCenter("node:Rock").x, rectCenter("node:Rock").y);
+      break;
+    case 50: io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); break;
+    case 51: moveTo(mouse.x, mouse.y + 20); break; // past the drag threshold
+    case 52: moveTo(rectCenter("node:Tower").x, rectCenter("node:Tower").y); break;
+    case 53: io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); break;
+    case 54: {
+      std::vector<Entity> kids = scene_.children(scene_.find("Tower"));
+      expect(std::find(kids.begin(), kids.end(), scene_.find("Rock")) != kids.end(), "dropping Rock on Tower in the Hierarchy re-parents it");
+      // ...and dropping it on the empty area below makes it a root again.
+      moveTo(rectCenter("node:Rock").x, rectCenter("node:Rock").y);
+      break;
+    }
+    case 55: io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); break;
+    case 56: moveTo(mouse.x, mouse.y + 20); break;
+    case 57: moveTo(rectCenter("hierarchy:blank").x, rectCenter("hierarchy:blank").y); break;
+    case 58: io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); break;
+    case 59: {
+      std::vector<Entity> roots = scene_.children(kNoEntity);
+      expect(std::find(roots.begin(), roots.end(), scene_.find("Rock")) != roots.end(), "dropping on empty Hierarchy space un-parents");
+      // --- drag an asset onto the selected entity's texture field
+      selectAll({scene_.find("Rock")});
+      moveTo(rectCenter("asset:assets/dirt.png").x, rectCenter("asset:assets/dirt.png").y);
+      break;
+    }
+    case 60: io.AddMouseButtonEvent(ImGuiMouseButton_Left, true); break;
+    case 61: moveTo(mouse.x + 20, mouse.y); break;
+    case 62: moveTo(rectCenter("field:texture").x, rectCenter("field:texture").y); break;
+    case 63: io.AddMouseButtonEvent(ImGuiMouseButton_Left, false); break;
+    case 64:
+      expect(scene_.reg.get<MeshRenderer>(scene_.find("Rock")).texture == "assets/dirt.png", "dropping an asset on a texture field assigns it");
+      // --- type a new name into the Name field
+      moveTo(rectCenter("field:Name").x, rectCenter("field:Name").y);
+      break;
+    case 65:
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+      break;
+    case 66: key(ImGuiKey_A, true); break; // select the old name
+    case 67:
+      for (char c : std::string("Boulder")) io.AddInputCharacter((unsigned)c);
+      break;
+    case 68: key(ImGuiKey_Enter); break;
+    case 69:
+      expect(scene_.find("Boulder") != kNoEntity && scene_.find("Rock") == kNoEntity, "typing in the Name field renames the entity");
+      // --- menus: Entity > Cube
+      moveTo(rectCenter("menu:Entity").x, rectCenter("menu:Entity").y);
+      break;
+    case 70:
+    case 72:
+    case 75:
+    case 77:
+    case 80:
+    case 83:
+    case 85:
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+      break;
+    case 71: moveTo(rectCenter("item:Cube").x, rectCenter("item:Cube").y); break;
+    case 73:
+      expect(scene_.find("Cube") != kNoEntity, "Entity > Cube creates a cube");
+      // --- File > Save Scene As..., typing a new path
+      moveTo(rectCenter("menu:File").x, rectCenter("menu:File").y);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, true);
+      io.AddMouseButtonEvent(ImGuiMouseButton_Left, false);
+      break;
+    case 74: moveTo(rectCenter("item:Save Scene As...").x, rectCenter("item:Save Scene As...").y); break;
+    case 76: moveTo(rectCenter("saveas:path").x, rectCenter("saveas:path").y); break;
+    case 78: key(ImGuiKey_A, true); break;
+    case 79:
+      for (char c : std::string("scenes/autotest_copy")) io.AddInputCharacter((unsigned)c);
+      moveTo(rectCenter("saveas:save").x, rectCenter("saveas:save").y);
+      break;
+    case 81: {
+      Scene saved;
+      expect(scenePath_ == "scenes/autotest_copy.scene.json" && saved.load(project_.path(scenePath_)) && saved.find("Boulder") != kNoEntity,
+             "Save Scene As writes the typed path (with .scene.json added) and switches to it");
+      // --- File > New Scene
+      moveTo(rectCenter("menu:File").x, rectCenter("menu:File").y);
+      break;
+    }
+    case 82: break;
+    case 84: moveTo(rectCenter("item:New Scene").x, rectCenter("item:New Scene").y); break;
+    case 86: {
+      expect(scenePath_.rfind("scenes/untitled_", 0) == 0 && scene_.reg.view<Name>().size() == 2 && scene_.find("Camera") != kNoEntity &&
+                 scene_.find("Sun") != kNoEntity,
+             "File > New Scene starts an unsaved scene with a camera and a sun");
       if (autotestResult_ == 0) {
         ACE_INFO("autotest passed");
         autotestResult_ = 1;
