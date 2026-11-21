@@ -65,7 +65,7 @@ Backend status at a glance (2026-11-21):
 | Backend | Platform tested | Builds | Runs player + editor | Validation | Image match |
 | --- | --- | --- | --- | --- | --- |
 | Metal | macOS, M1 Pro; iOS simulator | yes | yes | n/a | reference |
-| Vulkan | macOS via MoltenVK | yes | yes | 0 messages | identical to Metal (`main`, `village`, `pathtraced`); `forest` 0.005% |
+| Vulkan | macOS via MoltenVK | yes | yes | 0 messages | identical to Metal (`main`, `village`, `pathtraced`); `forest` 0.005% (distant ground, not sky) |
 | Vulkan | Windows 11, RTX 5070 Ti, NVIDIA driver | yes | yes | 0 messages | reference for D3D12 |
 | D3D12 | Windows 11, RTX 5070 Ti | yes (MSVC 14.50) | yes | 0 messages (debug layer) | within 0.001-0.02% of Vulkan (path traced: at most 1/255), see below |
 
@@ -255,8 +255,11 @@ Backend status at a glance (2026-11-21):
   other verify images unchanged; zero validation messages; editor autotest
   passes on both. The cloud *layout* changed (new random pattern; same
   coverage, scale and colors), so the forest's sky looks different: show the
-  owner. *Open:* on the Mac, re-check Metal = Vulkan on `forest` (the
-  0.005% above predates this) and get the owner's verdict on the new sky.
+  owner. *Mac re-check (same day):* Metal vs Vulkan unchanged after the
+  fix: `main`, `village`, `pathtraced` identical, `forest` 0.005% (the
+  distant-ground band, not the sky), zero validation messages, unit tests and
+  editor autotest pass on both. *Open:* the owner's verdict on the new cloud
+  layout (the new pattern happens to cover the sun more at the start view).
 - **Windows editor program**: `tools/make_editor_windows.ps1` (Release,
   `ACE_EDITOR_WINDOWED=ON` = no console, icon from `editor/resources/editor.rc`
   + `AppIcon.ico`, both from `tools/make_app_icon.py`) -> `build-export\AceEngine\`
