@@ -91,7 +91,17 @@ VsOut vsMain(uint vid : SV_VertexID) {
   // Lower-priority probes are pushed slightly away from the camera so that where
   // both probes cover a spot, the stable one wins (depth precision is not uniform,
   // so this is done in world space, not in clip space).
-  world += (world - data.camera.xyz) * data.params.y;
+  // Neighbouring squares overlap a little (params.x > 1) and are nearly coplanar,
+  // so in the overlap the depth test would pick a winner by rounding noise: a
+  // different one per GPU compiler (D3D12 vs Vulkan) and per frame (shimmer).
+  // A fixed, tiny push per position in a 2x2 block gives any two neighbours,
+  // diagonal ones included, different depths. Pushing along the camera ray
+  // moves only the depth, never the square on screen. Kept well below the
+  // probe-priority pushes (0.003 and up).
+  // shortcut: a fixed fraction of the distance; very far away it nears D32F's
+  // precision (standard 0..1 depth). Revisit with reversed-Z depth.
+  float tieBreak = float((x & 1u) + 2u * (y & 1u)) * 0.0005;
+  world += (world - data.camera.xyz) * (data.params.y + tieBreak);
   o.position = mul(data.viewProj, float4(world, 1.0));
   o.color = float4(finalAtlas.Load(int3(at, 0)).rgb, 0.0); // alpha 0: already tone mapped and palette-snapped
   o.normalDepth = float4(normal, -mul(data.view, float4(p, 1.0)).z);
