@@ -67,7 +67,7 @@ Backend status at a glance (2026-11-21):
 | Metal | macOS, M1 Pro; iOS simulator | yes | yes | n/a | reference |
 | Vulkan | macOS via MoltenVK | yes | yes | 0 messages | identical to Metal (`main`, `village`, `pathtraced`); `forest` 0.005% |
 | Vulkan | Windows 11, RTX 5070 Ti, NVIDIA driver | yes | yes | 0 messages | reference for D3D12 |
-| D3D12 | Windows 11, RTX 5070 Ti | yes (MSVC 14.50) | yes | 0 messages (debug layer) | within 0.003-0.3% of Vulkan, see below |
+| D3D12 | Windows 11, RTX 5070 Ti | yes (MSVC 14.50) | yes | 0 messages (debug layer) | within 0.001-0.02% of Vulkan (path traced: at most 1/255), see below |
 
 
 - Metal backend: player (raster and path traced) and editor.
@@ -208,7 +208,8 @@ Backend status at a glance (2026-11-21):
 - **D3D12 vs Vulkan images** (same GPU, `--fixed-dt 0.0166667`; time-based
   scenes differ otherwise). Each backend is deterministic run to run. Share of
   pixels that differ: `main` 0.003% (max 54/255), path traced at most 1/255,
-  `village` and the scripted walk 0.001%, editor 0.02%, `forest` 0.3%.
+  `village` and the scripted walk 0.001%, editor 0.02%, `forest` 0.004%
+  (0.3% before the star and cloud fixes below).
   Why they are not identical, when Metal and MoltenVK were: those two share
   Apple's shader compiler; here DXC and NVIDIA's SPIR-V compiler round the
   last bits differently, and any hard decision near a boundary can flip.
@@ -218,8 +219,8 @@ Backend status at a glance (2026-11-21):
   z-fighting. `texel_splat.slang` now pushes each texel of a 2x2 block back
   by a different fixed amount (0.05% of the camera distance per step, along
   the camera ray so the square does not move on screen); 0.4% -> 0.001%.
-  The forest's remaining 0.3% was in the sky: stars and dither dots at cloud
-  edges where smooth noise sits on a palette/dither threshold.
+  The forest's remaining 0.3% was in the sky: stars and cloud edges (see the
+  two fixes below; the first report blamed cloud-edge *dither*, which was wrong).
 - **Fix: stars that agree across GPUs (2026-11-21, Mac).**
   *Symptom:* D3D12 and Vulkan showed some stars in different places
   (part of the forest's 0.3%). *Cause:* two decisions used math whose
@@ -235,10 +236,27 @@ Backend status at a glance (2026-11-21):
   still be looked up at a coordinate computed from the view direction, so it
   removes neither rounding source. *Evidence:* on the Mac the sky looks the
   same (same density; stars moved because the cell layout changed), Metal
-  and Vulkan still match, zero validation messages. *Open:* re-run the
-  D3D12-vs-Vulkan forest comparison on Windows and record the new number
-  here. Cell boundaries can still flip in rare pixels (division is not
-  exact either), and cloud-edge dither is unchanged: both are accepted.
+  and Vulkan still match, zero validation messages. **Windows re-run:**
+  with stars off the forest's D3D12/Vulkan difference drops only from 0.280%
+  to 0.279%, so stars now account for ~0.001%; the rest was clouds (next
+  entry). *Open:* cell boundaries can still flip in rare pixels (division
+  is not exact either); accepted.
+- **Fix: clouds that agree across GPUs (2026-11-21, Windows).**
+  *Symptom:* after the star fix the forest still differed on 0.28% of pixels
+  between D3D12 and Vulkan, all at cloud edges. Bisected on Windows with
+  temporary scene copies: clouds off 0.004%, stars off 0.279%, dither off
+  0.307%, so neither stars nor dither. *Cause:* the cloud noise (`fbm` ->
+  `valueNoise` -> `hash12`) used the same float hash as the old stars; its
+  last bits differ between compilers, and the cloud `smoothstep` plus palette
+  snap turn that into a different color at edges. *Fix:* `hash12` now takes
+  the integer lattice point (exact, since `valueNoise` passes `floor(p)`),
+  hashes it with `pcgHash`, and keeps 24 bits (exact in a float).
+  *Evidence:* forest 0.28% -> 0.004% (D3D12 vs Vulkan, fixed timestep); all
+  other verify images unchanged; zero validation messages; editor autotest
+  passes on both. The cloud *layout* changed (new random pattern; same
+  coverage, scale and colors), so the forest's sky looks different: show the
+  owner. *Open:* on the Mac, re-check Metal = Vulkan on `forest` (the
+  0.005% above predates this) and get the owner's verdict on the new sky.
 - **Windows editor program**: `tools/make_editor_windows.ps1` (Release,
   `ACE_EDITOR_WINDOWED=ON` = no console, icon from `editor/resources/editor.rc`
   + `AppIcon.ico`, both from `tools/make_app_icon.py`) -> `build-export\AceEngine\`
@@ -539,7 +557,8 @@ Pitfalls already hit:
   tie-break, or the winner depends on the GPU compiler and flickers.
 - Shader transcendentals (`atan2`, `asin`, `pow`, `sin`) differ between GPU
   compilers; do not feed them into `floor`/`step` where exact repeatability
-  across backends matters. For random-looking discrete choices use an
+  across backends matters. For random-looking discrete choices, and for
+  noise whose value feeds a threshold (cloud edges, palette snap), use an
   integer hash (`pcgHash` in `common.slangh`), not a float one.
 - The editor captures keys through ImGui, which maps Cmd to "Ctrl" on macOS;
   injected test input must send `ImGuiMod_Super` there.

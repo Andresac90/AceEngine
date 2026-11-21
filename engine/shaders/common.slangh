@@ -88,10 +88,12 @@ uint pcgHash(uint v) {
   return (word >> 22u) ^ word;
 }
 
+// 0..1 for a lattice point (whole-number coordinates, so int2() is exact).
+// Integer hash, 24 bits (exact in a float): the cloud noise built on it is
+// the same on every GPU, so cloud edges do not flip palette colors across backends.
 float hash12(float2 p) {
-  float3 q = frac(float3(p.xyx) * 0.1031);
-  q += dot(q, q.yzx + 33.33);
-  return frac((q.x + q.y) * q.z);
+  int2 c = int2(p);
+  return float(pcgHash(uint(c.x) + pcgHash(uint(c.y))) >> 8u) * (1.0 / 16777216.0);
 }
 float valueNoise(float2 p) {
   float2 i = floor(p), f = frac(p);
