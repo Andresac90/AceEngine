@@ -104,7 +104,8 @@ Backend status at a glance (2026-11-21):
   compiler-dependent rounding (splat depth tie-break, stars, clouds). Numbers,
   causes and fixes: RENDERING.md section 11.
 - Not checked on Windows: playing or editing by hand, AMD GPUs, the Intel
-  iGPU (D3D12 or Vulkan), Windows export.
+  iGPU (D3D12 or Vulkan), Windows export, the path-tracer sky change
+  (`7c11429`) and the autotest steps added on 2026-11-21 (45-86).
 - **Mac re-check after the Windows changes (2026-11-21):** Metal = Vulkan
   still pixel-identical on `main`, `village`, `pathtraced`; `forest` 0.005%;
   zero validation messages; tests and autotest pass on both.
@@ -120,9 +121,10 @@ Backend status at a glance (2026-11-21):
 - The path tracer with textures, world texel mapping, cutout sprites, palette
   and per-texel light gathering: `village` with `pathTraced` on, both backends.
 - **World pixels** (`worldPixels`): capture/splat geometry and visible-face
-  culling unit-tested; Metal = Vulkan pixel-identical; shimmer and cost
-  measured (RENDERING.md sections 7 and 12). The shimmer numbers predate the
-  splat depth tie-break and were not re-measured.
+  culling unit-tested; Metal = Vulkan pixel-identical; stability measured with
+  `tools/measure_shimmer.py` (2026-11-21: world 35.7% / 24.5% vs screen
+  39.2% / 26.0%; the depth tie-break changes nothing) and cost re-timed
+  (RENDERING.md sections 7 and 12).
 - Point lights (`Light.point`, up to 8 nearest the camera, banded; shadows
   only when path traced): lantern light in `house.scene.json`; a night copy
   of the village renders dark with the lantern lighting the path, in every
@@ -156,9 +158,15 @@ Backend status at a glance (2026-11-21):
   disk, play/stop restoring the scene, Build mode place and Shift-erase,
   prefab save/place/undo, Shift+click multi-select, copy/paste through the
   system clipboard (the test saves and restores the user's clipboard), delete
-  of a multi-selection, a group gizmo drag, and the Palette panel (create,
+  of a multi-selection, a group gizmo drag, the Palette panel (create,
   edit with a live GPU update including a resize, save, read back from disk),
-  and selecting a light by clicking its viewport icon.
+  selecting a light by clicking its viewport icon, middle-drag pan,
+  Hierarchy drag and drop (re-parent, back to the root), dragging an asset
+  onto a texture field, renaming in the Name field, Entity > Cube, File >
+  Save Scene As with a typed path, and File > New Scene (87 steps). Widgets
+  are found through rectangles the editor records only during the test
+  (`Editor::testRect`). The test was checked to fail when a feature breaks
+  (Hierarchy drop disabled: it stops at step 54).
   When you add an editor feature, add steps to `Editor::autotestStep`.
 - `tools/make_editor_app.sh` -> `build-export/AceEngine.app` (Metal only, SDL
   static, ad-hoc signed, icon from `tools/make_app_icon.py`): no non-system
@@ -215,17 +223,20 @@ Backend status at a glance (2026-11-21):
 
 ### Not verified (treat as unknown until someone tries it)
 
-- Editor interactions the autotest does not cover: pan, drag-and-drop
-  re-parenting and asset assignment, Save As, New Scene, the menus, text fields.
-  Nobody has used the editor by hand yet.
+- Editor by hand: nobody has used it with a real mouse yet. Not covered by
+  the autotest: native dialogs (folder picker, unsaved-changes prompt),
+  File > Open Scene / Open Project / Reload Assets / Export from the menu
+  (Export is tested through `--export`), window resize, HiDPI text.
 - **iOS on a real device.** The simulator works (see above); a device build
   (`tools/export_ios.sh <project> device`) is produced unsigned and has never
   been installed. Touch control (`ace.pointer`, hold to walk) is written but
   has only been exercised with scripted keys, never with a finger or mouse.
 - Vulkan on Android or Linux (Windows/NVIDIA is verified, see above).
-- glTF from real tools. `assets/pine.gltf` (hand-written, embedded buffer,
-  two materials) loads and renders, but no Blender/Blockbench export with
-  textures, multiple nodes or skinning has been tried.
+- glTF from real tools. Verified: `assets/pine.gltf` (hand-written, embedded
+  buffer, two materials) and, on 2026-11-21, three binary `.glb` buildings
+  from a script-based exporter (45 materials each, real-world scale): they
+  load with no warnings and Metal = Vulkan pixel-identical. Not yet tried:
+  a Blender or Blockbench export with textures, multiple nodes or skinning.
 - Audio through real speakers (see the Sound item above).
 - Gamepad input (no controller was connected).
 
@@ -290,6 +301,7 @@ build/bin/ace_player projects/pixel_demo --scene scenes/pathtraced.scene.json --
 build/bin/ace_editor projects/pixel_demo --select Tower --screenshot /tmp/c.png   # add --play to capture play mode
 build/bin/ace_player projects/pixel_demo --hold W --frames 420 --screenshot /tmp/e.png   # scripted gameplay
 tools/autotest.sh                     # editor interaction test, Metal then Vulkan
+python3 tools/measure_shimmer.py      # world vs screen pixel stability (RENDERING.md section 7)
 # Windows, from a Developer PowerShell (or after Launch-VsDevShell.ps1 -Arch amd64):
 #   same cmake lines; build\bin\ace_player.exe ... --backend d3d12|vulkan --validation
 #   tools/autotest.sh d3d12 vulkan   (in Git Bash)
@@ -403,11 +415,11 @@ Pitfalls already hit:
 Each task lists what "done" means. Do them in order unless the owner says
 otherwise; ask the owner before installing anything.
 
-1. **Hand-test the editor on macOS** and fix what breaks: every row of the
-   README's editor table, plus resize, Save As, New Scene, play/stop while an
-   entity is selected, and deleting a parent. Load a real glTF model on both
-   backends. Done: all of section 2's "not verified" macOS items are
-   confirmed or fixed.
+1. **Hand-test the editor on macOS** and fix what breaks. The autotest now
+   covers most rows of the README's editor table; what is left needs a person:
+   native dialogs, resize, HiDPI, the feel of the gizmo and camera, and
+   playing the forest with a real mouse. Load a Blender export with textures.
+   Done: section 2's "not verified" macOS items are confirmed or fixed.
 2. ~~Raster shadows~~ done (one 2048 map over the whole scene, sprites cast
    theirs; see the `shortcut:` in `Renderer::fitShadowFrustum` for big levels).
 2a. **World pixels, next steps.** Show the owner and tune `probeResolution` /

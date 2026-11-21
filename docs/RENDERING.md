@@ -211,10 +211,27 @@ tracing a face after 64 unchanged frames. In captures, sprite cards only cast
 shadows, so they face the sun rather than the camera: turning the view never
 changes the geometry or rebuilds the BVH.
 
-Measured on a 60-frame camera orbit at a fixed timestep: the share of pixels
-that change between frames (after the best shift) is 19% (ground) and 10%
-(wall) with world pixels, against 34% and 14% with screen pixels, with no
-spike when the grid probe moves.
+**Measured stability** (`tools/measure_shimmer.py`, reproducible): the village
+camera orbits at 30 degrees per second for 60 frames at 60 Hz; for each pair
+of consecutive frames, the image is compared after the best integer shift
+(up to 4 game pixels), and the share of game pixels that still differ by
+more than 8/255 is averaged, in a ground region and a wall region (HUD text
+and the hero sprite removed).
+
+| Mode | Ground | Wall |
+| --- | --- | --- |
+| World pixels | 35.7% | 24.5% |
+| World pixels without the depth tie-break | 35.6% | 24.4% |
+| Screen pixels | 39.2% | 26.0% |
+
+How to read it: during an orbit most of the change is real (parallax and
+perspective change the picture, and no shift can undo that), so the metric
+has a high floor. World pixels lower it modestly; the depth tie-break
+(section 11) made no difference here. The metric does not separate the
+specific artifact world pixels remove (pixels sliding over a surface) from
+legitimate change; a better test would track fixed surface points across
+frames. Older figures (19% / 10% vs 34% / 14%) came from an undocumented
+one-off measurement and are withdrawn.
 
 ## 8. Path tracer (`path_tracer.*`, `pathtrace.slang`)
 
@@ -353,7 +370,7 @@ often under load; treat as relative numbers):
 | Configuration | Frame time |
 | --- | --- |
 | Screen pixels, raster | ~5 ms |
-| World pixels, raster (village) | 10.0 ms Metal, 13.3 ms Vulkan |
+| World pixels, raster (village) | 9.1 ms Metal, 8.4 ms Vulkan (load average ~4.5; earlier, at load ~10 and before Vulkan framebuffer caching: 10.0 and 13.3 ms) |
 | World pixels, path traced, still camera (village) | 16.5 ms (settles, then costs little) |
 | Forest, walking, raster world pixels | 15 ms |
 | Forest, walking, path traced, 320 texels, 1 bounce (shipped settings) | ~60 ms |

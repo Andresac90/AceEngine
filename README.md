@@ -105,8 +105,8 @@ The demo's `scenes/village.scene.json` is the reference. Two ways to get pixels:
 - **World pixels** (`worldPixels`, used by the demo; perspective cameras): the
   scene is captured into small cube maps around a point snapped to a world
   grid, and every captured pixel is drawn as a little square *in the 3D world*.
-  The pixels belong to the world, so they don't swim or shimmer when the camera
-  turns or moves. `probeResolution` sets their size (384 per cube face by
+  The pixels belong to the world, so they stay attached to surfaces instead
+  of sliding over them when the camera turns or moves. `probeResolution` sets their size (384 per cube face by
   default; lower = chunkier), `probeCell` how far you walk before the pixel grid
   re-centres (with a quick dissolve). This is the technique of Dylan Ebert's
   [Texel Splatting](https://dylanebert.com/texel-splatting/) paper.
@@ -166,6 +166,7 @@ Windows and Android export are not done yet; the plan is in docs/HANDOFF.md.
 build/bin/ace_tests                 # CPU-side unit tests (or ctest --test-dir build)
 tools/autotest.sh                   # scripted editor interaction test: metal + vulkan on macOS,
                                     # tools/autotest.sh d3d12 vulkan on Windows (Git Bash)
+python3 tools/measure_shimmer.py    # frame-to-frame pixel change, world vs screen pixels
 ```
 
 Rendering changes are checked by taking `--screenshot` images on every backend
