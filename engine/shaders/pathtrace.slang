@@ -14,14 +14,13 @@ struct TraceData {
   float4x4 view;
   float4 lightDir;
   float4 lightColor;
-  float4 skyTop;
-  float4 skyBottom;
   float4 params;    // x: accumulated frames, y: samples per pixel, z: bounces, w: toon bands
   float4 lightInfo; // x: number of emissive triangles, y: texels per world unit, z: texel-space lighting on, w: primary rays skip sprites
   float4 ramp;      // x: ramp shading on, y: shadow steps, z: luminance of a fully lit white surface
   float4 pointInfo; // x: number of point lights
   float4 pointPosition[8]; // xyz: position, w: range
   float4 pointColor[8];    // rgb * intensity
+  Atmosphere atmosphere;   // the same sky the present pass draws, so bounce light matches it
 };
 struct BvhNode {
   float4 minLeft;  // xyz: box min, w (bits): left child, or first triangle for leaves
@@ -176,7 +175,6 @@ bool trace(float3 origin, float3 dir, float tMax, bool anyHit, out Hit hit, bool
   return found;
 }
 
-float3 skyColor(float3 dir) { return lerp(data.skyBottom.rgb, data.skyTop.rgb, saturate(dir.y * 0.5 + 0.5)); }
 
 float3 shadingNormal(Triangle tri, Hit hit, float3 dir) {
   float3 n = normalize(tri.n0.xyz * (1.0 - hit.u - hit.v) + tri.n1.xyz * hit.u + tri.n2.xyz * hit.v);
@@ -323,7 +321,7 @@ FsOut fsMain(VsOut i) {
       float3 next = cosineSample(sprite ? data.lightDir.xyz : n, rng);
       Hit h;
       if (!trace(pos + offset, next, 1e30, false, h)) {
-        radiance += throughput * skyColor(next);
+        radiance += throughput * skyRadiance(data.atmosphere, next, false);
         break;
       }
       tri = triangles[h.tri];

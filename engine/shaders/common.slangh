@@ -110,8 +110,10 @@ float fbm(float2 p) {
   return v;
 }
 
-// What the sky looks like in direction `dir` (unit length).
-float3 skyRadiance(Atmosphere a, float3 dir) {
+// What the sky looks like in direction `dir` (unit length). `sunDisc` = false
+// leaves out the disc: the path tracer samples the sun directly, so a bounce
+// ray that also counted the disc would add its light twice.
+float3 skyRadiance(Atmosphere a, float3 dir, bool sunDisc = true) {
   float h = dir.y;
   // Most of the change happens near the horizon, where low cameras look.
   float3 sky = lerp(a.skyBottom.rgb, a.skyTop.rgb, saturate(sqrt(max(h, 0.0)) * 1.35));
@@ -133,7 +135,7 @@ float3 skyRadiance(Atmosphere a, float3 dir) {
   }
   // Sun: a disc and a soft glow around it.
   sky += sunTint * a.sunColor.w * (pow(saturate(s), 10.0) * 0.45 + pow(saturate(s), 120.0) * 0.8);
-  if (s > a.sunDir.w) sky = lerp(sky, sunTint * 1.6 + 0.4, 0.9);
+  if (sunDisc && s > a.sunDir.w) sky = lerp(sky, sunTint * 1.6 + 0.4, 0.9);
   // Clouds: noise on a ceiling, thick parts darker and cooler, the sun side warm.
   if (a.clouds.x > 0.0 && h > 0.0) {
     float2 uv = dir.xz / (h + 0.12) * a.clouds.y + float2(a.clouds.z, a.clouds.z * 0.37);

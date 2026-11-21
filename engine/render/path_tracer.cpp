@@ -11,9 +11,10 @@ using namespace rhi;
 namespace {
 struct TraceData {
   mat4 invViewProj, view;
-  vec4 lightDir, lightColor, skyTop, skyBottom, params, lightInfo, ramp;
+  vec4 lightDir, lightColor, params, lightInfo, ramp;
   vec4 pointInfo;
   vec4 pointPosition[8], pointColor[8];
+  Atmosphere atmosphere;
 };
 constexpr u32 kAtlasSize = 1024;
 constexpr u32 kMovingHistoryFrames = 6;
@@ -436,8 +437,9 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     d.pointColor[i] = vec4(toLinear(l.color) * l.intensity, 0);
   }
   d.pointInfo = vec4((f32)lampCount, 0, 0, 0);
-  d.skyTop = vec4(toLinear(scene.settings.skyTop), 0);
-  d.skyBottom = vec4(toLinear(scene.settings.skyBottom), 0);
+  // Clouds frozen at time 0: their slow drift would change this data every
+  // frame and restart the accumulation; it is invisible in the bounce light.
+  d.atmosphere = makeAtmosphere(scene, 0.0);
   d.params = vec4(0, (f32)(target.samples > 0 ? target.samples : scene.settings.ptSamples), (f32)scene.settings.ptBounces, (f32)scene.settings.toonBands);
 
   d.lightInfo = vec4((f32)lightCount_, (f32)std::max(scene.settings.texelsPerUnit, 1), scene.settings.texelLighting ? 1.0f : 0.0f,
