@@ -1,7 +1,7 @@
 # AceEngine handoff manual
 
 For the next engineer (human or model) continuing this work. Read this whole
-file before changing anything. Last updated 2026-11-18, branch `main`.
+file before changing anything. Last updated 2026-11-21, branch `main`.
 
 ## 1. What the owner asked for
 
@@ -48,7 +48,7 @@ Decisions the owner made explicitly (do not revisit without asking):
 | Shaders | **Slang** as the single source language |
 | Old OpenGL exercises | Removed (they are in git history before `5bbfab7`) |
 | Git | Commit locally on `main` (since 2026-11-18; `engine-v2` was merged and retired); **the owner does every push**; no AI co-author lines in commit messages |
-| Installing tools | Ask first. Approved so far: cmake, ninja, the four Vulkan brew packages, the Slang release in `~/.cache/ace/slang` |
+| Installing tools | Ask first. Approved so far: cmake, ninja, the four Vulkan brew packages, the Slang release in `~/.cache/ace/slang`; on Windows the LunarG Vulkan SDK (winget `KhronosGroup.VulkanSDK`) |
 
 SDL3 is used for window/input/files only (never for rendering). That choice
 was mine, not the owner's; it keeps five platforms' windowing out of scope.
@@ -180,6 +180,26 @@ looking at screenshots produced with `--screenshot`:
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
 
+- **Windows (2026-11-21, Windows 11, RTX 5070 Ti Laptop + Intel iGPU, MSVC
+  14.50 from VS 2026 Build Tools, Vulkan SDK 1.4.363).** The whole engine
+  builds warning-free with MSVC on the first try; `ace_tests` passes; the
+  DXIL rule in `cmake/Shaders.cmake` works. **D3D12 and Vulkan** both run
+  section 4's verify commands plus `village` (world pixels) and
+  `projects/forest` (path-traced world pixels) with **zero validation
+  messages** (D3D12 debug layer, `VK_LAYER_KHRONOS_validation`), and
+  `tools/autotest.sh d3d12 vulkan` passes in Git Bash. Images look right.
+  D3D12 picks the high-performance GPU (`EnumAdapterByGpuPreference`) and
+  filters the "no optimized clear value" hint (clear colors are per pass).
+  D3D12 vs Vulkan are *not* pixel-identical, unlike Metal vs MoltenVK
+  (which share Apple's compiler): the raster `main` scene differs on 0.003%
+  of pixels (max 54/255, float rounding between DXC and NVIDIA's SPIR-V
+  compiler); palette scenes differ on ~0.4% of pixels, isolated single pixels
+  where that rounding crosses a palette/dither threshold. Each backend is
+  deterministic run to run. Not checked: the editor/player by hand on
+  Windows, AMD GPUs, the Intel iGPU under Vulkan, Windows export.
+  Build from a shell with the VS environment (Developer PowerShell, or
+  `Launch-VsDevShell.ps1 -Arch amd64`) and `VULKAN_SDK` set.
+
 **Not verified — treat as unknown until someone tries it:**
 
 - Editor interactions the autotest does not cover: pan, drag-and-drop
@@ -189,7 +209,7 @@ looking at screenshots produced with `--screenshot`:
   (`tools/export_ios.sh <project> device`) is produced unsigned and has never
   been installed. Touch control (`ace.pointer`, hold to walk) is written but
   has only been exercised with scripted keys, never with a finger or mouse.
-- Vulkan on a real Vulkan driver (Android, Windows, Linux). Only MoltenVK ran.
+- Vulkan on Android or Linux (Windows/NVIDIA is verified, see above).
 - glTF from real tools. `assets/pine.gltf` (hand-written, embedded buffer,
   two materials) loads and renders, but no Blender/Blockbench export with
   textures, multiple nodes or skinning has been tried.
@@ -198,14 +218,8 @@ looking at screenshots produced with `--screenshot`:
 
 **Not written at all:**
 
-- **D3D12 backend: written, never run.** `engine/rhi/d3d12/d3d12_device.cpp`
-  (header comment explains the mapping). It was only compile-checked on macOS
-  against MinGW's Windows headers (warning-free, all imports resolve; command
-  in section 4); no Windows machine has built or run it, and
-  `cmake/Shaders.cmake`'s DXIL rule (slangc + dxcompiler) is untested.
-- Windows and Linux builds have never been attempted (the GCC-only
-  `format` attribute in `core/base.h` is already guarded for MSVC; expect other
-  MSVC errors). The editor's Export menu uses `popen` and is disabled on Windows.
+- A Linux build has never been attempted. The editor's Export menu uses
+  `popen` and is disabled on Windows.
 - Android build and packaging (the NDK and a JDK are not installed here).
 - Rigid-body physics, skeletal animation, tilemaps, particles, point/spot
   lights in the raster renderer, OGG/MP3 audio, UI images/panels.
@@ -430,7 +444,7 @@ otherwise; ask the owner before installing anything.
    BLAS built once + TLAS rebuilt per frame) so moving objects are cheap; then
    a denoiser. Hardware ray tracing (Metal/Vulkan/DXR ray queries) is a later
    optimization behind the same interface, not a prerequisite.
-4. **D3D12 backend: bring-up on Windows.** The backend is written
+4. ~~**D3D12 backend: bring-up on Windows.**~~ Done 2026-11-21 (see section 2). The backend is written
    (`engine/rhi/d3d12/d3d12_device.cpp`): uniform buffers are root CBVs and
    storage buffers root SRVs (dynamic offsets = address + offset), textures
    and samplers are one descriptor-table block per bind group, one root

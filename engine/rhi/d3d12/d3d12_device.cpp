@@ -27,7 +27,7 @@
 #endif
 #include <windows.h>
 #include <d3d12.h>
-#include <dxgi1_4.h>
+#include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -227,9 +227,16 @@ public:
       }
     }
     ACE_HR(CreateDXGIFactory2(factoryFlags, IID_PPV_ARGS(&factory_)), "CreateDXGIFactory2");
-    // The first hardware adapter that supports D3D12 (feature level 11.0 is enough).
+    // The first hardware adapter that supports D3D12 (feature level 11.0 is enough),
+    // discrete GPU first: laptops list the integrated one first otherwise.
+    ComPtr<IDXGIFactory6> factory6;
+    factory_.As(&factory6);
+    auto enumAdapter = [&](UINT i, ComPtr<IDXGIAdapter1>& a) {
+      if (factory6) return factory6->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&a));
+      return factory_->EnumAdapters1(i, &a);
+    };
     ComPtr<IDXGIAdapter1> adapter;
-    for (UINT i = 0; factory_->EnumAdapters1(i, &adapter) != DXGI_ERROR_NOT_FOUND; i++) {
+    for (UINT i = 0; enumAdapter(i, adapter) != DXGI_ERROR_NOT_FOUND; i++) {
       DXGI_ADAPTER_DESC1 ad;
       adapter->GetDesc1(&ad);
       if (ad.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) continue;
@@ -241,7 +248,16 @@ public:
       }
     }
     ACE_ASSERT(device_, "no Direct3D 12 capable GPU found");
-    if (desc.validation) device_.As(&infoQueue_);
+    if (desc.validation && SUCCEEDED(device_.As(&infoQueue_))) {
+      // Clear colors are chosen per pass (RenderPassDesc), not at texture creation,
+      // so the "no optimized clear value" performance hint would fire on every clear.
+      D3D12_MESSAGE_ID deny[] = {D3D12_MESSAGE_ID_CLEARRENDERTARGETVIEW_MISMATCHINGCLEARVALUE,
+                                 D3D12_MESSAGE_ID_CLEARDEPTHSTENCILVIEW_MISMATCHINGCLEARVALUE};
+      D3D12_INFO_QUEUE_FILTER filter{};
+      filter.DenyList.NumIDs = (UINT)std::size(deny);
+      filter.DenyList.pIDList = deny;
+      infoQueue_->AddStorageFilterEntries(&filter);
+    }
 
     D3D12_COMMAND_QUEUE_DESC qd{};
     qd.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
