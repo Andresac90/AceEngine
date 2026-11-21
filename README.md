@@ -4,7 +4,7 @@ A small cross-platform game engine for stylized 2D and 3D games, with a level
 editor. First target look: 3D pixel art (low-resolution render, toon shading,
 outlines, optional path tracing).
 
-Status: early but usable on macOS. See [docs/HANDOFF.md](docs/HANDOFF.md) for
+Status: early but usable on macOS and Windows. See [docs/HANDOFF.md](docs/HANDOFF.md) for
 exactly what works, what is untested and what is missing.
 
 ## Build (macOS)
@@ -21,12 +21,33 @@ ctest --test-dir build          # CPU-side unit tests
 The first configure downloads the pinned dependencies and the Slang shader
 compiler into `build/` (Slang is reused from `~/.cache/ace/slang` if present).
 
+## Build (Windows)
+
+Requirements: Visual Studio 2022 or newer (or its Build Tools) with "Desktop
+development with C++" and "C++ CMake tools for Windows". Optional, for the
+Vulkan backend: the Vulkan SDK (`winget install KhronosGroup.VulkanSDK`). To
+see D3D12's error messages with `--validation`, add **Graphics Tools** under
+Settings > System > Optional features.
+
+From a "Developer PowerShell for VS" in the repo folder:
+
+```sh
+cmake -S . -B build -G Ninja
+cmake --build build
+build\bin\ace_tests.exe
+```
+
 ## Run
 
 **As a Mac app:** `tools/make_editor_app.sh` builds `build-export/AceEngine.app`.
 Double-click it (or drag it to Applications). It reopens your last project; the
 first time, or from **File > Open Project...**, pick a project folder, or an
 empty folder to start a new project. It asks before closing with unsaved changes.
+
+**As a Windows program:** `powershell -ExecutionPolicy Bypass -File
+tools\make_editor_windows.ps1` builds `build-export\AceEngine\AceEngine.exe`
+(no console window, uses D3D12) and adds **AceEngine** to the Start menu. It
+behaves like the Mac app. File > Export is not available on Windows yet.
 
 **From a terminal:**
 
@@ -37,7 +58,8 @@ build/bin/ace_player projects/forest         # first-person open-world forest an
 build/bin/ace_editor --new ~/games/my_game   # create and open a new project
 ```
 
-Add `--backend vulkan` (or `metal`) to pick the GPU backend.
+Add `--backend vulkan` (or `metal`, `d3d12`) to pick the GPU backend. The default
+is Metal on Apple platforms and D3D12 on Windows.
 
 ## Editor
 
@@ -130,7 +152,7 @@ Windows and Android export are not done yet; the plan is in docs/HANDOFF.md.
 
 ```
 engine/core      types, logging, math
-engine/rhi       GPU interface + Metal and Vulkan backends
+engine/rhi       GPU interface + Metal, Vulkan and D3D12 backends
 engine/render    renderer (raster + path traced scene passes, present pass)
 engine/scene     entities, components, reflection, serialization
 engine/assets    meshes and textures

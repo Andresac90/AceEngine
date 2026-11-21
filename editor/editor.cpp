@@ -315,9 +315,12 @@ void Editor::openInCodeEditor(const std::string& file) {
     if (posix_spawnp(&pid, "open", nullptr, nullptr, (char* const*)args, nullptr) == 0) return;
   }
 #endif
+  // file:///C:/dir/x.lua on Windows, file:///dir/x.lua elsewhere.
+  std::string path = std::filesystem::absolute(file).generic_string();
+  if (path.empty() || path[0] != '/') path = "/" + path;
   std::string url = "file://";
-  for (unsigned char c : std::filesystem::absolute(file).string()) { // percent-encode all but safe characters
-    if (isalnum(c) || strchr("/-_.~", c)) url += (char)c;
+  for (unsigned char c : path) { // percent-encode all but safe characters
+    if (isalnum(c) || strchr("/-_.~:", c)) url += (char)c;
     else {
       char hex[4];
       snprintf(hex, sizeof(hex), "%%%02X", c);

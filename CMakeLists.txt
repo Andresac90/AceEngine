@@ -1,13 +1,16 @@
 cmake_minimum_required(VERSION 3.24)
+# Before project(): with MSVC, project() itself caches Debug as the default,
+# which builds slowly and needs Visual Studio's debug runtime DLLs to run.
+# (Multi-config generators ignore this.)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type")
+endif()
 project(AceEngine VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-  set(CMAKE_BUILD_TYPE RelWithDebInfo)
-endif()
 
 # Which GPU backends to compile. Each platform enables what it can run.
 if(APPLE)

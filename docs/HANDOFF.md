@@ -182,23 +182,46 @@ looking at screenshots produced with `--screenshot`:
 
 - **Windows (2026-11-21, Windows 11, RTX 5070 Ti Laptop + Intel iGPU, MSVC
   14.50 from VS 2026 Build Tools, Vulkan SDK 1.4.363).** The whole engine
-  builds warning-free with MSVC on the first try; `ace_tests` passes; the
-  DXIL rule in `cmake/Shaders.cmake` works. **D3D12 and Vulkan** both run
-  section 4's verify commands plus `village` (world pixels) and
-  `projects/forest` (path-traced world pixels) with **zero validation
-  messages** (D3D12 debug layer, `VK_LAYER_KHRONOS_validation`), and
-  `tools/autotest.sh d3d12 vulkan` passes in Git Bash. Images look right.
-  D3D12 picks the high-performance GPU (`EnumAdapterByGpuPreference`) and
-  filters the "no optimized clear value" hint (clear colors are per pass).
-  D3D12 vs Vulkan are *not* pixel-identical, unlike Metal vs MoltenVK
-  (which share Apple's compiler): the raster `main` scene differs on 0.003%
-  of pixels (max 54/255, float rounding between DXC and NVIDIA's SPIR-V
-  compiler); palette scenes differ on ~0.4% of pixels, isolated single pixels
-  where that rounding crosses a palette/dither threshold. Each backend is
-  deterministic run to run. Not checked: the editor/player by hand on
-  Windows, AMD GPUs, the Intel iGPU under Vulkan, Windows export.
-  Build from a shell with the VS environment (Developer PowerShell, or
-  `Launch-VsDevShell.ps1 -Arch amd64`) and `VULKAN_SDK` set.
+  builds warning-free with MSVC; `ace_tests` passes; the DXIL rule in
+  `cmake/Shaders.cmake` works. **D3D12 and Vulkan** both run section 4's
+  verify commands plus `village` (world pixels) and `projects/forest`
+  (path-traced world pixels) with **zero validation messages** (D3D12 debug
+  layer, `VK_LAYER_KHRONOS_validation`), and `tools/autotest.sh d3d12 vulkan`
+  passes in Git Bash. Images look right. D3D12 picks the high-performance GPU
+  (`EnumAdapterByGpuPreference`; the Intel iGPU is listed first) and filters
+  the "no optimized clear value" hint (clear colors are per pass).
+- **D3D12 vs Vulkan images** (same GPU, `--fixed-dt 0.0166667`; time-based
+  scenes differ otherwise). Each backend is deterministic run to run. Share of
+  pixels that differ: `main` 0.003% (max 54/255), path traced at most 1/255,
+  `village` and the scripted walk 0.001%, editor 0.02%, `forest` 0.3%.
+  Why they are not identical, when Metal and MoltenVK were: those two share
+  Apple's shader compiler; here DXC and NVIDIA's SPIR-V compiler round the
+  last bits differently, and any hard decision near a boundary can flip.
+  The big one was in world pixels (`village` was 0.4%; 0.000% with
+  `worldPixels` off): splat squares are 2% oversized and nearly coplanar, so
+  the depth test in the overlap was decided by rounding noise, i.e.
+  z-fighting. `texel_splat.slang` now pushes each texel of a 2x2 block back
+  by a different fixed amount (0.05% of the camera distance per step, along
+  the camera ray so the square does not move on screen); 0.4% -> 0.001%.
+  The forest's remaining 0.3% is in the sky: stars placed by `atan2`/`asin`
+  cells (precision is unspecified on every API) and dither dots at cloud
+  edges where smooth noise sits on a palette/dither threshold. Side by side
+  they look the same; making them exact would need exact cross-GPU math, so
+  this is accepted.
+- **Windows editor program**: `tools/make_editor_windows.ps1` (Release,
+  `ACE_EDITOR_WINDOWED=ON` = no console, icon from `editor/resources/editor.rc`
+  + `AppIcon.ico`, both from `tools/make_app_icon.py`) -> `build-export\AceEngine\`
+  and a Start menu shortcut. Started from another folder it found its shaders
+  and rendered. Release runtime only (`MSVCP140.dll`, from the VC++
+  redistributable); `vulkan-1.dll` is delay-loaded so PCs without a Vulkan
+  driver still start on D3D12. Settings live in `%APPDATA%\AceEngine\Editor\`.
+  Not checked by hand: the folder picker, Open script (now builds
+  `file:///C:/...` URLs), the unsaved-changes dialog, HiDPI (no
+  `SDL_WINDOW_HIGH_PIXEL_DENSITY`, so Windows may scale the window blurrily).
+- Not checked on Windows: playing or editing by hand, AMD GPUs, the Intel
+  iGPU under Vulkan, Windows export. **For the Mac:** re-check Metal = Vulkan
+  on `village` after the splat tie-break and re-measure the world-pixel
+  shimmer numbers above (the tie-break should lower them; not measured).
 
 **Not verified — treat as unknown until someone tries it:**
 
@@ -332,6 +355,9 @@ build/bin/ace_player projects/pixel_demo --scene scenes/pathtraced.scene.json --
 build/bin/ace_editor projects/pixel_demo --select Tower --screenshot /tmp/c.png   # add --play to capture play mode
 build/bin/ace_player projects/pixel_demo --hold W --frames 420 --screenshot /tmp/e.png   # scripted gameplay
 tools/autotest.sh                     # editor interaction test, Metal then Vulkan
+# Windows, from a Developer PowerShell (or after Launch-VsDevShell.ps1 -Arch amd64):
+#   same cmake lines; build\bin\ace_player.exe ... --backend d3d12|vulkan --validation
+#   tools/autotest.sh d3d12 vulkan   (in Git Bash)
 # D3D12 compile check on macOS (no run; needs `brew install mingw-w64`, must print nothing):
 x86_64-w64-mingw32-g++ -std=c++20 -fsyntax-only -Wall -Wextra -Wno-unused-parameter \
   -Wno-missing-field-initializers -DACE_RHI_D3D12=1 -DACE_RHI_METAL=0 -DACE_RHI_VULKAN=0 \
@@ -402,6 +428,16 @@ Pitfalls already hit:
 - After `Assets::reload()` or a texture changes size, call
   `Renderer::clearTextureCaches()`: bind groups are cached by texture id and ids
   are reused.
+- MSVC: `project()` caches `CMAKE_BUILD_TYPE=Debug` when none is given, so
+  the RelWithDebInfo default must be set *before* `project()` (it is). A Debug
+  build is slow and needs Visual Studio's debug runtime DLLs to start.
+- `vswhere -latest` may pick a Visual Studio install without the CMake/Ninja
+  component; ask for `Microsoft.VisualStudio.Component.VC.CMake.Project` too.
+- Anything drawn as overlapping, nearly coplanar pieces needs a fixed depth
+  tie-break, or the winner depends on the GPU compiler and flickers.
+- Shader transcendentals (`atan2`, `asin`, `pow`, `sin`) differ between GPU
+  compilers; do not feed them into `floor`/`step` where exact repeatability
+  across backends matters.
 - The editor captures keys through ImGui, which maps Cmd to "Ctrl" on macOS;
   injected test input must send `ImGuiMod_Super` there.
 
@@ -458,7 +494,10 @@ otherwise; ask the owner before installing anything.
    the DXIL rule in `cmake/Shaders.cmake`, then run with `--validation`
    until it prints nothing. Done: the four verify commands produce the same
    images with `--backend d3d12` as with Metal.
-5. **Windows export** (zip of `ace_player.exe`, `ace_data`, `project/`), then
+5. **Windows export** (zip of `ace_player.exe`, `ace_data`, `project/`; link
+   the C runtime statically or ship the VC++ redistributable; the editor's
+   Export menu needs a replacement for `popen` + shell scripts, e.g.
+   `SDL_CreateProcess` and a PowerShell script), then
    **iOS** (simulator export works; remaining: device signing, testing touch
    with a finger, an app icon and launch screen), **Android** (Gradle project using SDL3's `android-project` template;
    assets inside the APK are already readable because all file reads go through
