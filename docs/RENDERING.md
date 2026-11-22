@@ -21,17 +21,8 @@ Contents:
 13. Known limitations
 14. References
 
-Terms used throughout:
-
-| Term | Meaning |
-| --- | --- |
-| Game pixel | one pixel of the low-resolution image, before integer upscaling |
-| Texel | one pixel of a texture; with `worldTexels`, a fixed size in the world (1 / `texelsPerUnit` units) |
-| World pixels | the mode where every pixel is a small square placed in the 3D world (section 7) |
-| Probe | a point from which the scene is captured into a cube map (6 faces) |
-| Splat | the world-space square drawn for one captured probe texel |
-| Ramp | one row of the palette image: hand-picked colors from dark to light, used instead of darkening a color |
-| Slot | one image the path tracer accumulates over time (the screen, or one probe face) |
+New to a term? Every one used here is defined in [GLOSSARY.md](GLOSSARY.md),
+grouped by topic.
 
 ## 1. Goals
 

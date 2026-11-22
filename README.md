@@ -14,6 +14,7 @@ Documentation:
 | --- | --- |
 | This README | building, running, using the editor and making pixel art |
 | [docs/RENDERING.md](docs/RENDERING.md) | how the renderer works: RHI and backends, world pixels, path tracer, measurements, limits |
+| [docs/GLOSSARY.md](docs/GLOSSARY.md) | every technical term used in the docs, explained, grouped by topic (start here to study) |
 | [docs/SCRIPTING.md](docs/SCRIPTING.md) | the Lua gameplay API |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | project state: decisions, what is verified, working rules, pitfalls, roadmap |
 

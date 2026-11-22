@@ -5,7 +5,8 @@ file before changing anything. Last updated 2026-11-21, branch `main`.
 
 Contents: 1. What the owner asked for · 2. State of the build (verified vs
 not) · 3. Architecture · 4. Build, run, verify · 5. Working rules and
-pitfalls · 6. Roadmap. How the renderer works is in [RENDERING.md](RENDERING.md).
+pitfalls · 6. Roadmap. How the renderer works is in [RENDERING.md](RENDERING.md);
+terms are explained in [GLOSSARY.md](GLOSSARY.md).
 
 ## 1. What the owner asked for
 
