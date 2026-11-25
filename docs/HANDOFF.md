@@ -1,7 +1,7 @@
 # AceEngine handoff manual
 
 For the next engineer (human or model) continuing this work. Read this whole
-file before changing anything. Last updated 2026-11-21, branch `main`.
+file before changing anything. Last updated 2026-11-24, branch `main`.
 
 Contents: 1. What the owner asked for · 2. State of the build (verified vs
 not) · 3. Architecture · 4. Build, run, verify · 5. Working rules and
@@ -106,7 +106,9 @@ Backend status at a glance (2026-11-21):
   causes and fixes: RENDERING.md section 11.
 - Not checked on Windows: playing or editing by hand, AMD GPUs, the Intel
   iGPU (D3D12 or Vulkan), Windows export, the path-tracer sky change
-  (`7c11429`) and the autotest steps added on 2026-11-21 (45-86).
+  (`7c11429`), the autotest steps added on 2026-11-21 (45-86), and the
+  2026-11-24 editor redesign (D3D12 build, look, autotest steps 87-106;
+  Windows HiDPI may still scale the window blurrily, see below).
 - **Mac re-check after the Windows changes (2026-11-21):** Metal = Vulkan
   still pixel-identical on `main`, `village`, `pathtraced`; `forest` 0.005%;
   zero validation messages; tests and autotest pass on both.
@@ -139,9 +141,21 @@ Backend status at a glance (2026-11-21):
 
 ### Editor and tools
 
-- Editor: default dock layout, hierarchy with children, inspector, transform
-  gizmo drawn on a selected entity, asset list, play mode running Lua scripts
-  from the scene camera.
+- Editor (redesigned 2026-11-24, owner's request: not the stock ImGui look other
+  AI-made engines share). Viewport-first: the scene fills the window; Scene
+  list, Inspector/Render/Palette, the tool rail, a view overlay and the
+  Assets/Console drawer float over it as notched "pixel" cards; a top bar
+  (menus, transport, command palette entry) and a status bar (selection,
+  context hints, latest log line). Command palette (Cmd/Ctrl+K: actions,
+  entities, files; fuzzy). Scene list: search, type icons, locks, rename in
+  place, identical leaf siblings folded into one row (3+). Inspector: label
+  column, colored X/Y/Z drags, a reset arrow when a value differs from a
+  default-constructed component, searchable Add component. Asset drawer:
+  folders, nearest-filtered thumbnails, list/grid, search. Dropping assets on
+  the viewport places meshes/prefabs on the surface or applies textures and
+  scripts to the entity under the cursor. Play mode draws a colored frame;
+  F6 pauses. Crisp HiDPI text (fonts rasterized at the window's pixel
+  density). Owner's choices: viewport-first layout, warm pixel-art style.
 - `tools/export_macos.sh`: produces a self-contained `.app` (system libraries
   only) that runs from another working directory.
 - Unit tests (`build/bin/ace_tests`, also `ctest --test-dir build`): scene
@@ -164,7 +178,10 @@ Backend status at a glance (2026-11-21):
   selecting a light by clicking its viewport icon, middle-drag pan,
   Hierarchy drag and drop (re-parent, back to the root), dragging an asset
   onto a texture field, renaming in the Name field, Entity > Cube, File >
-  Save Scene As with a typed path, and File > New Scene (87 steps). Widgets
+  Save Scene As with a typed path, File > New Scene, then (2026-11-24) the
+  command palette, a texture dropped on an entity in the viewport, a locked
+  entity ignoring clicks, a folded group selecting all, Scene search, and
+  hiding the panels (107 steps). Widgets
   are found through rectangles the editor records only during the test
   (`Editor::testRect`). The test was checked to fail when a feature breaks
   (Hierarchy drop disabled: it stops at step 54).
@@ -287,8 +304,12 @@ Parents are saved as indices into the entity array.
 
 ### Editor (`editor/editor.cpp`)
 
-Dear ImGui (docking) drawn through the RHI by `editor/imgui_rhi.cpp`, so it
-works on any backend. Undo is whole-scene JSON snapshots taken in `commit()`
+Dear ImGui drawn through the RHI by `editor/imgui_rhi.cpp`, so it works on
+any backend. Docking is off: the layout is fixed (cards placed each frame from
+the work area; their widths and the drawer height persist in `imgui.ini`).
+`editor/theme.*` holds the palette, fonts (Karla, Cousine and the engine's 5x7
+pixel font baked into the atlas as custom glyphs) and 9x9 pixel icons;
+`editor/ui_text.h` the fuzzy match and label helpers (unit-tested). Undo is whole-scene JSON snapshots taken in `commit()`
 after an edit *finishes* (`IsItemDeactivatedAfterEdit`, gizmo release). Play
 mode snapshots the scene and restores it on stop.
 
@@ -386,8 +407,15 @@ Pitfalls already hit:
   (fraction of the camera distance), not clip space: perspective depth is
   nearly 1.0 beyond a few metres, so a clip-space push sends splats to the far
   plane and they vanish. Orthographic cameras use screen pixels instead.
-- A new editor panel will float off-screen for anyone whose `imgui.ini` predates
-  it; dock it on first use (see `drawPalette`, `SetNextWindowDockID`).
+- Editor text uses Karla, which covers ASCII only: a `·` or `×` renders as `?`.
+  Keep UI strings ASCII (or draw the symbol as a pixel icon).
+- UI colors blend in linear space on sRGB targets, so "almost opaque" is not:
+  a card at alpha 246 let ~10% of a bright sky through. Panels are alpha 255.
+- `ImDrawList::PushClipRectFullScreen` gives +-8192 clip rects; the ImGui
+  renderer clamps scissors to the target (a negative scissor is invalid).
+- ImGui texture ids are RHI texture ids: after `Assets::reload()` or a texture
+  resize, also call `ImGuiRhi::forgetAllTextures()` (after `waitIdle`), or a
+  thumbnail can bind a destroyed texture whose id was reused.
 - After `Assets::reload()` or a texture changes size, call
   `Renderer::clearTextureCaches()`: bind groups are cached by texture id and ids
   are reused.
@@ -476,9 +504,12 @@ otherwise; ask the owner before installing anything.
    verified with `ace_editor <project> --export macos` on a path containing a
    space; prefabs, which are
    independent copies with no live link to the file; multi-select; copy/paste).
+   Done 2026-11-24: the viewport-first redesign (section 2), asset
+   thumbnails, crisp HiDPI fonts.
    Next: box (marquee) selection, a file dialog (`SDL_ShowOpenFileDialog`),
-   crisp fonts on HiDPI displays, a game-resolution preview, asset
-   thumbnails.
+   a game-resolution preview, mesh thumbnails (only images have them), an
+   eye (hide) toggle in the Scene list (needs a renderer flag), locks saved
+   with the scene.
 9. **Engine scale**: replace `Scene::children`' linear scans with cached child
    lists, GPU sub-allocation in Vulkan (VMA) and D3D12 (placed resources or
    D3D12MA), static buffers in GPU-local memory on all backends, frames in
