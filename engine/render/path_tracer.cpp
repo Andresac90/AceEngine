@@ -287,15 +287,19 @@ void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 ca
       const Vertex& b = mesh->vertices[mesh->indices[i + 1]];
       const Vertex& c = mesh->vertices[mesh->indices[i + 2]];
       vec3 p0 = vec3(world * vec4(a.position, 1)), p1 = vec3(world * vec4(b.position, 1)), p2 = vec3(world * vec4(c.position, 1));
+      // Each corner's sRGB vertex color rides in the spare w of v0/e1/e2 as
+      // r + 256 g + 65536 b (exact in a float); the shader interpolates them
+      // like the raster path does. One color per triangle showed every terrain
+      // triangle as a flat patch ("squares") in path-traced images.
+      auto rgb = [](const Vertex& v) { return (f32)v.color[0] + 256.0f * v.color[1] + 65536.0f * v.color[2]; };
       Triangle tri;
-      tri.v0 = vec4(p0, 0);
-      tri.e1 = vec4(p1 - p0, 0);
-      tri.e2 = vec4(p2 - p0, 0);
+      tri.v0 = vec4(p0, rgb(a));
+      tri.e1 = vec4(p1 - p0, rgb(b));
+      tri.e2 = vec4(p2 - p0, rgb(c));
       tri.n0 = vec4(glm::normalize(nm * a.normal), 0);
       tri.n1 = vec4(glm::normalize(nm * b.normal), 0);
       tri.n2 = vec4(glm::normalize(nm * c.normal), 0);
-      // shortcut: one vertex color per triangle (the first vertex's).
-      tri.color = toLinear(color * vec4(a.color[0], a.color[1], a.color[2], a.color[3]) / 255.0f);
+      tri.color = toLinear(color); // the material color; vertex alpha is unused here (cutouts come from textures)
       tri.emissive = vec4(toLinear(emissive), 0);
       auto uv = [&](const Vertex& v) { return v.uv * vec2(uvRect.z, uvRect.w) + vec2(uvRect.x, uvRect.y); };
       tri.uv01 = vec4(uv(a), uv(b));

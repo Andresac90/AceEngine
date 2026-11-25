@@ -267,6 +267,17 @@ change keeps 6 frames of history (less noise, slight ghosting); a slot that
 was not traced in the previous frame restarts, because other modes draw into
 the same targets.
 
+**Surface color** is the material color times the vertex colors, interpolated
+at the hit like the raster path. Each corner's sRGB vertex color is stored in
+the otherwise unused `w` of `v0`/`e1`/`e2` as `r + 256 g + 65536 b` (exact in a
+float, never a NaN pattern). Fixed 2026-11-24: the tracer used only the first
+vertex's color, so on the forest terrain (6.4-unit triangles whose variation
+is in vertex colors) every triangle became one flat patch: hard-edged
+"squares" that raster did not show. Ruled out on the way, each by a debug
+render: shadow rays (removing them changed nothing), the shadow terminator,
+world-pixel probe seams (screen pixels showed the same) and the normals
+(the shading normal is smooth).
+
 **Denoiser.** The tracer writes light, surface color and emission to separate
 targets (demodulation). Three à-trous passes (`pt_denoise.slang`, tap
 spacing 1, 2, 4) smooth only the light, with edge-stopping on normal, depth

@@ -32,7 +32,7 @@ public:
     u32 count;
   };
   struct Triangle {
-    vec4 v0, e1, e2, n0, n1, n2, color, emissive;
+    vec4 v0, e1, e2, n0, n1, n2, color, emissive; // w of v0/e1/e2: packed vertex colors
     vec4 uv01, uv2Flags, atlas; // see pathtrace.slang
   };
   // Builds a BVH in place (reorders `tris`). Exposed for tests.

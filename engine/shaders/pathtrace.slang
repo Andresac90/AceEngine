@@ -27,7 +27,7 @@ struct BvhNode {
   float4 maxCount; // xyz: box max, w (bits): triangle count (0 = interior node)
 };
 struct Triangle {
-  float4 v0, e1, e2;
+  float4 v0, e1, e2; // w: the corner's sRGB vertex color as r + 256 g + 65536 b
   float4 n0, n1, n2;
   float4 color;
   float4 emissive;
@@ -83,6 +83,18 @@ float2 texelAt(Triangle t, float3 pos, float u, float v) {
   }
   float2 uv = t.uv01.xy * (1.0 - u - v) + t.uv01.zw * u + t.uv2Flags.xy * v;
   return floor(uv * t.atlas.zw);
+}
+
+// Linear surface color at barycentrics (u, v): the material color times the
+// interpolated vertex colors, as mesh.slang does (vertex colors are sRGB).
+float3 surfaceColor(Triangle t, float u, float v) {
+  float3 c[3];
+  float packed[3] = {t.v0.w, t.e1.w, t.e2.w};
+  for (int k = 0; k < 3; k++) {
+    uint bits = uint(packed[k]);
+    c[k] = pow(float3(bits & 255u, (bits >> 8) & 255u, (bits >> 16) & 255u) / 255.0, 2.2);
+  }
+  return t.color.rgb * (c[0] * (1.0 - u - v) + c[1] * u + c[2] * v);
 }
 
 // Unfiltered, repeating lookup of the triangle's texture inside the atlas.
@@ -243,7 +255,7 @@ FsOut fsMain(VsOut i) {
 
   float2 ptexel = texelAt(ptri, ppos, primary.u, primary.v);
   // The first surface is traced as white: its color is applied after denoising.
-  o.albedo = float4(ptri.color.rgb * texelColor(ptri, ptexel).rgb, (flagsOf(ptri) & 2) == 0 ? 1.0 : 0.0);
+  o.albedo = float4(surfaceColor(ptri, primary.u, primary.v) * texelColor(ptri, ptexel).rgb, (flagsOf(ptri) & 2) == 0 ? 1.0 : 0.0);
   o.emission = float4(ptri.emissive.rgb, 0.0);
   float3 palbedo = float3(1, 1, 1);
   uint rng = uint(i.position.x) * 1973u + uint(i.position.y) * 9277u + frame * 26699u + 1u;
@@ -327,7 +339,7 @@ FsOut fsMain(VsOut i) {
       tri = triangles[h.tri];
       pos = pos + offset + next * h.t;
       n = shadingNormal(tri, h, next);
-      albedo = tri.color.rgb * texelColor(tri, texelAt(tri, pos, h.u, h.v)).rgb;
+      albedo = surfaceColor(tri, h.u, h.v) * texelColor(tri, texelAt(tri, pos, h.u, h.v)).rgb;
     }
     total += min(radiance, 16.0); // firefly clamp: slightly biased, removes single-pixel sparkles
   }
