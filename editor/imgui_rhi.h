@@ -13,6 +13,9 @@ public:
   void render(rhi::CommandList& cmd, ImDrawData* data);
   static ImTextureID textureId(rhi::TextureHandle t) { return (ImTextureID)t.id; }
   void forgetTexture(rhi::TextureHandle t); // before destroying a texture that was shown
+  // After textures were destroyed elsewhere (asset reload): their ids can be reused.
+  // The GPU must be idle.
+  void forgetAllTextures();
 
 private:
   rhi::Device& device_;

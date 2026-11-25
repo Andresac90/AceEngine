@@ -5,7 +5,7 @@
 //   ace_editor --new <dir>              create a starter project there and open it
 //   options: --backend metal|vulkan|d3d12, --validation,
 //            --export macos|ios-simulator|ios-device   run File > Export, exit when done
-//            --focus <panel>   bring a panel (e.g. Palette) to the front
+//            --focus <panel>   show a panel: Render, Palette, Assets, Console or Commands
 //            --autotest   scripted interaction test; exits non-zero on failure (use a project copy)
 //            --screenshot out.png [--frames N] [--select <entity>] [--play]   (automated UI capture)
 #include "editor.h"

@@ -5,6 +5,7 @@
 #include "assets/assets.h"
 #include "scene/scene.h"
 #include "script/script.h"
+#include "ui_text.h" // editor/
 #include <filesystem>
 
 using namespace ace;
@@ -284,6 +285,17 @@ static void testRaycastMesh() {
   CHECK(raycastMesh(m, world, vec3(0, -5, 0), vec3(0, 1, 0), 100.0f, t) && fabsf(t - 8.0f) < 1e-4f); // from below
 }
 
+static void testUiText() {
+  CHECK(ui::humanize("probeResolution") == "Probe resolution");
+  CHECK(ui::humanize("MeshRenderer") == "Mesh renderer");
+  CHECK(ui::humanize("ptSamples") == "PT samples");
+  CHECK(ui::fuzzyScore("crcu", "Create cube") >= 0);
+  CHECK(ui::fuzzyScore("cubex", "Create cube") < 0);       // every letter must appear, in order
+  CHECK(ui::fuzzyScore("", "anything") >= 0);              // empty query matches everything
+  CHECK(ui::fuzzyScore("sun", "Sun") > ui::fuzzyScore("sun", "Sound unit")); // word starts and runs win
+  CHECK(ui::fuzzyScore("tree", "Tree") > ui::fuzzyScore("tree", "assets/tree_big.gltf")); // shorter wins ties
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
@@ -297,6 +309,7 @@ int main() {
   testCopyPaste();
   testTexelSplatGeometry();
   testRaycastMesh();
+  testUiText();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

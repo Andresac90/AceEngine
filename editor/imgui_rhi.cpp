@@ -19,7 +19,8 @@ ImGuiRhi::ImGuiRhi(Device& device, ShaderHandle vs, ShaderHandle fs, Format targ
   g.entries[0].buffer = ubo_;
   g.entries[0].size = 16;
   uboGroup_ = device_.createBindGroup(g);
-  sampler_ = device_.createSampler({Filter::Linear, AddressMode::ClampToEdge});
+  // Nearest: text is rasterized at display resolution, and pixel-art thumbnails stay sharp.
+  sampler_ = device_.createSampler({Filter::Nearest, AddressMode::ClampToEdge});
 
   PipelineDesc p;
   p.name = "imgui";
@@ -54,6 +55,11 @@ void ImGuiRhi::forgetTexture(TextureHandle t) {
   if (it == textureGroups_.end()) return;
   device_.destroy(it->second);
   textureGroups_.erase(it);
+}
+
+void ImGuiRhi::forgetAllTextures() {
+  for (auto& [id, group] : textureGroups_) device_.destroy(group);
+  textureGroups_.clear();
 }
 
 void ImGuiRhi::render(CommandList& cmd, ImDrawData* data) {
@@ -97,6 +103,9 @@ void ImGuiRhi::render(CommandList& cmd, ImDrawData* data) {
       if (c.UserCallback) continue; // not used by the editor
       ImVec2 min((c.ClipRect.x - data->DisplayPos.x) * data->FramebufferScale.x, (c.ClipRect.y - data->DisplayPos.y) * data->FramebufferScale.y);
       ImVec2 max((c.ClipRect.z - data->DisplayPos.x) * data->FramebufferScale.x, (c.ClipRect.w - data->DisplayPos.y) * data->FramebufferScale.y);
+      // Clamp to the target: a scissor outside it is invalid (PushClipRectFullScreen is +-8192).
+      min = ImVec2(std::max(min.x, 0.0f), std::max(min.y, 0.0f));
+      max = ImVec2(std::min(max.x, fbW), std::min(max.y, fbH));
       if (max.x <= min.x || max.y <= min.y) continue;
       cmd.setScissor((i32)min.x, (i32)min.y, (u32)(max.x - min.x), (u32)(max.y - min.y));
       u32 texId = (u32)c.GetTexID();
