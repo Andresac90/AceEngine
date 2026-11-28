@@ -40,6 +40,7 @@ mat4 uprightCard(const mat4& world, vec3 right);
 
 class PathTracer;
 class TexelSplatter;
+class CrowdRenderer;
 
 // Sky, sun, clouds and haze for the shaders (common.slangh, struct Atmosphere).
 struct Atmosphere {
@@ -89,6 +90,7 @@ public:
   // Copies `size` bytes into this frame's uniform ring; returns the dynamic offset.
   u32 pushUniform(const void* data, u32 size);
   rhi::BufferHandle uniformBuffer() const { return uniforms_; }
+  CrowdRenderer& crowd() { return *crowd_; }
 
 private:
   void ensureTargets(u32 w, u32 h);
@@ -124,6 +126,7 @@ private:
 
   std::unique_ptr<PathTracer> pathTracer_;
   std::unique_ptr<TexelSplatter> splatter_;
+  std::unique_ptr<CrowdRenderer> crowd_;
 
   void drawTexts(rhi::CommandList& cmd, std::span<const TextDraw> texts, rhi::Format targetFormat, u32 width, u32 height, f32 pixelsPerGamePixel);
   rhi::ShaderHandle uiVs_, uiFs_;

@@ -50,23 +50,27 @@ private:
   Renderer& r_;
   rhi::BindGroupLayoutHandle layout_;
   rhi::BindGroupHandle group_;
-  rhi::PipelineHandle pipelines_[2][2]; // [RGBA32F normal/depth][first frame: no blending]
-  // Denoising: per traced image (screen, or a probe atlas), the raw light, the
-  // surface color and glow, and two scratch images for the filter passes.
+  rhi::PipelineHandle pipelines_[2]; // [RGBA32F normal/depth]
+  // Per traced image (screen, or a probe atlas): the accumulated light in two
+  // images used in turn (read last frame's, write this frame's: temporal
+  // reprojection), last frame's normal/depth, the surface color and glow, and
+  // two scratch images for the denoiser.
   struct Buffers {
     vec2 size{0.0f};
     u32 normalDepthId = 0;
-    rhi::TextureHandle light, albedo, emission, scratch[2];
-    rhi::BindGroupHandle denoise[3]; // input: light, scratch[0], scratch[1]
-    rhi::BindGroupHandle compose;
-    u32 composeInput = 0;            // which image compose reads (depends on the pass count)
-    u32 composePalette = 0;          // palette texture compose was bound to
+    rhi::TextureHandle light[2], prevNormalDepth, albedo, emission, scratch[2];
+    rhi::BindGroupHandle reproject[2]; // [parity]: reads light[1 - parity] and prevNormalDepth
+    rhi::BindGroupHandle denoise[2][3]; // [parity][pass input: light[parity], scratch[0], scratch[1]]
+    rhi::BindGroupHandle compose[2];    // [parity]
+    rhi::BindGroupHandle copyNormalDepth;
+    u32 composeInput = 0;               // which image compose reads (depends on the pass count)
+    u32 composePalette = 0;             // palette texture compose was bound to
   };
   Buffers& buffers(const Target& target, bool denoise, rhi::TextureHandle palette);
   void destroy(Buffers& b);
   std::unordered_map<u32, Buffers> buffers_; // by target color texture id
-  rhi::BindGroupLayoutHandle denoiseLayout_, composeLayout_;
-  rhi::PipelineHandle denoisePipeline_, composePipeline_;
+  rhi::BindGroupLayoutHandle denoiseLayout_, composeLayout_, reprojectLayout_, copyLayout_;
+  rhi::PipelineHandle denoisePipeline_, composePipeline_, copyPipelines_[2]; // copy: [RGBA32F]
   rhi::BufferHandle nodeBuffer_, triBuffer_, lightBuffer_;
   u64 nodeCapacity_ = 0, triCapacity_ = 0, lightCapacity_ = 0;
   u32 lightCount_ = 0;
@@ -74,9 +78,13 @@ private:
   rhi::TextureHandle atlas_; // every texture used by the scene, packed side by side
   u64 sceneHash_ = 0;
   struct History {
-    u32 frame = 0;      // frames averaged so far
-    u64 viewHash = 0;   // what was traced: anything else restarts the average
+    u32 frame = 0;      // frames traced since the history last restarted (seeds the random numbers)
+    u32 stillFrames = 0; // frames in a row with the same camera (settling)
+    u64 viewHash = 0;   // what was traced (apart from the camera): anything else restarts the history
     u64 lastFrame = 0;  // Renderer::frameIndex() of the last trace into this slot
+    u32 parity = 0;     // which of Buffers::light this slot writes next
+    bool clamp = false; // the scene changed: shorten every pixel's history once
+    mat4 prevViewProj{1.0f}, prevView{1.0f}; // the camera of the last trace (reprojection)
   };
   std::unordered_map<u32, History> history_;
 };

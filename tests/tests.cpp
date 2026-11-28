@@ -1,4 +1,5 @@
 // CPU-only engine tests (no window or GPU needed). Run with: ctest --test-dir build
+#include "render/crowd.h"
 #include "render/path_tracer.h"
 #include "render/renderer.h"
 #include "render/texel_splat.h"
@@ -296,6 +297,89 @@ static void testUiText() {
   CHECK(ui::fuzzyScore("tree", "Tree") > ui::fuzzyScore("tree", "assets/tree_big.gltf")); // shorter wins ties
 }
 
+// Crowds: the box BVH, pack validation, and the property the whole design
+// rests on: every pose a person can show (any frame, any crossfade weight)
+// stays inside the precomputed pair bounds, so trees built on them never miss.
+static void testCrowd() {
+  using CR = CrowdRenderer;
+  std::vector<Aabb> boxes;
+  u32 seed = 7;
+  auto rnd = [&] { seed = seed * 1664525u + 1013904223u; return (f32)(seed >> 8) / 16777216.0f; };
+  for (int i = 0; i < 300; i++) {
+    vec3 c(rnd() * 50, rnd() * 5, rnd() * 50);
+    boxes.push_back(Aabb{c - vec3(0.3f, 0.9f, 0.3f), c + vec3(0.3f, 0.9f, 0.3f)});
+  }
+  std::vector<u32> order;
+  std::vector<CR::Node> nodes;
+  CR::buildBoxBvh(boxes, order, nodes, 1);
+  std::vector<int> seen(boxes.size(), 0);
+  std::vector<u32> stack{0};
+  while (!stack.empty()) {
+    CR::Node n = nodes[stack.back()];
+    stack.pop_back();
+    if (n.count == 0) {
+      for (u32 c : {n.leftFirst, n.leftFirst + 1}) {
+        CHECK(glm::all(glm::greaterThanEqual(nodes[c].min, n.min)) && glm::all(glm::lessThanEqual(nodes[c].max, n.max)));
+        stack.push_back(c);
+      }
+      continue;
+    }
+    CHECK(n.count == 1);
+    const Aabb& b = boxes[order[n.leftFirst]];
+    CHECK(glm::all(glm::greaterThanEqual(b.min, n.min)) && glm::all(glm::lessThanEqual(b.max, n.max)));
+    seen[order[n.leftFirst]]++;
+  }
+  CHECK(std::all_of(seen.begin(), seen.end(), [](int k) { return k == 1; }));
+  CR::buildBoxBvh({}, order, nodes, 1);
+  CHECK(nodes.size() == 1 && nodes[0].min.x > nodes[0].max.x); // empty root: every ray misses
+
+  // Validation at the trust boundary.
+  CR::Pack pack;
+  std::string error;
+  CHECK(!CR::parsePack(nlohmann::json::parse(R"({"bones": 3})"), pack, error) && !error.empty());
+  nlohmann::json frame = nlohmann::json::array();
+  for (u32 b = 0; b < CR::kBones; b++) frame.push_back({0, 0, 0, 1, 0, 0, 0});
+  nlohmann::json bad = {{"bones", CR::kBones}, {"clips", {{{"name", "idle"}}}}, {"models", {{{"name", "m"}, {"parts", nlohmann::json::array()}}}},
+                        {"poses", {{{frame, nlohmann::json::array({0, 0})}}}}}; // second frame has 2 bones
+  CHECK(!CR::parsePack(bad, pack, error));
+
+  // The shipped pack: random frames of two clips, random crossfade weights.
+  std::vector<u8> bytes;
+  if (!readFile(std::string(ACE_SOURCE_DIR) + "/projects/arena/assets/fans.crowd.json", bytes)) {
+    printf("FAIL: cannot read the arena crowd pack\n");
+    failures++;
+    return;
+  }
+  CHECK(CR::parsePack(nlohmann::json::parse(bytes.begin(), bytes.end()), pack, error));
+  const u32 clips = (u32)pack.clipNames.size();
+  int outside = 0, tested = 0;
+  for (const auto& model : pack.models) {
+    for (int trial = 0; trial < 4000; trial++) {
+      u32 a = (u32)(rnd() * clips) % clips, b = (u32)(rnd() * clips) % clips;
+      const auto& fa = model.clips[a][(size_t)(rnd() * model.clips[a].size()) % model.clips[a].size()];
+      const auto& fb = model.clips[b][(size_t)(rnd() * model.clips[b].size()) % model.clips[b].size()];
+      f32 w = a == b ? 0.0f : rnd();
+      for (const auto& part : model.parts) {
+        quat qa = fa[part.bone].q, qb = glm::dot(qa, fb[part.bone].q) < 0.0f ? -fb[part.bone].q : fb[part.bone].q;
+        quat q = glm::normalize(qa * (1.0f - w) + qb * w); // as crowd.slangh blends
+        vec3 t = glm::mix(fa[part.bone].t, fb[part.bone].t, w);
+        const Aabb& box = model.pairPartBounds[(a * clips + b) * CR::kBones + part.bone];
+        const Aabb& person = model.pairBounds[a * clips + b];
+        for (vec3 p : part.positions) {
+          vec3 x = q * p + t;
+          tested++;
+          if (glm::any(glm::lessThan(x, box.min - 1e-4f)) || glm::any(glm::greaterThan(x, box.max + 1e-4f)) ||
+              glm::any(glm::lessThan(x, person.min - 1e-4f)) || glm::any(glm::greaterThan(x, person.max + 1e-4f)) ||
+              glm::any(glm::lessThan(x, model.bounds.min - 1e-4f)) || glm::any(glm::greaterThan(x, model.bounds.max + 1e-4f)))
+            outside++;
+        }
+      }
+    }
+  }
+  CHECK(tested > 1000000 && outside == 0);
+  if (outside) printf("  %d of %d sampled pose vertices left their bounds\n", outside, tested);
+}
+
 int main() {
   testSceneRoundTrip();
   testSceneTolerantLoad();
@@ -310,6 +394,7 @@ int main() {
   testTexelSplatGeometry();
   testRaycastMesh();
   testUiText();
+  testCrowd();
   printf(failures ? "%d check(s) failed\n" : "all tests passed\n", failures);
   return failures ? 1 : 0;
 }

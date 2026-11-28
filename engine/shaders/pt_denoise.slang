@@ -7,11 +7,11 @@
 
 struct DenoiseData {
   float4 rect;   // region of the texture to filter (a cube face, or the whole image): x, y, width, height
-  float4 params; // x: tap spacing in pixels, y: brightness tolerance (smaller = sharper)
+  float4 params; // x: tap spacing in pixels, y: brightness tolerance for one frame (smaller = sharper)
 };
 
 [[vk::binding(0, 0)]] ConstantBuffer<DenoiseData> data : register(b0, space0);
-[[vk::binding(1, 0)]] Texture2D lightIn : register(t1, space0);
+[[vk::binding(1, 0)]] Texture2D lightIn : register(t1, space0); // a: frames averaged in this pixel
 [[vk::binding(2, 0)]] Texture2D normalDepth : register(t2, space0);
 
 struct VsOut {
@@ -35,7 +35,10 @@ float4 fsMain(VsOut i) : SV_Target0 {
   int step = int(data.params.x);
   int2 lo = int2(data.rect.xy), hi = int2(data.rect.xy + data.rect.zw) - 1; // never cross into another cube face
   float luma = dot(centre.rgb, lumaWeights);
-  float tolerance = max(data.params.y, 1e-4);
+  // Noise falls as 1 / sqrt(frames averaged), and so does the tolerance: a
+  // pixel with little history (just uncovered, or on a moving person) is
+  // smoothed hard, a converged one hardly at all.
+  float tolerance = max(data.params.y / sqrt(max(centre.a, 1.0)), 1e-4);
   float3 sum = 0;
   float weights = 0;
   for (int dy = -2; dy <= 2; dy++) {

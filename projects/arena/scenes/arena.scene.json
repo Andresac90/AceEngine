@@ -1,0 +1,1355 @@
+{
+ "version": 1,
+ "settings": {
+  "pathTraced": true,
+  "worldPixels": false,
+  "pixelArt": true,
+  "pixelHeight": 240,
+  "integerScale": true,
+  "toonBands": 4,
+  "dither": 0.45,
+  "texelLighting": true,
+  "texelsPerUnit": 16,
+  "palette": "assets/palette.png",
+  "rampShading": false,
+  "outlines": true,
+  "outlineStrength": 0.45,
+  "highlightStrength": 0.2,
+  "ambient": [
+   0.1,
+   0.11,
+   0.14
+  ],
+  "skyTop": [
+   0.02,
+   0.02,
+   0.03
+  ],
+  "skyBottom": [
+   0.04,
+   0.04,
+   0.05
+  ],
+  "sunSize": 0.0,
+  "sunGlow": 0.0,
+  "fogDensity": 0.0,
+  "cloudCoverage": 0.0,
+  "stars": 0.0,
+  "ptSamples": 1,
+  "ptBounces": 2,
+  "denoise": true,
+  "exposure": 1.25,
+  "shadows": false
+ },
+ "entities": [
+  {
+   "name": "Camera",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      17,
+      -44
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Camera": {
+     "orthographic": false,
+     "fov": 46,
+     "nearPlane": 0.3,
+     "farPlane": 250
+    },
+    "Script": {
+     "path": "scripts/camera.lua"
+    }
+   }
+  },
+  {
+   "name": "Ice",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/ice.gltf",
+     "texture": "assets/ice.png",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false,
+     "reflectivity": 0.1,
+     "roughness": 0.06
+    }
+   }
+  },
+  {
+   "name": "Floor",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/floor.gltf",
+     "texture": "assets/ice.png",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Boards",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/boards.gltf",
+     "texture": "assets/boards.png",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Bowl",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/bowl.gltf",
+     "texture": "",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Roof",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/roof.gltf",
+     "texture": "",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Light rig",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/rig.gltf",
+     "texture": "",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Flood panels",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/panels.gltf",
+     "texture": "",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      1.0,
+      0.97,
+      0.9
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Ribbon board",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/ribbon.gltf",
+     "texture": "assets/ribbon.png",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Jumbotron",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/jumbotron.gltf",
+     "texture": "",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Jumbotron screens",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/screens.gltf",
+     "texture": "",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      1.4,
+      1.4,
+      1.4
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Goal west",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      -27.13,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0.0,
+      0,
+      1.0
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/goal.gltf",
+     "texture": "",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Goal east",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      27.13,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      1.0,
+      0,
+      6.123233995736766e-17
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "assets/goal.gltf",
+     "texture": "",
+     "color": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  },
+  {
+   "name": "Flood 1",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      -21,
+      25.5,
+      -7
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Light": {
+     "color": [
+      1.0,
+      0.97,
+      0.92
+     ],
+     "intensity": 3.2,
+     "point": true,
+     "range": 64
+    }
+   }
+  },
+  {
+   "name": "Flood 2",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      -21,
+      25.5,
+      7
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Light": {
+     "color": [
+      1.0,
+      0.97,
+      0.92
+     ],
+     "intensity": 3.2,
+     "point": true,
+     "range": 64
+    }
+   }
+  },
+  {
+   "name": "Flood 3",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      -7,
+      25.5,
+      -7
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Light": {
+     "color": [
+      1.0,
+      0.97,
+      0.92
+     ],
+     "intensity": 3.2,
+     "point": true,
+     "range": 64
+    }
+   }
+  },
+  {
+   "name": "Flood 4",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      -7,
+      25.5,
+      7
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Light": {
+     "color": [
+      1.0,
+      0.97,
+      0.92
+     ],
+     "intensity": 3.2,
+     "point": true,
+     "range": 64
+    }
+   }
+  },
+  {
+   "name": "Flood 5",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      7,
+      25.5,
+      -7
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Light": {
+     "color": [
+      1.0,
+      0.97,
+      0.92
+     ],
+     "intensity": 3.2,
+     "point": true,
+     "range": 64
+    }
+   }
+  },
+  {
+   "name": "Flood 6",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      7,
+      25.5,
+      7
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Light": {
+     "color": [
+      1.0,
+      0.97,
+      0.92
+     ],
+     "intensity": 3.2,
+     "point": true,
+     "range": 64
+    }
+   }
+  },
+  {
+   "name": "Flood 7",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      21,
+      25.5,
+      -7
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Light": {
+     "color": [
+      1.0,
+      0.97,
+      0.92
+     ],
+     "intensity": 3.2,
+     "point": true,
+     "range": 64
+    }
+   }
+  },
+  {
+   "name": "Flood 8",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      21,
+      25.5,
+      7
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Light": {
+     "color": [
+      1.0,
+      0.97,
+      0.92
+     ],
+     "intensity": 3.2,
+     "point": true,
+     "range": 64
+    }
+   }
+  },
+  {
+   "name": "Crowd",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "Crowd": {
+     "pack": "assets/fans.crowd.json",
+     "members": "assets/arena.members.json",
+     "speed": 1.0
+    },
+    "Script": {
+     "path": "scripts/showcase.lua"
+    }
+   }
+  },
+  {
+   "name": "Skater 1",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      -10,
+      0,
+      -4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 0,
+     "speed": 1.0,
+     "primary": [
+      0.7607843137254902,
+      0.1843137254901961,
+      0.2
+     ],
+     "secondary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 2",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      -6,
+      0,
+      -4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 0,
+     "speed": 1.0,
+     "primary": [
+      0.7607843137254902,
+      0.1843137254901961,
+      0.2
+     ],
+     "secondary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 3",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      -2,
+      0,
+      -4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 0,
+     "speed": 1.0,
+     "primary": [
+      0.7607843137254902,
+      0.1843137254901961,
+      0.2
+     ],
+     "secondary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 4",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      2,
+      0,
+      -4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 0,
+     "speed": 1.0,
+     "primary": [
+      0.7607843137254902,
+      0.1843137254901961,
+      0.2
+     ],
+     "secondary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 5",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      6,
+      0,
+      -4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 0,
+     "speed": 1.0,
+     "primary": [
+      0.7607843137254902,
+      0.1843137254901961,
+      0.2
+     ],
+     "secondary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 6",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      10,
+      0,
+      4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 1,
+     "speed": 1.0,
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      0.1843137254901961,
+      0.30196078431372547,
+      0.6196078431372549
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 7",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      14,
+      0,
+      4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 1,
+     "speed": 1.0,
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      0.1843137254901961,
+      0.30196078431372547,
+      0.6196078431372549
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 8",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      18,
+      0,
+      4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 1,
+     "speed": 1.0,
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      0.1843137254901961,
+      0.30196078431372547,
+      0.6196078431372549
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 9",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      22,
+      0,
+      4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 1,
+     "speed": 1.0,
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      0.1843137254901961,
+      0.30196078431372547,
+      0.6196078431372549
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Skater 10",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      26,
+      0,
+      4
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      1,
+      1,
+      1
+     ]
+    },
+    "CrowdActor": {
+     "model": 6,
+     "clip": 8,
+     "team": 1,
+     "speed": 1.0,
+     "primary": [
+      1.0,
+      1.0,
+      1.0
+     ],
+     "secondary": [
+      0.1843137254901961,
+      0.30196078431372547,
+      0.6196078431372549
+     ],
+     "accent": [
+      0.047058823529411764,
+      0.050980392156862744,
+      0.07058823529411765
+     ]
+    }
+   }
+  },
+  {
+   "name": "Puck",
+   "parent": -1,
+   "components": {
+    "Transform": {
+     "position": [
+      0,
+      0.0254,
+      0
+     ],
+     "rotation": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "scale": [
+      0.076,
+      0.0254,
+      0.076
+     ]
+    },
+    "MeshRenderer": {
+     "mesh": "builtin:sphere",
+     "texture": "",
+     "color": [
+      0.02,
+      0.02,
+      0.02,
+      1
+     ],
+     "emissive": [
+      0,
+      0,
+      0
+     ],
+     "worldTexels": false
+    }
+   }
+  }
+ ]
+}

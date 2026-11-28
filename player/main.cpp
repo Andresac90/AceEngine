@@ -6,6 +6,8 @@
 //              [--hold <key>]...   keep a key pressed (scripted play tests)
 //              [--fixed-dt <seconds>]   every frame advances exactly this much
 //              [--frames-to <prefix>]   save every frame as <prefix>0000.png, ... (offscreen)
+//              [--timing <first>]   print median / 90th percentile frame time of the frames
+//                                   from <first> on (one frame in flight: max of CPU and GPU)
 //
 // Without a project_dir it runs the "project" folder next to the executable.
 #include "platform/app.h"
@@ -13,13 +15,14 @@
 #include "runtime/project.h"
 #include "script/script.h"
 #include <SDL3/SDL_main.h>
+#include <algorithm>
 
 using namespace ace;
 
 int main(int argc, char** argv) {
   std::string projectDir, sceneOverride, screenshot, framesPrefix;
   f32 fixedDt = 0.0f;
-  int frames = 0;
+  int frames = 0, timingFrom = -1;
   std::vector<SDL_Scancode> held;
   AppDesc desc;
   for (int i = 1; i < argc; i++) {
@@ -37,6 +40,7 @@ int main(int argc, char** argv) {
     else if (a == "--validation") desc.validation = true;
     else if (a == "--fixed-dt") fixedDt = (f32)atof(next().c_str());
     else if (a == "--frames-to") framesPrefix = next();
+    else if (a == "--timing") timingFrom = atoi(next().c_str());
     else if (a == "--hold") {
       std::string name = next();
       SDL_Scancode code = SDL_GetScancodeFromName(name.c_str());
@@ -80,7 +84,14 @@ int main(int argc, char** argv) {
     rhi::TextureHandle shot; // offscreen target used only in --screenshot mode
     u32 shotW = 0, shotH = 0;
     int frame = 0;
+    std::vector<f64> frameMs;
+    u64 lastTick = 0;
     while (app.pump()) {
+      if (timingFrom >= 0) { // time from one loop start to the next
+        u64 now = SDL_GetTicksNS();
+        if (lastTick && frame > timingFrom) frameMs.push_back((f64)(now - lastTick) / 1e6);
+        lastTick = now;
+      }
       for (SDL_Scancode code : held) app.input.down[code] = true;
       scripts.update(app.dt);
       if (!scripts.pendingScene.empty()) {
@@ -121,6 +132,11 @@ int main(int argc, char** argv) {
       }
 
       if (frames > 0 && ++frame >= frames) break;
+    }
+    if (!frameMs.empty()) {
+      std::sort(frameMs.begin(), frameMs.end());
+      ACE_INFO("timing: %zu frames, median %.2f ms, 90th percentile %.2f ms", frameMs.size(), frameMs[frameMs.size() / 2],
+               frameMs[std::min(frameMs.size() - 1, frameMs.size() * 9 / 10)]);
     }
     if (!screenshot.empty() && shot) {
       device.waitIdle();

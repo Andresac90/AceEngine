@@ -1,0 +1,6 @@
+{
+  "name": "Ace Arena",
+  "startScene": "scenes/arena.scene.json",
+  "width": 1280,
+  "height": 720
+}

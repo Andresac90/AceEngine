@@ -33,6 +33,9 @@ struct MeshRenderer {
   vec4 color{1.0f};
   vec3 emissive{0.0f}; // light emitted (path tracer) / unlit add (raster)
   bool worldTexels = false; // map the texture in world space at the scene's texel density
+  // Path tracer only: mirror-like reflection on top of the diffuse color.
+  f32 reflectivity = 0.0f; // Fresnel reflectance facing the surface (Schlick F0); 0 = matte. Ice ~0.1
+  f32 roughness = 0.0f;    // blur of the reflection (0 = mirror)
 };
 
 struct SpriteRenderer {
@@ -47,6 +50,40 @@ struct SpriteRenderer {
   int frame = 0;          // first (or only) frame shown
   f32 fps = 0.0f;         // > 0 plays all frames in a loop starting at `frame`
   bool flipX = false;
+};
+
+// A large animated crowd drawn and path traced without one entity per person.
+// `pack` (*.crowd.json) holds the character models, split into rigid parts (one
+// per bone), and their animation clips baked as one rigid transform per bone per
+// frame. `members` (*.members.json) places every person: position, facing,
+// model, team, idle clip, speed, phase, stadium-wave delay and three colors.
+// See render/crowd.h. The runtime fields below are set by scripts
+// (ace.crowd_event, ace.crowd_wave) and are not saved.
+struct Crowd {
+  std::string pack;
+  std::string members;
+  f32 speed = 1.0f; // animation playback rate for everyone
+  // Times are on the renderer's clock. Scripts only request (`pending`); the
+  // renderer stamps the start, because script and render clocks may differ.
+  struct Event {
+    std::string clip; // empty = none
+    f64 start = 0.0, end = 0.0, seconds = 0.0;
+    bool pending = false;
+  };
+  Event teams[3];         // per team (0 home, 1 away, 2 neutral): play `clip` between start and end
+  f64 waveStart = -1.0;   // < 0: no stadium wave
+  int waveLaps = 0;
+  bool wavePending = false;
+};
+
+// One extra crowd person driven by its entity's Transform (skaters, mascots):
+// drawn with the scene's first Crowd pack and animated like the members.
+struct CrowdActor {
+  int model = 0;
+  int clip = 0;
+  int team = 0;
+  f32 speed = 1.0f;
+  vec3 primary{1.0f}, secondary{1.0f}, accent{1.0f}; // sRGB
 };
 
 struct Camera {

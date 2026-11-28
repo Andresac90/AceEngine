@@ -1,0 +1,143 @@
+// Crowd animation, shared by the raster crowd pass (crowd.slang) and the path
+// tracer (pathtrace.slang), so both show exactly the same pose. Must match
+// render/crowd.h.
+//
+// A person is a set of rigid parts, one per bone, stored in rest pose. A clip
+// stores, per frame and bone, the rigid transform rest space -> character
+// space (a quaternion and a translation, forward kinematics already applied).
+// Animation is evaluated here, per bone, from the time and the person's own
+// parameters: nothing about the pose is uploaded per frame, and the path
+// tracer's acceleration structures never change while people move (see
+// render/crowd.h for why that is the whole trick).
+
+static const uint kCrowdBones = 9;
+
+struct CrowdMember {
+  float4 posScale; // xyz: feet position (world), w: uniform scale
+  float4 facing;   // x: cos(yaw), y: sin(yaw), z: stadium-wave delay in seconds (< 0: never waves), w: seed
+  float4 anim;     // x: idle clip, y: speed, z: phase (seconds), w: model
+  uint4 colors;    // xyz: primary, secondary, accent as 0xRRGGBB (sRGB), w: team (0 home, 1 away, 2 neutral)
+};
+
+struct CrowdData {
+  float4 time;      // x: seconds (scaled by the crowd's speed), y: 1 = a crowd is present, z: first part header, w: first model header
+  float4 counts;    // x: clips per model, y: dynamic TLAS root node (< 0: none), z: frames per second, w: blend seconds
+  float4 events[3]; // per team: x clip (< 0: none), y start, z end
+  float4 wave;      // x: start (< 0: none), y: seconds per lap, z: laps, w: wave clip
+  float4 bounds;    // z: first per-bone box, per (model, idle clip, override clip, bone): min, max
+};
+
+struct CrowdPose {
+  float4 q; // rest -> character rotation
+  float3 t;
+};
+
+float3 quatRotate(float4 q, float3 v) {
+  float3 u = cross(q.xyz, v) * 2.0;
+  return v + q.w * u + cross(q.xyz, u);
+}
+
+// The clip table (`table`) starts with one header per (model, clip): x =
+// offset of its frames in float4s, y = frame count, z = 1 if it loops. Each
+// frame holds, per bone: rotation, translation, and the part's box in that
+// frame (min, max), i.e. 4 float4s.
+// Offset of a clip's held frame (its bone 0) at `seconds`.
+uint crowdFrame(StructuredBuffer<float4> table, CrowdData c, uint model, uint clip, float seconds) {
+  float4 h = table[model * uint(c.counts.x) + clip];
+  int frames = int(h.y);
+  // Stepped, not interpolated: pixel art animates on held frames.
+  int f = int(floor(seconds * c.counts.z));
+  f = h.z > 0.5 ? ((f % frames) + frames) % frames : clamp(f, 0, frames - 1);
+  return uint(h.x) + uint(f) * kCrowdBones * 4u;
+}
+
+CrowdPose crowdPoseAt(StructuredBuffer<float4> table, uint frame, uint bone) {
+  CrowdPose p;
+  p.q = table[frame + bone * 4u];
+  p.t = table[frame + bone * 4u + 1u].xyz;
+  return p;
+}
+
+float crowdClipSeconds(StructuredBuffer<float4> table, CrowdData c, uint model, uint clip) {
+  return table[model * uint(c.counts.x) + clip].y / c.counts.z;
+}
+
+// Reaction delay so a goal does not make 18,000 people jump on the same frame.
+float crowdDelay(CrowdMember m) { return float(pcgHash(uint(m.facing.w)) & 1023u) / 1023.0 * 0.6; }
+
+// Which clips a person plays right now: the idle clip, plus at most one
+// override (the team's event, else the wave) blended in with `weight`.
+// Computed once per person, then sampled per bone.
+struct CrowdAnim {
+  uint model, clipA, clipB;
+  float timeA, timeB, weight;
+  uint frameA, frameB; // table offsets of the held frames (computed once per person, used per bone)
+};
+
+CrowdAnim crowdAnim(StructuredBuffer<float4> table, CrowdData c, CrowdMember m) {
+  CrowdAnim a;
+  a.model = uint(m.anim.w);
+  float now = c.time.x;
+  a.clipA = uint(m.anim.x);
+  a.timeA = now * m.anim.y + m.anim.z;
+  a.weight = 0.0;
+  a.clipB = 0;
+  a.timeB = 0.0;
+  float fade = c.counts.w;
+  float4 ev = c.events[min(m.colors.w, 2u)];
+  if (ev.x >= 0.0) {
+    float start = ev.y + crowdDelay(m), end = ev.z + crowdDelay(m);
+    a.weight = saturate((now - start) / fade) * saturate((end - now) / fade);
+    a.timeB = (now - start) * m.anim.y;
+    a.clipB = uint(ev.x);
+  }
+  if (a.weight <= 0.0 && c.wave.x >= 0.0 && m.facing.z >= 0.0) {
+    float s = now - c.wave.x - m.facing.z;
+    float lap = floor(s / c.wave.y);
+    float len = crowdClipSeconds(table, c, a.model, uint(c.wave.w));
+    float local = s - lap * c.wave.y;
+    if (lap >= 0.0 && lap < c.wave.z && local < len) {
+      a.weight = saturate(local / 0.12) * saturate((len - local) / 0.12);
+      a.clipB = uint(c.wave.w);
+      a.timeB = local;
+    }
+  }
+  a.frameA = crowdFrame(table, c, a.model, a.clipA, a.timeA);
+  a.frameB = a.weight > 0.0 ? crowdFrame(table, c, a.model, a.clipB, a.timeB) : a.frameA;
+  return a;
+}
+
+CrowdPose crowdBonePose(StructuredBuffer<float4> table, CrowdData c, CrowdAnim a, uint bone) {
+  CrowdPose p = crowdPoseAt(table, a.frameA, bone);
+  if (a.weight > 0.0) {
+    CrowdPose o = crowdPoseAt(table, a.frameB, bone);
+    if (dot(o.q, p.q) < 0.0) o.q = -o.q; // shortest way round
+    p.q = normalize(lerp(p.q, o.q, a.weight));
+    p.t = lerp(p.t, o.t, a.weight);
+  }
+  return p;
+}
+
+CrowdPose crowdPose(StructuredBuffer<float4> table, CrowdData c, CrowdMember m, uint bone) {
+  return crowdBonePose(table, c, crowdAnim(table, c, m), bone);
+}
+
+// Character space -> world: turn by the yaw, scale, move to the feet position.
+float3 crowdToWorld(CrowdMember m, float3 p) {
+  p *= m.posScale.w;
+  return float3(m.facing.x * p.x + m.facing.y * p.z, p.y, -m.facing.y * p.x + m.facing.x * p.z) + m.posScale.xyz;
+}
+float3 crowdDirToWorld(CrowdMember m, float3 d) {
+  return float3(m.facing.x * d.x + m.facing.y * d.z, d.y, -m.facing.y * d.x + m.facing.x * d.z);
+}
+// World -> character space for a direction (no scale: callers divide by it).
+float3 crowdDirToCharacter(CrowdMember m, float3 d) {
+  return float3(m.facing.x * d.x - m.facing.y * d.z, d.y, m.facing.y * d.x + m.facing.x * d.z);
+}
+
+// A part's color code: >= 0 is a fixed 0xRRGGBB, -1/-2/-3 the person's
+// primary/secondary/accent. Returns linear color.
+float3 crowdColor(float code, CrowdMember m) {
+  uint rgb = code >= 0.0 ? uint(code) : (code > -1.5 ? m.colors.x : (code > -2.5 ? m.colors.y : m.colors.z));
+  return pow(float3((rgb >> 16) & 255u, (rgb >> 8) & 255u, rgb & 255u) / 255.0, 2.2);
+}

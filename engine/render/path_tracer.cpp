@@ -1,4 +1,5 @@
 #include "render/path_tracer.h"
+#include "render/crowd.h"
 #include <algorithm>
 #include <SDL3/SDL.h>
 #include <glm/gtx/component_wise.hpp>
@@ -12,13 +13,19 @@ namespace {
 struct TraceData {
   mat4 invViewProj, view;
   vec4 lightDir, lightColor, params, lightInfo, ramp;
-  vec4 pointInfo;
+  vec4 pointInfo, history;
   vec4 pointPosition[8], pointColor[8];
+  mat4 prevViewProj, prevView;
+  vec4 viewport, reproject;
   Atmosphere atmosphere;
 };
 constexpr u32 kAtlasSize = 1024;
-constexpr u32 kMovingHistoryFrames = 6;
+constexpr u32 kMovingHistoryFrames = 6; // after a scene change, every pixel keeps at most this many frames
 constexpr u32 kMaxAccumulatedFrames = 512; // RGBA16F stops gaining precision beyond this
+// While a crowd animates: still pixels average at most this many frames (bounce
+// light and shadows from people change slowly), pixels a moving person may
+// cover keep this many (pathtrace.slang, the end of fsMain).
+constexpr f32 kCrowdStillHistory = 32.0f, kCrowdMovingHistory = 4.0f, kCrowdReflectedHistory = 8.0f; // poses hold 5 frames at 60 fps (12 fps clips)
 
 u64 hashBytes(u64 h, const void* data, size_t size) { // FNV-1a
   for (size_t i = 0; i < size; i++) h = (h ^ ((const u8*)data)[i]) * 1099511628211ull;
@@ -40,27 +47,41 @@ PathTracer::PathTracer(Renderer& renderer) : r_(renderer) {
   p.name = "pathtrace";
   p.vertexShader = r_.loadShader("pathtrace", ShaderStage::Vertex);
   p.fragmentShader = r_.loadShader("pathtrace", ShaderStage::Fragment);
+  BindGroupLayoutDesc rl;
+  rl.bindings[0] = rl.bindings[1] = BindingType::Texture; // last frame's light and normal/depth
+  reprojectLayout_ = dev.createBindGroupLayout(rl);
   p.bindGroupLayouts[0] = layout_;
-  p.colorCount = 2;
+  p.bindGroupLayouts[1] = r_.crowd().traceLayout();
+  p.bindGroupLayouts[2] = reprojectLayout_;
   p.cull = CullMode::None;
-  p.colorFormats[0] = Format::RGBA16F;
-  p.colorCount = 4; // light, normal/depth, surface color, emission
-  p.colorFormats[2] = p.colorFormats[3] = Format::RGBA16F;
+  p.colorCount = 4; // light (rgb, a = frames averaged), normal/depth, surface color, emission
+  p.colorFormats[0] = p.colorFormats[2] = p.colorFormats[3] = Format::RGBA16F;
+  // No blending: the shader averages with the reprojected history itself, and
+  // overwriting means nothing left in a new target (even NaN) can leak in.
   for (int capture = 0; capture < 2; capture++) {
-    for (int first = 0; first < 2; first++) {
-      p.colorFormats[1] = capture ? Format::RGBA32F : Format::RGBA16F;
-      // Later frames blend into the running average; the first one overwrites,
-      // so whatever was there (even NaN) cannot leak in.
-      p.blend[0] = first ? BlendMode::Opaque : BlendMode::Alpha;
-      pipelines_[capture][first] = dev.createPipeline(p);
-      ACE_ASSERT(pipelines_[capture][first], "failed to create path tracing pipeline");
-    }
+    p.colorFormats[1] = capture ? Format::RGBA32F : Format::RGBA16F;
+    pipelines_[capture] = dev.createPipeline(p);
+    ACE_ASSERT(pipelines_[capture], "failed to create path tracing pipeline");
+  }
+  BindGroupLayoutDesc cpl;
+  cpl.bindings[0] = BindingType::Texture;
+  copyLayout_ = dev.createBindGroupLayout(cpl);
+  PipelineDesc cpy;
+  cpy.name = "pt copy normal/depth";
+  cpy.vertexShader = r_.loadShader("pt_copy", ShaderStage::Vertex);
+  cpy.fragmentShader = r_.loadShader("pt_copy", ShaderStage::Fragment);
+  cpy.bindGroupLayouts[0] = copyLayout_;
+  cpy.cull = CullMode::None;
+  for (int capture = 0; capture < 2; capture++) {
+    cpy.colorFormats[0] = capture ? Format::RGBA32F : Format::RGBA16F;
+    copyPipelines_[capture] = dev.createPipeline(cpy);
+    ACE_ASSERT(copyPipelines_[capture], "failed to create the normal/depth copy pipeline");
   }
   atlas_ = dev.createTexture({kAtlasSize, kAtlasSize, Format::RGBA8_SRGB, TextureUsage_Sampled, "path tracer atlas"});
 
   BindGroupLayoutDesc dl;
   dl.bindings[0] = BindingType::UniformBuffer;
-  dl.bindings[1] = dl.bindings[2] = BindingType::Texture;
+  dl.bindings[1] = dl.bindings[2] = BindingType::Texture; // light (a: frames averaged), normal/depth
   denoiseLayout_ = dev.createBindGroupLayout(dl);
   BindGroupLayoutDesc cl;
   cl.bindings[0] = BindingType::UniformBuffer;
@@ -88,9 +109,13 @@ PathTracer::~PathTracer() {
 
 void PathTracer::destroy(Buffers& b) {
   Device& dev = r_.device();
-  for (BindGroupHandle g : b.denoise) dev.destroy(g);
-  dev.destroy(b.compose);
-  for (TextureHandle t : {b.light, b.albedo, b.emission, b.scratch[0], b.scratch[1]}) dev.destroy(t);
+  for (int p = 0; p < 2; p++) {
+    for (BindGroupHandle g : b.denoise[p]) dev.destroy(g);
+    dev.destroy(b.compose[p]);
+    dev.destroy(b.reproject[p]);
+  }
+  dev.destroy(b.copyNormalDepth);
+  for (TextureHandle t : {b.light[0], b.light[1], b.prevNormalDepth, b.albedo, b.emission, b.scratch[0], b.scratch[1]}) dev.destroy(t);
   b = Buffers{};
 }
 
@@ -108,44 +133,59 @@ PathTracer::Buffers& PathTracer::buffers(const Target& target, bool denoise, Tex
   Device& dev = r_.device();
   Buffers& b = buffers_[target.color.id];
   if (b.size != target.textureSize || b.normalDepthId != target.normalDepth.id) {
-    if (b.light) {
+    if (b.albedo) {
       dev.waitIdle();
       destroy(b);
     }
     b.size = target.textureSize;
     b.normalDepthId = target.normalDepth.id;
     u32 w = (u32)target.textureSize.x, h = (u32)target.textureSize.y, rt = TextureUsage_RenderTarget | TextureUsage_Sampled;
-    b.light = dev.createTexture({w, h, Format::RGBA16F, rt, "pt light"});
+    b.light[0] = dev.createTexture({w, h, Format::RGBA16F, rt, "pt light a"});
+    b.light[1] = dev.createTexture({w, h, Format::RGBA16F, rt, "pt light b"});
+    b.prevNormalDepth = dev.createTexture({w, h, target.capture ? Format::RGBA32F : Format::RGBA16F, rt, "pt previous normal/depth"});
     b.albedo = dev.createTexture({w, h, Format::RGBA16F, rt, "pt surface color"});
     b.emission = dev.createTexture({w, h, Format::RGBA16F, rt, "pt emission"});
     b.scratch[0] = dev.createTexture({w, h, Format::RGBA16F, rt, "pt denoise a"});
     b.scratch[1] = dev.createTexture({w, h, Format::RGBA16F, rt, "pt denoise b"});
-    TextureHandle inputs[3] = {b.light, b.scratch[0], b.scratch[1]};
-    for (int k = 0; k < 3; k++) {
-      BindGroupDesc g;
-      g.layout = denoiseLayout_;
-      g.entries[0].buffer = r_.uniformBuffer();
-      g.entries[0].size = sizeof(DenoiseData);
-      g.entries[1].texture = inputs[k];
-      g.entries[2].texture = target.normalDepth;
-      b.denoise[k] = dev.createBindGroup(g);
+    for (int p = 0; p < 2; p++) {
+      TextureHandle inputs[3] = {b.light[p], b.scratch[0], b.scratch[1]};
+      for (int k = 0; k < 3; k++) {
+        BindGroupDesc g;
+        g.layout = denoiseLayout_;
+        g.entries[0].buffer = r_.uniformBuffer();
+        g.entries[0].size = sizeof(DenoiseData);
+        g.entries[1].texture = inputs[k];
+        g.entries[2].texture = target.normalDepth;
+        b.denoise[p][k] = dev.createBindGroup(g);
+      }
+      BindGroupDesc rg;
+      rg.layout = reprojectLayout_;
+      rg.entries[0].texture = b.light[1 - p];
+      rg.entries[1].texture = b.prevNormalDepth;
+      b.reproject[p] = dev.createBindGroup(rg);
     }
+    BindGroupDesc cg;
+    cg.layout = copyLayout_;
+    cg.entries[0].texture = target.normalDepth;
+    b.copyNormalDepth = dev.createBindGroup(cg);
   }
   // Pass k writes scratch[k % 2]; compose reads the last one (or the raw light).
   u32 input = denoise ? (u32)((kDenoisePasses - 1) % 2) + 1 : 0;
-  if (!b.compose || b.composeInput != input || b.composePalette != palette.id) {
-    if (b.compose) dev.destroy(b.compose);
-    TextureHandle inputs[3] = {b.light, b.scratch[0], b.scratch[1]};
-    BindGroupDesc g;
-    g.layout = composeLayout_;
-    g.entries[0].buffer = r_.uniformBuffer();
-    g.entries[0].size = sizeof(ComposeData);
-    g.entries[1].texture = inputs[input];
-    g.entries[2].texture = b.albedo;
-    g.entries[3].texture = b.emission;
-    g.entries[4].texture = palette;
-    g.entries[5].texture = target.normalDepth;
-    b.compose = dev.createBindGroup(g);
+  if (!b.compose[0] || b.composeInput != input || b.composePalette != palette.id) {
+    for (int p = 0; p < 2; p++) {
+      if (b.compose[p]) dev.destroy(b.compose[p]);
+      TextureHandle inputs[3] = {b.light[p], b.scratch[0], b.scratch[1]};
+      BindGroupDesc g;
+      g.layout = composeLayout_;
+      g.entries[0].buffer = r_.uniformBuffer();
+      g.entries[0].size = sizeof(ComposeData);
+      g.entries[1].texture = inputs[input];
+      g.entries[2].texture = b.albedo;
+      g.entries[3].texture = b.emission;
+      g.entries[4].texture = palette;
+      g.entries[5].texture = target.normalDepth;
+      b.compose[p] = dev.createBindGroup(g);
+    }
     b.composeInput = input;
     b.composePalette = palette.id;
   }
@@ -279,7 +319,8 @@ void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 ca
   };
 
   std::vector<Triangle> tris;
-  auto addMesh = [&](const Mesh* mesh, const mat4& world, vec4 color, vec3 emissive, vec4 atlasRect, int flags, vec4 uvRect) {
+  auto addMesh = [&](const Mesh* mesh, const mat4& world, vec4 color, vec3 emissive, vec4 atlasRect, int flags, vec4 uvRect,
+                     f32 reflectivity = 0.0f, f32 roughness = 0.0f) {
     mat3 nm = glm::transpose(glm::inverse(mat3(world)));
     if (atlasRect.z > 0.0f) flags |= 4;
     for (size_t i = 0; i + 2 < mesh->indices.size(); i += 3) {
@@ -300,16 +341,17 @@ void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 ca
       tri.n1 = vec4(glm::normalize(nm * b.normal), 0);
       tri.n2 = vec4(glm::normalize(nm * c.normal), 0);
       tri.color = toLinear(color); // the material color; vertex alpha is unused here (cutouts come from textures)
-      tri.emissive = vec4(toLinear(emissive), 0);
+      tri.emissive = vec4(toLinear(emissive), glm::clamp(reflectivity, 0.0f, 1.0f));
       auto uv = [&](const Vertex& v) { return v.uv * vec2(uvRect.z, uvRect.w) + vec2(uvRect.x, uvRect.y); };
       tri.uv01 = vec4(uv(a), uv(b));
-      tri.uv2Flags = vec4(uv(c), (f32)flags, 0);
+      tri.uv2Flags = vec4(uv(c), (f32)flags, std::max(roughness, 0.0f));
       tri.atlas = atlasRect;
       tris.push_back(tri);
     }
   };
   for (auto [e, t, m] : scene.reg.view<Transform, MeshRenderer>().each())
-    addMesh(assets.mesh(m.mesh), t.world, m.color, m.emissive, place(assets.texture(m.texture)), m.worldTexels ? 1 : 0, vec4(0, 0, 1, 1));
+    addMesh(assets.mesh(m.mesh), t.world, m.color, m.emissive, place(assets.texture(m.texture)), m.worldTexels ? 1 : 0, vec4(0, 0, 1, 1),
+            m.reflectivity, m.roughness);
   const Mesh* quad = assets.mesh("builtin:quad");
   f64 seconds = r_.time();
   for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
@@ -322,15 +364,29 @@ void PathTracer::rebuild(Scene& scene, Assets& assets, vec3 cameraRight, vec3 ca
   buildBvh(tris, nodes);
   if (tris.empty()) tris.push_back(Triangle{});
 
-  // Emissive triangles, by their final (post-BVH) index, for direct light sampling.
+  // Emissive triangles, by their final (post-BVH) index, for direct light
+  // sampling. Each is picked with probability proportional to its power (area x
+  // brightness): with uniform picking, a few big flood panels next to a thousand
+  // tiny scoreboard pixels got almost no samples, and the image was noisy.
+  // The shader searches the cumulative probabilities (z) and divides by w.
   std::vector<vec4> lights;
+  f64 totalPower = 0.0;
   for (u32 i = 0; i < tris.size(); i++) {
     f32 area = 0.5f * glm::length(glm::cross(vec3(tris[i].e1), vec3(tris[i].e2)));
+    f32 brightness = glm::dot(vec3(tris[i].emissive), vec3(0.2126f, 0.7152f, 0.0722f));
     if (glm::compMax(vec3(tris[i].emissive)) <= 0.0f || area <= 0.0f) continue;
-    vec4 entry(0.0f, area, 0.0f, 0.0f);
+    vec4 entry(0.0f, area, 0.0f, area * std::max(brightness, 1e-6f));
     memcpy(&entry.x, &i, sizeof(u32));
     lights.push_back(entry);
+    totalPower += entry.w;
   }
+  f64 running = 0.0;
+  for (vec4& l : lights) {
+    running += l.w;
+    l.w = (f32)(l.w / totalPower);
+    l.z = (f32)(running / totalPower);
+  }
+  if (!lights.empty()) lights.back().z = 1.0f; // rounding must not leave a gap at the end
   lightCount_ = (u32)lights.size();
   if (lights.empty()) lights.push_back(vec4(0.0f)); // buffers cannot be empty
 
@@ -377,6 +433,8 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     sh = hashBytes(sh, &m.color, sizeof(vec4));
     sh = hashBytes(sh, &m.emissive, sizeof(vec3));
     sh = hashBytes(sh, &m.worldTexels, sizeof(bool));
+    sh = hashBytes(sh, &m.reflectivity, sizeof(f32));
+    sh = hashBytes(sh, &m.roughness, sizeof(f32));
   }
   f64 seconds = r_.time();
   for (auto [e, t, s] : scene.reg.view<Transform, SpriteRenderer>().each()) {
@@ -392,9 +450,13 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     sceneHash_ = sh;
     rebuild(scene, assets, cameraRight, cameraPosition);
     // Moving objects: keep a short history instead of restarting, trading a
-    // little ghosting for far less noise.
-    // shortcut: replace with motion-vector reprojection + a spatial denoiser.
-    for (auto& [slot, h] : history_) h.frame = std::min(h.frame, kMovingHistoryFrames);
+    // little ghosting for far less noise. Every pixel's frame count is cut
+    // once (pathtrace.slang reads `clamp`).
+    // shortcut: no per-object motion vectors; a moved mesh ghosts for a few frames.
+    for (auto& [slot, h] : history_) {
+      h.frame = std::min(h.frame, kMovingHistoryFrames);
+      h.clamp = true;
+    }
   }
   const Texture* palette = assets.texture(scene.settings.palette); // white 1x1 when unset
   if (!group_ || palette->handle.id != paletteId_) {
@@ -441,6 +503,8 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     d.pointColor[i] = vec4(toLinear(l.color) * l.intensity, 0);
   }
   d.pointInfo = vec4((f32)lampCount, 0, 0, 0);
+  CrowdRenderer& crowd = r_.crowd();
+  d.history = crowd.active() ? vec4(kCrowdStillHistory, kCrowdMovingHistory, kCrowdReflectedHistory, 0) : vec4(0.0f);
   // Clouds frozen at time 0: their slow drift would change this data every
   // frame and restart the accumulation; it is invisible in the bounce light.
   d.atmosphere = makeAtmosphere(scene, 0.0);
@@ -456,26 +520,45 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   bool ramps = scene.settings.rampShading && !scene.settings.palette.empty();
   d.ramp = vec4(ramps ? 1.0f : 0.0f, (f32)glm::clamp(scene.settings.rampShadowSteps, 0, 15), fullyLit, 0);
 
-  // Anything else that changes the image restarts the running average.
-  u64 vh = hashBytes(14695981039346656037ull, &d, sizeof(d));
+  // Anything else that changes the image restarts the history. The camera is
+  // left out: a moved camera reprojects last frame's light instead.
+  TraceData keyData = d;
+  keyData.invViewProj = mat4(0.0f);
+  keyData.view = mat4(0.0f);
+  u64 vh = hashBytes(14695981039346656037ull, &keyData, sizeof(keyData));
   bool denoise = scene.settings.denoise;
   u32 key[5] = {target.color.id, target.normalDepth.id, target.capture ? 1u : 0u, palette->handle.id, denoise ? 1u : 0u};
   vh = hashBytes(vh, key, sizeof(key));
   vh = hashBytes(vh, &target.viewport, sizeof(vec4));
+  u64 crowdVersion = crowd.active() ? crowd.version() : 0; // the people's poses are not hashed: they move every frame by design
+  vh = hashBytes(vh, &crowdVersion, sizeof(crowdVersion));
   History& h = history_[target.slot];
-  // The running average lives in shared targets. If this slot was not traced
-  // the previous frame, another mode drew there, or the targets were recreated
+  // The history lives in shared targets. If this slot was not traced the
+  // previous frame, another mode drew there, or the targets were recreated
   // (possibly with the same handle ids): the history is not ours.
-  if (vh != h.viewHash || r_.frameIndex() != h.lastFrame + 1) h.frame = 0;
+  bool continuous = vh == h.viewHash && r_.frameIndex() == h.lastFrame + 1;
+  if (!continuous) h.frame = 0;
   h.viewHash = vh;
   h.lastFrame = r_.frameIndex();
   // Settled: nothing changed for settleFrames frames, so the image is as good as
   // it gets for this target; leave it in place (probe atlases are never cleared
-  // in path-traced mode).
-  if (target.settleFrames > 0 && h.frame >= target.settleFrames) return;
-  bool first = h.frame == 0;
+  // in path-traced mode). A moved camera or moving people never settle.
+  mat4 viewProj = proj * view;
+  bool still = continuous && viewProj == h.prevViewProj;
+  h.stillFrames = still ? h.stillFrames : 0;
+  if (target.settleFrames > 0 && h.stillFrames >= target.settleFrames && !crowd.active()) return;
+  if (h.stillFrames < kMaxAccumulatedFrames) h.stillFrames++;
   d.params.x = (f32)h.frame;
   if (h.frame < kMaxAccumulatedFrames) h.frame++;
+  d.prevViewProj = h.prevViewProj;
+  d.prevView = h.prevView;
+  d.viewport = target.viewport;
+  d.reproject = vec4(continuous ? 1.0f : 0.0f, h.clamp ? (f32)kMovingHistoryFrames : 0.0f, (f32)(kMaxAccumulatedFrames - 1), 0);
+  h.clamp = false;
+  u32 parity = h.parity;
+  h.parity ^= 1u;
+  h.prevViewProj = viewProj;
+  h.prevView = view;
   u32 offset = r_.pushUniform(&d, sizeof(d));
   Buffers& buf = buffers(target, denoise, palette->handle);
   const vec4& v = target.viewport;
@@ -484,21 +567,35 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
     cmd.setScissor((i32)v.x, (i32)v.y, (u32)v.z, (u32)v.w);
   };
 
-  // 1. trace: light (blended into the running average), normal/depth, surface color, emission
+  // 1. trace: light averaged with last frame's (reprojected), normal/depth, surface color, emission
   RenderPassDesc pass;
   pass.name = "pathtrace";
   pass.colorCount = 4;
-  pass.color[0].texture = buf.light;
+  pass.color[0].texture = buf.light[parity];
   pass.color[1].texture = target.normalDepth;
   pass.color[2].texture = buf.albedo;
   pass.color[3].texture = buf.emission;
   // Load, never clear: a clear would wipe the whole texture, and probe atlases
-  // hold six faces with separate histories. The first frame overwrites instead.
+  // hold six faces with separate histories. Every traced pixel is overwritten.
   for (int k = 0; k < 4; k++) pass.color[k].load = LoadOp::Load;
   cmd.beginRenderPass(pass);
   region();
-  cmd.setPipeline(pipelines_[target.capture ? 1 : 0][first ? 1 : 0]);
+  cmd.setPipeline(pipelines_[target.capture ? 1 : 0]);
   cmd.setBindGroup(0, group_, {&offset, 1});
+  crowd.bindTrace(cmd);
+  cmd.setBindGroup(2, buf.reproject[parity]);
+  cmd.draw(3);
+  cmd.endRenderPass();
+
+  // Keep this frame's normal/depth for the next frame's disocclusion test.
+  RenderPassDesc cp0;
+  cp0.name = "pt keep normal/depth";
+  cp0.color[0].texture = buf.prevNormalDepth;
+  cp0.color[0].load = LoadOp::Load;
+  cmd.beginRenderPass(cp0);
+  region();
+  cmd.setPipeline(copyPipelines_[target.capture ? 1 : 0]);
+  cmd.setBindGroup(0, buf.copyNormalDepth);
   cmd.draw(3);
   cmd.endRenderPass();
 
@@ -506,7 +603,8 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   // brightness tolerance shrinks as samples accumulate, so the blur fades out
   // as the image converges and shadow edges come back sharp.
   if (denoise) {
-    f32 tolerance = 0.4f * d.ramp.z / sqrtf((f32)h.frame);
+    // Divided per pixel by sqrt(frames averaged) in the shader.
+    f32 tolerance = 0.4f * d.ramp.z;
     for (int k = 0; k < kDenoisePasses; k++) {
       DenoiseData dd{v, vec4((f32)(1 << k), tolerance, 0, 0)};
       u32 dOffset = r_.pushUniform(&dd, sizeof(dd));
@@ -517,7 +615,7 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
       cmd.beginRenderPass(dp);
       region();
       cmd.setPipeline(denoisePipeline_);
-      cmd.setBindGroup(0, buf.denoise[k == 0 ? 0 : 1 + (k - 1) % 2], {&dOffset, 1});
+      cmd.setBindGroup(0, buf.denoise[parity][k == 0 ? 0 : 1 + (k - 1) % 2], {&dOffset, 1});
       cmd.draw(3);
       cmd.endRenderPass();
     }
@@ -533,7 +631,7 @@ void PathTracer::render(CommandList& cmd, Scene& scene, Assets& assets, const ma
   cmd.beginRenderPass(cp);
   region();
   cmd.setPipeline(composePipeline_);
-  cmd.setBindGroup(0, buf.compose, {&cOffset, 1});
+  cmd.setBindGroup(0, buf.compose[parity], {&cOffset, 1});
   cmd.draw(3);
   cmd.endRenderPass();
 }

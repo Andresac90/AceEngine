@@ -120,6 +120,33 @@ int l_text(lua_State* L) {
   if (texts.size() < 1024) texts.push_back(std::move(t)); // bound a runaway loop
   return 0;
 }
+// ace.crowd_event(team, clip, seconds): the scene's crowd team (0 home, 1 away,
+// 2 neutral) plays `clip` (e.g. "celebrate") for `seconds`, each person after a
+// short random reaction delay. An empty clip name cancels.
+Crowd* firstCrowd(lua_State* L) {
+  for (auto [e, c] : self(L).scene.reg.view<Crowd>().each()) return &c;
+  return nullptr;
+}
+int l_crowd_event(lua_State* L) {
+  int team = (int)luaL_checkinteger(L, 1);
+  const char* clip = luaL_checkstring(L, 2);
+  f64 seconds = luaL_checknumber(L, 3);
+  Crowd* c = firstCrowd(L);
+  if (!c || team < 0 || team > 2) return 0;
+  Crowd::Event& ev = c->teams[team];
+  ev.clip = clip;
+  ev.seconds = std::max(seconds, 0.0);
+  ev.pending = true;
+  return 0;
+}
+// ace.crowd_wave(laps): a stadium wave goes round the bowl `laps` times.
+int l_crowd_wave(lua_State* L) {
+  Crowd* c = firstCrowd(L);
+  if (!c) return 0;
+  c->waveLaps = (int)std::max<lua_Integer>(luaL_checkinteger(L, 1), 0);
+  c->wavePending = true;
+  return 0;
+}
 // ace.screen() -> width, height in game pixels
 int l_screen(lua_State* L) {
   lua_pushnumber(L, self(L).gameSize.x);
@@ -409,6 +436,7 @@ ScriptSystem::ScriptSystem(Scene& s, Assets& a, Input& i) : scene(s), assets(a),
       {"load_scene", l_load_scene},  {"spawn_prefab", l_spawn_prefab},  {"overlaps", l_overlaps},   {"raycast", l_raycast},
       {"gamepad_axis", l_gamepad_axis}, {"gamepad_button", l_gamepad_button}, {"gamepad_pressed", l_gamepad_pressed},
       {"text", l_text},             {"screen", l_screen},       {"text_width", l_text_width},
+      {"crowd_event", l_crowd_event}, {"crowd_wave", l_crowd_wave},
       {nullptr, nullptr}};
   lua_newtable(L_);
   lua_pushlightuserdata(L_, this);

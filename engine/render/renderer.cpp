@@ -1,5 +1,6 @@
 #include "render/renderer.h"
 #include "render/path_tracer.h"
+#include "render/crowd.h"
 #include "render/texel_splat.h"
 #include "render/pixel_font.h"
 #include <SDL3/SDL.h>
@@ -135,6 +136,7 @@ Renderer::Renderer(Device& device) : device_(device) {
     font_.handle = device_.createTexture({font_.width, font_.height, Format::RGBA8, TextureUsage_Sampled, "pixel font"});
     device_.writeTexture(font_.handle, font_.pixels.data());
   }
+  crowd_ = std::make_unique<CrowdRenderer>(*this, frameLayout_); // before the path tracer, which binds its group
   pathTracer_ = std::make_unique<PathTracer>(*this);
   splatter_ = std::make_unique<TexelSplatter>(*this);
 }
@@ -435,6 +437,7 @@ void Renderer::drawRaster(CommandList& cmd, Scene& scene, Assets& assets, std::s
     cmd.setPipeline(v.capture ? meshCapturePipeline_ : meshPipeline_);
     cmd.setBindGroup(0, frameGroupHandle, {&frameOffsets[i], 1});
     drawItems(false, v.capture ? spriteCapturePipeline_ : spritePipeline_, frameOffsets[i], v.meshes, v.sprites);
+    if (v.meshes) crowd_->drawRaster(cmd, frameGroupHandle, frameOffsets[i], v.capture);
     cmd.endRenderPass();
   }
 }
@@ -537,6 +540,7 @@ void Renderer::drawTexts(CommandList& cmd, std::span<const TextDraw> texts, Form
 void Renderer::render(CommandList& cmd, Scene& scene, Assets& assets, const CameraView& cv, TextureHandle target, Format targetFormat,
                       u32 width, u32 height, std::span<const TextDraw> texts) {
   if (width == 0 || height == 0) return;
+  crowd_->update(scene, assets, time_);
   const RenderSettings& s = scene.settings;
   f32 aspect = (f32)width / (f32)height;
   Camera cam = cv.camera;
