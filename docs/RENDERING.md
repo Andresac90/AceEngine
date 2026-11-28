@@ -365,7 +365,8 @@ static rest-pose geometry inside animated cells):
   While an event or the wave runs, the CPU refits it every frame (same tree,
   new boxes) from each person's current state: idle frame, override frame,
   or crossfade (pair box), sampled at now +- 50 ms because the GPU computes
-  in float; ~1 ms of CPU and a 1.2 MB upload, only while something happens.
+  in float; 1.9 ms of CPU (measured, refit + 1.2 MB upload), only while
+  something happens.
   Moving actors have their own small top level rebuilt each frame (a
   two-partition top level, like DXR's partitioned TLAS).
 - **Per-bone culling.** Inside a person, each bone's box for the pose shown
