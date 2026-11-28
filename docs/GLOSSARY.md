@@ -17,6 +17,7 @@ Contents:
 8. World pixels (texel splatting)
 9. Exactness across GPUs
 10. Engine, editor and tooling
+11. Crowds and temporal accumulation
 
 ## 1. Pixels, color and pixel art
 
@@ -240,3 +241,21 @@ Contents:
 | CMake / Ninja | The build system generator and the fast build tool AceEngine uses. |
 | MSVC / MinGW | Microsoft's C++ compiler; MinGW is a GCC-based compiler for Windows, used on the Mac only to check that the D3D12 file compiles. |
 | `shortcut:` comment | A marked, deliberate simplification with its limit and when to improve it (ponytail rule). *`grep -rn "shortcut:" engine editor`.* |
+
+## 11. Crowds and temporal accumulation
+
+| Term | Meaning |
+| --- | --- |
+| BLAS / TLAS | Bottom- and top-level acceleration structures: a BVH per object (in its own space) and a BVH over object instances. The crowd's part BVHs are BLAS-like, its one-person-per-leaf tree is a TLAS. *RENDERING.md 8b.* |
+| Rest pose | A character's undeformed shape, in which its parts' BVHs are built once. |
+| Rigid part | A piece of a character that moves with one bone without bending; rays enter it through the inverse of that bone's transform. |
+| Pose-conservative bounds | Boxes that hold every pose a character can show (every frame, every crossfade), so a tree built on them never needs rebuilding while it animates. |
+| Refit | Updating a BVH's boxes bottom-up without changing its tree; far cheaper than a rebuild. *`CrowdRenderer::refitStatic`.* |
+| Crossfade / nlerp | Blending two poses by weight; nlerp = linear blend of quaternions, then normalize. |
+| Stepped animation | Clip frames are held, not interpolated (12 fps), as pixel-art animation does; it also makes per-frame boxes exact. |
+| Vertex pulling | A vertex shader that reads its vertex from a buffer by index instead of from a vertex buffer binding. *`crowd.slang`.* |
+| Proxy | Simplified geometry for some rays: the crowd's shadow and bounce rays hit bone boxes instead of triangles. |
+| Temporal reprojection | Reusing last frame's result for a pixel by finding where its surface was on screen last frame. |
+| Disocclusion | A surface that was hidden last frame and is visible now: it has no history; detected by comparing depth and normal. |
+| Reactive mask | Pixels marked to keep little history because something there moves (here: rays that crossed a moving person's box). |
+| Ablation | Measuring a system with one part switched off at a time, to learn what each part is worth. |

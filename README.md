@@ -15,6 +15,9 @@ small RHI, with **Slang** as the only shader language. Gameplay is written in
 ![The forest sample at dusk: path-traced world pixels, pixel clouds and distance haze](docs/images/forest.png)
 <sub>`projects/forest`: a first-person open world (~115k triangles), path-traced world pixels, pixel clouds, stars and distance haze.</sub>
 
+![The arena sample: 18,125 animated tube-man fans, path traced](docs/images/arena.png)
+<sub>`projects/arena`: 18,125 animated inflatable fans and 10 skaters, path traced with ice reflections and temporal reprojection (RENDERING.md section 8b).</sub>
+
 ## What's inside
 
 **Renderer** ([full write-up: docs/RENDERING.md](docs/RENDERING.md))
@@ -23,6 +26,12 @@ small RHI, with **Slang** as the only shader language. Gameplay is written in
   uniform offsets into one per-frame ring, and offscreen frames for
   screenshots and tests. Backends: Metal (SPIR-V to MSL through SPIRV-Cross),
   Vulkan, and D3D12 (DXIL, root signatures, descriptor tables).
+- **Crowds** ([RENDERING.md section 8b](docs/RENDERING.md)): 18,125
+  animated inflatable fans path traced on an M1 Pro without rebuilding any
+  acceleration structure. Rigid rest-pose parts with their own small BVHs,
+  animation evaluated in the shader, pose-conservative bounds refit only
+  during crowd events, box proxies for shadow and bounce rays, and temporal
+  reprojection so moving cameras keep their history.
 - **World pixels** (after Dylan Ebert's
   [Texel Splatting](https://dylanebert.com/texel-splatting/)): the scene is
   captured into cube maps around a probe snapped to a world grid (plus an
@@ -133,6 +142,7 @@ into `build/` (Slang is reused from `~/.cache/ace/slang` if present).
 build/bin/ace_editor projects/pixel_demo     # the editor, on the village sample
 build/bin/ace_player projects/pixel_demo     # the game alone
 build/bin/ace_player projects/forest         # first-person forest and castle, path traced
+build/bin/ace_player projects/arena          # hockey arena, 18,125 animated fans, path traced (keys 1-6: camera shots)
 build/bin/ace_editor --new ~/games/my_game   # create and open a new project
 ```
 
@@ -191,6 +201,8 @@ engines):
 | World pixels, path traced, still camera (village) | 16.5 ms, then cheaper as it settles |
 | Forest, walking, raster world pixels | 15 ms |
 | Forest, walking, path traced (shipped settings) | ~60 ms |
+| Arena, 18,125 animated fans, path traced (2 bounces / 1 bounce) | 69 / 46 ms |
+| Arena, raster | 18 ms |
 
 Walking while path tracing is the expensive case, since new probes start from
 zero samples. It is the next item on the roadmap.
@@ -252,7 +264,7 @@ engine/assets    meshes and textures
 engine/platform  window, input, timing (SDL3: windowing and input only, never rendering)
 editor/          level editor (Dear ImGui, drawn through the RHI)
 player/          game runtime executable
-projects/        samples: pixel_demo (village), forest (first-person open world)
+projects/        samples: pixel_demo (village), forest (first-person open world), arena (crowd showcase)
 tests/           unit tests
 tools/           export scripts, editor autotest, measurement and art scripts
 ```

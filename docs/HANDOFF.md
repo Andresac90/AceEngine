@@ -1,7 +1,7 @@
 # AceEngine handoff manual
 
 For the next engineer (human or model) continuing this work. Read this whole
-file before changing anything. Last updated 2026-11-24, branch `main`.
+file before changing anything. Last updated 2026-11-27, branch `main`.
 
 Contents: 1. What the owner asked for · 2. State of the build (verified vs
 not) · 3. Architecture · 4. Build, run, verify · 5. Working rules and
@@ -138,6 +138,24 @@ Backend status at a glance (2026-11-21):
 - Integer pixel scaling (`integerScale`, on by default): measured on 2560x1440
   screenshots, every row and column edge falls on a multiple of the scale (7 in
   `village`, 8 in `main`). The sky gradient is computed per game pixel.
+
+- **Crowds and the arena (2026-11-27, owner's request: a hockey arena with a
+  large path-traced crowd of inflatable tube-man fans, pixel-art style, as an
+  interview showcase).** `projects/arena` from `tools/make_arena.py`: 18,125
+  fans (7 models, 9 clips) plus 10 skaters. Design, numbers and the problems
+  met: RENDERING.md section 8b. Verified on macOS: Metal = Vulkan identical
+  (raster and path traced, during a celebration), 0 validation messages on
+  arena, pixel_demo and forest; `testCrowd` (box BVH, pack validation, 45M
+  sampled poses inside their bounds); editor opens the arena. Also changed
+  for every scene: temporal reprojection of the path tracer's history,
+  power-weighted emissive picking, one sampled point light when there are
+  more than 4, emissive x texture, reflections (`reflectivity`, `roughness`).
+  Existing images: raster scenes identical; forest 0.0021%; `pathtraced`
+  differs only by the new light picking (identical with uniform picking).
+  `tools/crowd_model_sheet.py` renders the pack in Blender (headless) as a
+  check outside the engine. Not checked: Windows (D3D12/Vulkan, MSVC build;
+  only the D3D12 backend compile check and HLSL generation of the new
+  shaders ran), the horn sound by ear, the editor by hand.
 
 ### Editor and tools
 
@@ -438,6 +456,20 @@ Pitfalls already hit:
 - Every shader resource needs its D3D `register(...)` beside `vk::binding`
   (RENDERING.md section 4). Metal and Vulkan will not notice a missing one;
   D3D12 will.
+- `set(VAR value CACHE ...)` never replaces an existing cache entry, even an
+  empty one. The Mac `build` folder predated the RelWithDebInfo default and
+  had compiled the C++ at -O0 since; the default now uses `FORCE` (only when
+  the type is empty). Check `CMAKE_BUILD_TYPE` in CMakeCache.txt before
+  trusting CPU timings.
+- Time frames with `ace_player --timing <first>` (median inside the loop).
+  Wall-clock runs include Metal pipeline compilation and PNG encoding,
+  which vary by seconds and once made a 3x slowdown look like a speedup.
+- slangc emits SPIR-V 1.4 for `ddx`/`ddy` of some varyings even with
+  `-profile spirv_1_3`; Vulkan validation then rejects the module. Check
+  versions with the first 8 bytes of each `.spv` after adding derivatives.
+- Crowd bounds must cover crossfades, not just frames: a blend moves points
+  along an arc. `testCrowd` samples poses at random weights; keep it passing
+  when adding clips or models.
 
 ## 6. Roadmap, in order
 
@@ -467,11 +499,13 @@ otherwise; ask the owner before installing anything.
    (path-traced ramp shading uses light *amount*, so the lantern's warm tint
    is lost); raster shadows for point lights; a
    day/night setting that animates sun, ambient and sky together.
-3. **Path tracer**: done: emissive sampling, denoiser (spatial), textures and
-   sprites, SAH BVH with ordered traversal, bounce light from the real sky.
-   **Next, forest performance while walking** (the priority), then a
-   two-level BVH and a temporal denoiser; the ordered list of ideas is in
-   RENDERING.md section 13.
+3. **Path tracer**: done: emissive sampling (power-weighted), denoiser
+   (spatial, per-pixel tolerance), temporal reprojection, reflections,
+   textures and sprites, SAH BVH with ordered traversal, bounce light from
+   the real sky, crowds (section 8b). **Next, forest performance while
+   walking** (the priority), then a two-level BVH for ordinary moving meshes;
+   for crowds: skinning via tetrahedral cages, raster LOD/culling, ReSTIR
+   for many lights. The ordered list of ideas is in RENDERING.md section 13.
 4. ~~**D3D12 backend**~~ done 2026-11-21: written, then verified on Windows
    with Vulkan as the reference (section 2; design in RENDERING.md section 3).
    Open: AMD and Intel GPUs, and the `shortcut:` limits listed there.

@@ -61,6 +61,8 @@ Numbers become numbers, `true`/`false` become booleans, anything else is text. A
 | `ace.text(text, x, y [, r, g, b [, scale]])` | draws text for this frame with the built-in pixel font; `x`, `y` in game pixels from the top-left; `\n` starts a new line; lowercase prints as uppercase |
 | `ace.screen()` | returns `width, height` of the screen in game pixels, for laying out text |
 | `ace.text_width(text)` | width in game pixels at scale 1 (for centring) |
+| `ace.crowd_event(team, clip, seconds)` | the scene's crowd team (0 home, 1 away, 2 neutral) plays `clip` (a name from its pack, e.g. `"celebrate"`) for `seconds`, each person after a short random reaction delay; CrowdActors of that team join in. An empty clip name cancels |
+| `ace.crowd_wave(laps)` | a stadium wave goes round the bowl `laps` times (the delay per seat comes from the members file) |
 | `ace.load_scene(path)` | switches to another scene (e.g. `"scenes/cave.scene.json"`) after this frame; every script restarts. In the editor the switch is undone when play stops |
 | `ace.overlaps(e)` | array of entities whose **Collider** overlaps `e`'s. Untick `solid` on a Collider to make a trigger the player can walk into |
 | `ace.raycast(ox, oy, oz, dx, dy, dz [, max [, ignore]])` | first solid Collider along the ray: returns `entity, distance, x, y, z`, or `nil` |
