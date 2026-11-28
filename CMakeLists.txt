@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.24)
 # Before project(): with MSVC, project() itself caches Debug as the default,
 # which builds slowly and needs Visual Studio's debug runtime DLLs to run.
-# (Multi-config generators ignore this.)
+# (Multi-config generators ignore this.) FORCE: a build folder configured
+# before this default existed holds an *empty* cached value, which a plain
+# set(CACHE) never replaces; that left such builds unoptimized (-O0).
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type")
+  set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
 endif()
 project(AceEngine VERSION 0.2.0 LANGUAGES C CXX)
 
